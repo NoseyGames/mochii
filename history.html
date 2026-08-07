@@ -127,6 +127,7 @@
       z-index: 0;
       pointer-events: none;
       animation: flow 18s ease-in-out infinite alternate;
+      will-change: transform;
     }
 
     @keyframes flow {
@@ -225,7 +226,7 @@
       color: #ffffff;
       font-size: 14px;
       outline: none;
-      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: border-color 0.3s, background 0.3s, box-shadow 0.3s;
     }
 
     .search-input:focus {
@@ -321,6 +322,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
+      contain: layout style;
     }
 
     .popover-content::-webkit-scrollbar {
@@ -350,6 +352,10 @@
       color: #d1d2eb;
       cursor: pointer;
       transition: background 0.2s, border-color 0.2s, transform 0.2s;
+      
+      /* Rendering Optimization for Long Lists */
+      content-visibility: auto;
+      contain-intrinsic-size: 0 64px;
     }
 
     .game-item:hover {
@@ -365,6 +371,11 @@
       object-fit: cover;
       background: rgba(255, 255, 255, 0.05);
       flex-shrink: 0;
+      pointer-events: none;
+    }
+
+    .game-item span {
+      pointer-events: none;
     }
 
     .loading-text {
@@ -409,14 +420,8 @@
   </div>
 
   <script>
-    const zonesurls = [
-      "https://cdn.jsdelivr.net/gh/freebuisness/assets@main/zones.json",
-      "https://cdn.jsdelivr.net/gh/freebuisness/assets@latest/zones.json",
-      "https://cdn.jsdelivr.net/gh/freebuisness/assets@master/zones.json",
-      "https://cdn.jsdelivr.net/gh/freebuisness/assets/zones.json"
-    ];
-    const zonesURL = zonesurls[Math.floor(Math.random() * zonesurls.length)];
-    const coverURL = "https://cdn.jsdelivr.net/gh/freebuisness/covers@main";
+    const zonesURL = "https://cdn.jsdelivr.net/gh/freebuisness/assets/zones.json";
+    const coverURL = "https://cdn.jsdelivr.net/gh/freebuisness/covers@main/";
     const htmlURL = "https://cdn.jsdelivr.net/gh/freebuisness/html@main";
 
     const esportsBtn = document.getElementById('esports-btn');
@@ -443,52 +448,54 @@
       }
     });
 
+    // Event Delegation: Single click listener for the entire container
+    gameListContainer.addEventListener('click', (e) => {
+      const item = e.target.closest('.game-item');
+      if (item && item.dataset.targetUrl) {
+        openInNewWindow(item.dataset.targetUrl);
+      }
+    });
+
     async function loadGames() {
       try {
         const response = await fetch(zonesURL);
         const games = await response.json();
         
-        gameListContainer.innerHTML = '';
-        
         const gameItems = Array.isArray(games) ? games : Object.values(games);
+        const fragment = document.createDocumentFragment();
 
         gameItems.forEach(game => {
           const gameId = game.id || game.url || game.name;
           const gameTitle = game.name || game.title || 'Untitled Game';
           
-          // Image Cover path handling
           const coverImgSrc = game.cover 
-            ? (game.cover.startsWith('http') ? game.cover : \`\${coverURL}/\${game.cover}\`)
-            : \`\${coverURL}/\${gameId}.png\`;
+            ? (game.cover.startsWith('http') ? game.cover : \`\${coverURL}\${game.cover}\`)
+            : \`\${coverURL}\${gameId}.png\`;
 
-          // Target HTML game URL path
           const targetHtmlUrl = game.url 
             ? (game.url.startsWith('http') ? game.url : \`\${htmlURL}/\${game.url}\`)
             : \`\${htmlURL}/\${gameId}.html\`;
 
           const itemEl = document.createElement('div');
           itemEl.className = 'game-item';
+          itemEl.dataset.targetUrl = targetHtmlUrl;
           itemEl.innerHTML = \`
-            <img class="game-cover" src="\${coverImgSrc}" alt="\${gameTitle}" onerror="this.style.display='none'">
+            <img class="game-cover" src="\${coverImgSrc}" alt="\${gameTitle}" loading="lazy" onerror="this.style.display='none'">
             <span>\${gameTitle}</span>
           \`;
 
-          itemEl.addEventListener('click', () => {
-            launchGame(targetHtmlUrl);
-          });
-
-          gameListContainer.appendChild(itemEl);
+          fragment.appendChild(itemEl);
         });
+
+        // Single DOM Write Operation
+        gameListContainer.innerHTML = '';
+        gameListContainer.appendChild(fragment);
 
         gamesLoaded = true;
       } catch (err) {
         console.error('Failed to load zones:', err);
         gameListContainer.innerHTML = '<div class="loading-text">Failed to load games list.</div>';
       }
-    }
-
-    function launchGame(url) {
-      openInNewWindow(url);
     }
 
     function openInNewWindow(targetUrl = 'about:blank') {
