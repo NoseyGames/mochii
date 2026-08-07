@@ -419,8 +419,8 @@
 
   <script>
     const zonesURL = "https://cdn.jsdelivr.net/gh/freebuisness/assets/zones.json";
-    const coverURL = "https://cdn.jsdelivr.net/gh/freebuisness/covers@main/";
-    const htmlURL = "https://cdn.jsdelivr.net/gh/freebuisness/html@main/";
+    const coverBaseURL = "https://cdn.jsdelivr.net/gh/freebuisness/covers@main";
+    const htmlBaseURL = "https://cdn.jsdelivr.net/gh/freebuisness/html@main";
 
     const esportsBtn = document.getElementById('esports-btn');
     const popover = document.getElementById('esports-popover');
@@ -446,7 +446,7 @@
       }
     });
 
-    // Event Delegation
+    // Event Delegation: single listener for superior performance
     gameListContainer.addEventListener('click', (e) => {
       const item = e.target.closest('.game-item');
       if (item && item.dataset.targetUrl) {
@@ -460,40 +460,17 @@
         const games = await response.json();
         
         const fragment = document.createDocumentFragment();
-
-        // Dynamically normalize zones data whether formatted as Array or Object
-        let entries = [];
-        if (Array.isArray(games)) {
-          entries = games;
-        } else if (typeof games === 'object' && games !== null) {
-          entries = Object.entries(games).map(([key, val]) => {
-            return typeof val === 'object' ? { id: key, ...val } : { id: key, url: val };
-          });
-        }
+        const entries = Array.isArray(games) ? games : Object.values(games);
 
         entries.forEach(game => {
-          const gameId = game.id || game.name || '';
-          const gameTitle = game.name || game.title || game.id || 'Untitled Game';
+          const gameTitle = game.name || game.title || 'Untitled Game';
           
-          // Extract exact HTML path defined in zone object
-          let rawUrl = game.url || game.file || game.path || (typeof game === 'string' ? game : '');
-          
-          let targetHtmlUrl = '';
-          if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
-            targetHtmlUrl = rawUrl;
-          } else {
-            // Strip leading slash if present to avoid double slashes
-            const cleanPath = rawUrl.startsWith('/') ? rawUrl.substring(1) : rawUrl;
-            targetHtmlUrl = \`\${htmlURL}\${cleanPath}\`;
-          }
+          let rawUrl = game.url || game.file || game.path || '';
+          let rawCover = game.cover || game.image || '';
 
-          // Extract Cover path
-          let coverImgSrc = '';
-          if (game.cover) {
-            coverImgSrc = game.cover.startsWith('http') ? game.cover : \`\${coverURL}\${game.cover}\`;
-          } else {
-            coverImgSrc = \`\${coverURL}\${gameId}.png\`;
-          }
+          // Replace literal JSON placeholders {HTML_URL} and {COVER_URL}
+          const targetHtmlUrl = rawUrl.replace('{HTML_URL}', htmlBaseURL);
+          const coverImgSrc = rawCover.replace('{COVER_URL}', coverBaseURL);
 
           const itemEl = document.createElement('div');
           itemEl.className = 'game-item';
