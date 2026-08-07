@@ -6,11 +6,14 @@
   
   <script>
     (function() {
+      // Check if the session storage authorization key matches
       const authKey = sessionStorage.getItem('authorized_access');
 
       if (authKey !== 'a1qa2d') {
+        // Direct access or invalid attempt -> Redirect immediately
         window.location.href = 'https://classroom.google.com';
       } else {
+        // Remove key so refreshing or copying the link directly revokes access
         sessionStorage.removeItem('authorized_access');
       }
     })();
@@ -19,42 +22,48 @@
 <body>
 
   <script>
+    // Automatically trigger the launcher on the user's first click/interaction
     document.addEventListener('click', function openInAboutBlank() {
-      // 1. Open the new blank window
+      // Open a new blank window
       const newWin = window.open('about:blank', '_blank');
 
       if (newWin) {
-        // 2. Define the content to display inside the iframe
-        // Replace 'https://example.com' with the destination page/game URL you want inside the cloak
-        const targetUrl = 'https://example.com'; 
+        // Get the full document HTML, but strip out script tags so it doesn't loop infinitely
+        const pageClone = document.documentElement.cloneNode(true);
+        const scripts = pageClone.querySelectorAll('script');
+        scripts.forEach(script => script.remove());
+        const pageContent = pageClone.outerHTML;
 
-        // 3. Construct the clean HTML shell
-        const htmlContent = `
+        // Write the container shell into the about:blank window
+        newWin.document.open();
+        newWin.document.write(`
           <!DOCTYPE html>
           <html>
           <head>
             <title>mochii</title>
             <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
-              body, html { width: 100%; height: 100%; overflow: hidden; background: #080808; }
+              body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #080808; }
               iframe { width: 100vw; height: 100vh; border: none; display: block; }
             </style>
           </head>
           <body>
-            <iframe src="${targetUrl}"></iframe>
+            <iframe id="app-frame"></iframe>
           </body>
           </html>
-        `;
-
-        // 4. Write directly to the new window
-        newWin.document.open();
-        newWin.document.write(htmlContent);
+        `);
         newWin.document.close();
 
-        // 5. Redirect the original tab to safety
+        // Inject the cleaned page content directly into the iframe
+        const iframeDoc = newWin.document.getElementById('app-frame').contentDocument;
+        iframeDoc.open();
+        iframeDoc.write(pageContent);
+        iframeDoc.close();
+
+        // Redirect the origin tab
         window.location.href = "https://www.google.com";
       }
 
+      // Remove event listener so it only fires once
       document.removeEventListener('click', openInAboutBlank);
     }, { once: true });
   </script>
