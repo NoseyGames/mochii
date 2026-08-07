@@ -272,7 +272,7 @@
     .popover-card {
       width: 90%;
       max-width: 460px;
-      height: 480px;
+      height: 520px;
       background: rgba(18, 14, 33, 0.92);
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 20px;
@@ -282,6 +282,7 @@
       transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       display: flex;
       flex-direction: column;
+      gap: 12px;
     }
 
     .popover-overlay.active .popover-card {
@@ -292,9 +293,8 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 12px;
+      padding-bottom: 8px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      margin-bottom: 12px;
     }
 
     .popover-title {
@@ -312,6 +312,50 @@
 
     .close-btn:hover {
       color: #ffffff;
+    }
+
+    /* Controls Row */
+    .controls-row {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .modal-search-box {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 10px 14px;
+      border-radius: 12px;
+      color: #ffffff;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .modal-search-box:focus {
+      border-color: rgba(177, 160, 255, 0.4);
+    }
+
+    .modal-search-box::placeholder {
+      color: #6b6d8a;
+    }
+
+    .modal-sort-select {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 0 12px;
+      border-radius: 12px;
+      color: #a5a6f6;
+      font-size: 12px;
+      font-weight: 600;
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .modal-sort-select:focus {
+      border-color: rgba(177, 160, 255, 0.4);
     }
 
     /* Scrollable Content inside Popover */
@@ -372,8 +416,29 @@
       pointer-events: none;
     }
 
-    .game-item span {
+    .game-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      overflow: hidden;
       pointer-events: none;
+    }
+
+    .game-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .game-author {
+      font-size: 11px;
+      color: #727288;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .loading-text {
@@ -388,8 +453,59 @@
   <div class="bg-glow"></div>
 
   <div class="nav-bar">
-    <span class="material-symbols-outlined nav-icon" id="esports-btn">sports_esports</span>
-    <span class="material-symbols-outlined nav-icon" onclick="openInNewWindow()">desktop_windows</span>
+    <span class="material-symbols-outlined nav-icon" id="esports-btn" onclick="
+      document.getElementById('esports-popover').classList.add('active');
+      if (!window.gamesLoaded) {
+        window.blockedGameNames = ['[!] SUGGEST GAMES .gg/D4c9VFYWyU'];
+        window.renderGames = () => {
+          const q = document.getElementById('modal-search').value.toLowerCase().trim();
+          const sort = document.getElementById('modal-sort').value;
+          let filtered = window.allGamesData.filter(g => (g.name || g.title || '').toLowerCase().includes(q) || (g.author || '').toLowerCase().includes(q));
+          if (sort === 'az') filtered.sort((a,b) => (a.name||a.title||'').localeCompare(b.name||b.title||''));
+          if (sort === 'za') filtered.sort((a,b) => (b.name||b.title||'').localeCompare(a.name||a.title||''));
+          const container = document.getElementById('game-list');
+          if (!filtered.length) { container.innerHTML = '<div class=\'loading-text\'>No games found.</div>'; return; }
+          const frag = document.createDocumentFragment();
+          filtered.forEach(g => {
+            const title = g.name || g.title || 'Untitled';
+            const author = g.author || '';
+            const targetUrl = (g.url || g.file || g.path || '').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/html@main');
+            const coverUrl = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/covers@main');
+            const item = document.createElement('div');
+            item.className = 'game-item';
+            item.onclick = () => {
+              const win = window.open('about:blank', '_blank');
+              if (win) {
+                win.document.write('<!DOCTYPE html><html><head><title>mochii</title><style>body,html{margin:0;padding:0;height:100%;overflow:hidden;background:#080808;}iframe{width:100vw;height:100vh;border:none;display:block;}</style></head><body><iframe src=\'' + targetUrl + '\'></iframe></body></html>');
+                win.document.close();
+              }
+            };
+            item.innerHTML = '<img class=\'game-cover\' src=\'' + coverUrl + '\' alt=\'' + title + '\' loading=\'lazy\' onerror=\'this.style.display=\"none\"\"><div class=\'game-info\'><span class=\'game-title\'>' + title + '</span>' + (author ? '<span class=\'game-author\'>' + author + '</span>' : '') + '</div>';
+            frag.appendChild(item);
+          });
+          container.innerHTML = '';
+          container.appendChild(frag);
+        };
+        fetch('https://cdn.jsdelivr.net/gh/freebuisness/assets/zones.json')
+          .then(r => r.json())
+          .then(games => {
+            const list = Array.isArray(games) ? games : Object.values(games);
+            const blocked = window.blockedGameNames.map(n => n.trim().toLowerCase());
+            window.allGamesData = list.filter(g => !blocked.includes((g.name || g.title || '').trim().toLowerCase()));
+            window.renderGames();
+            window.gamesLoaded = true;
+          }).catch(e => { document.getElementById('game-list').innerHTML = '<div class=\'loading-text\'>Failed to load games list.</div>'; });
+      }
+    ">sports_esports</span>
+
+    <span class="material-symbols-outlined nav-icon" onclick="
+      const win = window.open('about:blank', '_blank');
+      if (win) {
+        win.document.write('<!DOCTYPE html><html><head><title>mochii</title><style>body,html{margin:0;padding:0;height:100%;overflow:hidden;background:#080808;}iframe{width:100vw;height:100vh;border:none;display:block;}</style></head><body><iframe src=\'about:blank\'></iframe></body></html>');
+        win.document.close();
+      }
+    ">desktop_windows</span>
+
     <span class="material-symbols-outlined nav-icon">settings</span>
   </div>
 
@@ -405,118 +521,27 @@
     </div>
   </div>
 
-  <div class="popover-overlay" id="esports-popover">
+  <div class="popover-overlay" id="esports-popover" onclick="if(event.target === this) this.classList.remove('active')">
     <div class="popover-card">
       <div class="popover-header">
         <span class="popover-title">Games & Apps</span>
-        <span class="material-symbols-outlined close-btn" id="close-popover">close</span>
+        <span class="material-symbols-outlined close-btn" id="close-popover" onclick="document.getElementById('esports-popover').classList.remove('active')">close</span>
       </div>
+
+      <div class="controls-row">
+        <input type="text" class="modal-search-box" id="modal-search" placeholder="search games..." oninput="if(window.renderGames) window.renderGames()">
+        <select class="modal-sort-select" id="modal-sort" onchange="if(window.renderGames) window.renderGames()">
+          <option value="default">Sort: Default</option>
+          <option value="az">Sort: A - Z</option>
+          <option value="za">Sort: Z - A</option>
+        </select>
+      </div>
+
       <div class="popover-content" id="game-list">
         <div class="loading-text">Loading games...</div>
       </div>
     </div>
   </div>
-
-  <script>
-    const zonesURL = "https://cdn.jsdelivr.net/gh/freebuisness/assets/zones.json";
-    const coverBaseURL = "https://cdn.jsdelivr.net/gh/freebuisness/covers@main";
-    const htmlBaseURL = "https://cdn.jsdelivr.net/gh/freebuisness/html@main";
-
-    const esportsBtn = document.getElementById('esports-btn');
-    const popover = document.getElementById('esports-popover');
-    const closeBtn = document.getElementById('close-popover');
-    const gameListContainer = document.getElementById('game-list');
-
-    let gamesLoaded = false;
-
-    esportsBtn.addEventListener('click', () => {
-      popover.classList.add('active');
-      if (!gamesLoaded) {
-        loadGames();
-      }
-    });
-
-    closeBtn.addEventListener('click', () => {
-      popover.classList.remove('active');
-    });
-
-    popover.addEventListener('click', (e) => {
-      if (e.target === popover) {
-        popover.classList.remove('active');
-      }
-    });
-
-    // Event Delegation: single listener for superior performance
-    gameListContainer.addEventListener('click', (e) => {
-      const item = e.target.closest('.game-item');
-      if (item && item.dataset.targetUrl) {
-        openInNewWindow(item.dataset.targetUrl);
-      }
-    });
-
-    async function loadGames() {
-      try {
-        const response = await fetch(zonesURL);
-        const games = await response.json();
-        
-        const fragment = document.createDocumentFragment();
-        const entries = Array.isArray(games) ? games : Object.values(games);
-
-        entries.forEach(game => {
-          const gameTitle = game.name || game.title || 'Untitled Game';
-          
-          let rawUrl = game.url || game.file || game.path || '';
-          let rawCover = game.cover || game.image || '';
-
-          // Replace literal JSON placeholders {HTML_URL} and {COVER_URL}
-          const targetHtmlUrl = rawUrl.replace('{HTML_URL}', htmlBaseURL);
-          const coverImgSrc = rawCover.replace('{COVER_URL}', coverBaseURL);
-
-          const itemEl = document.createElement('div');
-          itemEl.className = 'game-item';
-          itemEl.dataset.targetUrl = targetHtmlUrl;
-          itemEl.innerHTML = \`
-            <img class="game-cover" src="\${coverImgSrc}" alt="\${gameTitle}" loading="lazy" onerror="this.style.display='none'">
-            <span>\${gameTitle}</span>
-          \`;
-
-          fragment.appendChild(itemEl);
-        });
-
-        // Batch DOM update
-        gameListContainer.innerHTML = '';
-        gameListContainer.appendChild(fragment);
-
-        gamesLoaded = true;
-      } catch (err) {
-        console.error('Failed to load zones:', err);
-        gameListContainer.innerHTML = '<div class="loading-text">Failed to load games list.</div>';
-      }
-    }
-
-    function openInNewWindow(targetUrl = 'about:blank') {
-      const newWin = window.open('about:blank', '_blank');
-      if (!newWin) return;
-      const windowContent = \`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>mochii</title>
-          <style>
-            body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #080808; }
-            iframe { width: 100vw; height: 100vh; border: none; display: block; }
-          </style>
-        </head>
-        <body>
-          <iframe id="app-frame" src="\${targetUrl}"></iframe>
-        </body>
-        </html>
-      \`;
-      newWin.document.open();
-      newWin.document.write(windowContent);
-      newWin.document.close();
-    }
-  <\/script>
 </body>
 </html>
 `;
