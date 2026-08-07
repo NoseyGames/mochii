@@ -111,7 +111,7 @@
       justify-content: center;
     }
 
-    /* soft flowing purple liquid background */
+    /* Soft flowing purple liquid background */
     .bg-glow {
       position: absolute;
       inset: -20%;
@@ -137,16 +137,9 @@
       100% { transform: scale(1.02) translate(-1%, -2%) rotate(-0.5deg); }
     }
 
-    /* Entry Animation */
     @keyframes fadeInUp {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     .container {
@@ -255,11 +248,11 @@
       font-weight: 600;
     }
 
-    /* Popover Modal Styles */
+    /* Popover Modal */
     .popover-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.5);
+      background: rgba(0, 0, 0, 0.65);
       backdrop-filter: blur(8px);
       z-index: 10;
       opacity: 0;
@@ -277,9 +270,9 @@
 
     .popover-card {
       width: 90%;
-      max-width: 420px;
-      max-height: 380px;
-      background: rgba(18, 14, 33, 0.85);
+      max-width: 460px;
+      height: 480px;
+      background: rgba(18, 14, 33, 0.92);
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 20px;
       padding: 20px;
@@ -322,6 +315,7 @@
 
     /* Scrollable Content inside Popover */
     .popover-content {
+      flex: 1;
       overflow-y: auto;
       padding-right: 6px;
       display: flex;
@@ -345,19 +339,39 @@
     }
 
     .game-item {
-      padding: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px;
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid rgba(255, 255, 255, 0.05);
       border-radius: 12px;
       font-size: 13px;
       color: #d1d2eb;
       cursor: pointer;
-      transition: background 0.2s, border-color 0.2s;
+      transition: background 0.2s, border-color 0.2s, transform 0.2s;
     }
 
     .game-item:hover {
-      background: rgba(255, 255, 255, 0.07);
+      background: rgba(255, 255, 255, 0.08);
       border-color: rgba(177, 160, 255, 0.3);
+      transform: translateX(3px);
+    }
+
+    .game-cover {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: rgba(255, 255, 255, 0.05);
+      flex-shrink: 0;
+    }
+
+    .loading-text {
+      color: #8c8ea8;
+      font-size: 13px;
+      text-align: center;
+      margin-top: 20px;
     }
   </style>
 </head>
@@ -388,26 +402,35 @@
         <span class="popover-title">Games & Apps</span>
         <span class="material-symbols-outlined close-btn" id="close-popover">close</span>
       </div>
-      <div class="popover-content">
-        <div class="game-item">🎮 Game #1</div>
-        <div class="game-item">🕹️ Game #2</div>
-        <div class="game-item">🚀 Game #3</div>
-        <div class="game-item">👾 Game #4</div>
-        <div class="game-item">🎯 Game #5</div>
-        <div class="game-item">🎲 Game #6</div>
-        <div class="game-item">⚡ Game #7</div>
-        <div class="game-item">🔮 Game #8</div>
+      <div class="popover-content" id="game-list">
+        <div class="loading-text">Loading games...</div>
       </div>
     </div>
   </div>
 
   <script>
+    const zonesurls = [
+      "https://cdn.jsdelivr.net/gh/freebuisness/assets@main/zones.json",
+      "https://cdn.jsdelivr.net/gh/freebuisness/assets@latest/zones.json",
+      "https://cdn.jsdelivr.net/gh/freebuisness/assets@master/zones.json",
+      "https://cdn.jsdelivr.net/gh/freebuisness/assets/zones.json"
+    ];
+    const zonesURL = zonesurls[Math.floor(Math.random() * zonesurls.length)];
+    const coverURL = "https://cdn.jsdelivr.net/gh/freebuisness/covers@main";
+    const htmlURL = "https://cdn.jsdelivr.net/gh/freebuisness/html@main";
+
     const esportsBtn = document.getElementById('esports-btn');
     const popover = document.getElementById('esports-popover');
     const closeBtn = document.getElementById('close-popover');
+    const gameListContainer = document.getElementById('game-list');
+
+    let gamesLoaded = false;
 
     esportsBtn.addEventListener('click', () => {
       popover.classList.add('active');
+      if (!gamesLoaded) {
+        loadGames();
+      }
     });
 
     closeBtn.addEventListener('click', () => {
@@ -420,7 +443,55 @@
       }
     });
 
-    function openInNewWindow() {
+    async function loadGames() {
+      try {
+        const response = await fetch(zonesURL);
+        const games = await response.json();
+        
+        gameListContainer.innerHTML = '';
+        
+        const gameItems = Array.isArray(games) ? games : Object.values(games);
+
+        gameItems.forEach(game => {
+          const gameId = game.id || game.url || game.name;
+          const gameTitle = game.name || game.title || 'Untitled Game';
+          
+          // Image Cover path handling
+          const coverImgSrc = game.cover 
+            ? (game.cover.startsWith('http') ? game.cover : \`\${coverURL}/\${game.cover}\`)
+            : \`\${coverURL}/\${gameId}.png\`;
+
+          // Target HTML game URL path
+          const targetHtmlUrl = game.url 
+            ? (game.url.startsWith('http') ? game.url : \`\${htmlURL}/\${game.url}\`)
+            : \`\${htmlURL}/\${gameId}.html\`;
+
+          const itemEl = document.createElement('div');
+          itemEl.className = 'game-item';
+          itemEl.innerHTML = \`
+            <img class="game-cover" src="\${coverImgSrc}" alt="\${gameTitle}" onerror="this.style.display='none'">
+            <span>\${gameTitle}</span>
+          \`;
+
+          itemEl.addEventListener('click', () => {
+            launchGame(targetHtmlUrl);
+          });
+
+          gameListContainer.appendChild(itemEl);
+        });
+
+        gamesLoaded = true;
+      } catch (err) {
+        console.error('Failed to load zones:', err);
+        gameListContainer.innerHTML = '<div class="loading-text">Failed to load games list.</div>';
+      }
+    }
+
+    function launchGame(url) {
+      openInNewWindow(url);
+    }
+
+    function openInNewWindow(targetUrl = 'about:blank') {
       const newWin = window.open('about:blank', '_blank');
       if (!newWin) return;
       const windowContent = \`
@@ -434,7 +505,7 @@
           </style>
         </head>
         <body>
-          <iframe id="app-frame" src="about:blank"></iframe>
+          <iframe id="app-frame" src="\${targetUrl}"></iframe>
         </body>
         </html>
       \`;
