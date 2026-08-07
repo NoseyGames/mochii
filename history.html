@@ -352,8 +352,6 @@
       color: #d1d2eb;
       cursor: pointer;
       transition: background 0.2s, border-color 0.2s, transform 0.2s;
-      
-      /* Rendering Optimization for Long Lists */
       content-visibility: auto;
       contain-intrinsic-size: 0 64px;
     }
@@ -422,7 +420,7 @@
   <script>
     const zonesURL = "https://cdn.jsdelivr.net/gh/freebuisness/assets/zones.json";
     const coverURL = "https://cdn.jsdelivr.net/gh/freebuisness/covers@main/";
-    const htmlURL = "https://cdn.jsdelivr.net/gh/freebuisness/html@main";
+    const htmlURL = "https://cdn.jsdelivr.net/gh/freebuisness/html@main/";
 
     const esportsBtn = document.getElementById('esports-btn');
     const popover = document.getElementById('esports-popover');
@@ -448,7 +446,7 @@
       }
     });
 
-    // Event Delegation: Single click listener for the entire container
+    // Event Delegation
     gameListContainer.addEventListener('click', (e) => {
       const item = e.target.closest('.game-item');
       if (item && item.dataset.targetUrl) {
@@ -461,20 +459,41 @@
         const response = await fetch(zonesURL);
         const games = await response.json();
         
-        const gameItems = Array.isArray(games) ? games : Object.values(games);
         const fragment = document.createDocumentFragment();
 
-        gameItems.forEach(game => {
-          const gameId = game.id || game.url || game.name;
-          const gameTitle = game.name || game.title || 'Untitled Game';
-          
-          const coverImgSrc = game.cover 
-            ? (game.cover.startsWith('http') ? game.cover : \`\${coverURL}\${game.cover}\`)
-            : \`\${coverURL}\${gameId}.png\`;
+        // Dynamically normalize zones data whether formatted as Array or Object
+        let entries = [];
+        if (Array.isArray(games)) {
+          entries = games;
+        } else if (typeof games === 'object' && games !== null) {
+          entries = Object.entries(games).map(([key, val]) => {
+            return typeof val === 'object' ? { id: key, ...val } : { id: key, url: val };
+          });
+        }
 
-          const targetHtmlUrl = game.url 
-            ? (game.url.startsWith('http') ? game.url : \`\${htmlURL}/\${game.url}\`)
-            : \`\${htmlURL}/\${gameId}.html\`;
+        entries.forEach(game => {
+          const gameId = game.id || game.name || '';
+          const gameTitle = game.name || game.title || game.id || 'Untitled Game';
+          
+          // Extract exact HTML path defined in zone object
+          let rawUrl = game.url || game.file || game.path || (typeof game === 'string' ? game : '');
+          
+          let targetHtmlUrl = '';
+          if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+            targetHtmlUrl = rawUrl;
+          } else {
+            // Strip leading slash if present to avoid double slashes
+            const cleanPath = rawUrl.startsWith('/') ? rawUrl.substring(1) : rawUrl;
+            targetHtmlUrl = \`\${htmlURL}\${cleanPath}\`;
+          }
+
+          // Extract Cover path
+          let coverImgSrc = '';
+          if (game.cover) {
+            coverImgSrc = game.cover.startsWith('http') ? game.cover : \`\${coverURL}\${game.cover}\`;
+          } else {
+            coverImgSrc = \`\${coverURL}\${gameId}.png\`;
+          }
 
           const itemEl = document.createElement('div');
           itemEl.className = 'game-item';
@@ -487,7 +506,7 @@
           fragment.appendChild(itemEl);
         });
 
-        // Single DOM Write Operation
+        // Batch DOM update
         gameListContainer.innerHTML = '';
         gameListContainer.appendChild(fragment);
 
