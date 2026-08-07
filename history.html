@@ -314,7 +314,6 @@
       color: #ffffff;
     }
 
-    /* Controls Row */
     .controls-row {
       display: flex;
       gap: 8px;
@@ -358,7 +357,6 @@
       border-color: rgba(177, 160, 255, 0.4);
     }
 
-    /* Scrollable Content inside Popover */
     .popover-content {
       flex: 1;
       overflow-y: auto;
@@ -455,54 +453,54 @@
   <div class="nav-bar">
     <span class="material-symbols-outlined nav-icon" id="esports-btn" onclick="
       document.getElementById('esports-popover').classList.add('active');
-      if (!window.gamesLoaded) {
-        window.blockedGameNames = ['[!] SUGGEST GAMES .gg/D4c9VFYWyU'];
-        window.renderGames = () => {
-          const q = document.getElementById('modal-search').value.toLowerCase().trim();
-          const sort = document.getElementById('modal-sort').value;
-          let filtered = window.allGamesData.filter(g => (g.name || g.title || '').toLowerCase().includes(q) || (g.author || '').toLowerCase().includes(q));
-          if (sort === 'az') filtered.sort((a,b) => (a.name||a.title||'').localeCompare(b.name||b.title||''));
-          if (sort === 'za') filtered.sort((a,b) => (b.name||b.title||'').localeCompare(a.name||a.title||''));
-          const container = document.getElementById('game-list');
-          if (!filtered.length) { container.innerHTML = '<div class=\'loading-text\'>No games found.</div>'; return; }
-          const frag = document.createDocumentFragment();
-          filtered.forEach(g => {
-            const title = g.name || g.title || 'Untitled';
-            const author = g.author || '';
-            const targetUrl = (g.url || g.file || g.path || '').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/html@main');
-            const coverUrl = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/covers@main');
-            const item = document.createElement('div');
-            item.className = 'game-item';
-            item.onclick = () => {
-              const win = window.open('about:blank', '_blank');
-              if (win) {
-                win.document.write('<!DOCTYPE html><html><head><title>mochii</title><style>body,html{margin:0;padding:0;height:100%;overflow:hidden;background:#080808;}iframe{width:100vw;height:100vh;border:none;display:block;}</style></head><body><iframe src=\'' + targetUrl + '\'></iframe></body></html>');
-                win.document.close();
+      if(!window.loaded){
+        window.blocked=['[!] SUGGEST GAMES .gg/D4c9VFYWyU'];
+        window.render=function(){
+          var q=document.getElementById('modal-search').value.toLowerCase().trim();
+          var s=document.getElementById('modal-sort').value;
+          var f=window.raw.filter(function(g){return (g.name||g.title||'').toLowerCase().includes(q)||(g.author||'').toLowerCase().includes(q)});
+          if(s==='az')f.sort(function(a,b){return (a.name||a.title||'').localeCompare(b.name||b.title||'')});
+          if(s==='za')f.sort(function(a,b){return (b.name||b.title||'').localeCompare(a.name||a.title||'')});
+          var c=document.getElementById('game-list');
+          if(!f.length){c.innerHTML='<div class=&quot;loading-text&quot;>No games found.</div>';return;}
+          var fg=document.createDocumentFragment();
+          f.forEach(function(g){
+            var t=g.name||g.title||'Untitled';
+            var a=g.author||'';
+            var u=(g.url||g.file||g.path||'').replace('{HTML_URL}','https://cdn.jsdelivr.net/gh/freebuisness/html@main');
+            var v=(g.cover||g.image||'').replace('{COVER_URL}','https://cdn.jsdelivr.net/gh/freebuisness/covers@main');
+            var d=document.createElement('div');
+            d.className='game-item';
+            d.onclick=function(){
+              var w=window.open('about:blank','_blank');
+              if(w){
+                w.document.write('<!DOCTYPE html><html><head><title>mochii</title><style>body,html{margin:0;padding:0;height:100%;overflow:hidden;background:#080808;}iframe{width:100vw;height:100vh;border:none;display:block;}</style></head><body><iframe src=&quot;'+u+'&quot;></iframe></body></html>');
+                w.document.close();
               }
             };
-            item.innerHTML = '<img class=\'game-cover\' src=\'' + coverUrl + '\' alt=\'' + title + '\' loading=\'lazy\' onerror=\'this.style.display=\"none\"\"><div class=\'game-info\'><span class=\'game-title\'>' + title + '</span>' + (author ? '<span class=\'game-author\'>' + author + '</span>' : '') + '</div>';
-            frag.appendChild(item);
+            d.innerHTML='<img class=&quot;game-cover&quot; src=&quot;'+v+'&quot; alt=&quot;'+t+'&quot; loading=&quot;lazy&quot; onerror=&quot;this.style.display=\'none\'&quot;><div class=&quot;game-info&quot;><span class=&quot;game-title&quot;>'+t+'</span>'+(a?'<span class=&quot;game-author&quot;>'+a+'</span>':'')+'</div>';
+            fg.appendChild(d);
           });
-          container.innerHTML = '';
-          container.appendChild(frag);
+          c.innerHTML='';
+          c.appendChild(fg);
         };
         fetch('https://cdn.jsdelivr.net/gh/freebuisness/assets/zones.json')
-          .then(r => r.json())
-          .then(games => {
-            const list = Array.isArray(games) ? games : Object.values(games);
-            const blocked = window.blockedGameNames.map(n => n.trim().toLowerCase());
-            window.allGamesData = list.filter(g => !blocked.includes((g.name || g.title || '').trim().toLowerCase()));
-            window.renderGames();
-            window.gamesLoaded = true;
-          }).catch(e => { document.getElementById('game-list').innerHTML = '<div class=\'loading-text\'>Failed to load games list.</div>'; });
+          .then(function(r){return r.json()})
+          .then(function(g){
+            var l=Array.isArray(g)?g:Object.values(g);
+            var b=window.blocked.map(function(n){return n.trim().toLowerCase()});
+            window.raw=l.filter(function(x){return !b.includes((x.name||x.title||'').trim().toLowerCase())});
+            window.render();
+            window.loaded=true;
+          }).catch(function(){document.getElementById('game-list').innerHTML='<div class=&quot;loading-text&quot;>Failed to load games list.</div>'});
       }
     ">sports_esports</span>
 
     <span class="material-symbols-outlined nav-icon" onclick="
-      const win = window.open('about:blank', '_blank');
-      if (win) {
-        win.document.write('<!DOCTYPE html><html><head><title>mochii</title><style>body,html{margin:0;padding:0;height:100%;overflow:hidden;background:#080808;}iframe{width:100vw;height:100vh;border:none;display:block;}</style></head><body><iframe src=\'about:blank\'></iframe></body></html>');
-        win.document.close();
+      var w=window.open('about:blank','_blank');
+      if(w){
+        w.document.write('<!DOCTYPE html><html><head><title>mochii</title><style>body,html{margin:0;padding:0;height:100%;overflow:hidden;background:#080808;}iframe{width:100vw;height:100vh;border:none;display:block;}</style></head><body><iframe src=&quot;about:blank&quot;></iframe></body></html>');
+        w.document.close();
       }
     ">desktop_windows</span>
 
@@ -521,7 +519,7 @@
     </div>
   </div>
 
-  <div class="popover-overlay" id="esports-popover" onclick="if(event.target === this) this.classList.remove('active')">
+  <div class="popover-overlay" id="esports-popover" onclick="if(event.target===this)this.classList.remove('active')">
     <div class="popover-card">
       <div class="popover-header">
         <span class="popover-title">Games & Apps</span>
@@ -529,8 +527,8 @@
       </div>
 
       <div class="controls-row">
-        <input type="text" class="modal-search-box" id="modal-search" placeholder="search games..." oninput="if(window.renderGames) window.renderGames()">
-        <select class="modal-sort-select" id="modal-sort" onchange="if(window.renderGames) window.renderGames()">
+        <input type="text" class="modal-search-box" id="modal-search" placeholder="search games..." oninput="if(window.render)window.render()">
+        <select class="modal-sort-select" id="modal-sort" onchange="if(window.render)window.render()">
           <option value="default">Sort: Default</option>
           <option value="az">Sort: A - Z</option>
           <option value="za">Sort: Z - A</option>
