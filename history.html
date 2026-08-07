@@ -478,7 +478,7 @@
                 w.document.close();
               }
             };
-            d.innerHTML='<img class=&quot;game-cover&quot; src=&quot;'+v+'&quot; alt=&quot;'+t+'&quot; loading=&quot;lazy&quot; onerror=&quot;this.style.display=\'none\'&quot;><div class=&quot;game-info&quot;><span class=&quot;game-title&quot;>'+t+'</span>'+(a?'<span class=&quot;game-author&quot;>'+a+'</span>':'')+'</div>';
+            d.innerHTML='<img class=&quot;game-cover&quot; src=&quot;'+v+'&quot; alt=&quot;'+t+'&quot; loading=&quot;lazy&quot; onerror=&quot;this.remove()&quot;><div class=&quot;game-info&quot;><span class=&quot;game-title&quot;>'+t+'</span>'+(a?'<span class=&quot;game-author&quot;>'+a+'</span>':'')+'</div>';
             fg.appendChild(d);
           });
           c.innerHTML='';
