@@ -431,8 +431,8 @@
           f.forEach(function(g){
             var t=g.name||g.title||'Untitled';
             var a=g.author||'';
-            var u=(g.url||g.file||g.path||'').replace('{HTML_URL}','https://cdn.jsdelivr.net/gh/freebuisness/assets@main/html');
-            var v=(g.cover||g.image||'').replace('{COVER_URL}','https://cdn.jsdelivr.net/gh/freebuisness/assets@main/html');
+            var u=(g.url||g.file||g.path||'').replace('{HTML_URL}','https://cdn.jsdelivr.net/gh/freebuisness/html@main');
+            var v=(g.cover||g.image||'').replace('{COVER_URL}','https://cdn.jsdelivr.net/gh/freebuisness/covers@main');
             var d=document.createElement('div');
             d.className='game-item';
             d.onclick=function(){
