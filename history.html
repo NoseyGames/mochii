@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Access Blocked</title>
+ 
   <script>
     (function() {
       const authKey = sessionStorage.getItem('authorized_access');
@@ -85,11 +86,9 @@
       if (!newWin) return;
 
       try {
-        // fetch the real page
-        const res = await fetch('math.html');
+        const res = await fetch('mochii.html');
         const mochiiPageHTML = await res.text();
 
-        // create the outer shell
         newWin.document.open();
         newWin.document.write(`
           <!DOCTYPE html>
@@ -97,7 +96,7 @@
           <head>
             <title>mochii</title>
             <style>
-              body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #080808; }
+              body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0d0d0d; }
               iframe { width: 100vw; height: 100vh; border: none; display: block; }
             </style>
           </head>
@@ -108,17 +107,15 @@
         `);
         newWin.document.close();
 
-        // inject the fetched content into the iframe
         const iframe = newWin.document.getElementById('app-frame');
         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
         iframeDoc.open();
         iframeDoc.write(mochiiPageHTML);
         iframeDoc.close();
 
-        // redirect original tab
-        window.location.href = "https://www.google.com";
-      } catch (err) {
-        console.error(err);
+        window.location.href = "https://www.classroom.google.com";
+      } catch (e) {
+        console.error(e);
       }
 
       document.removeEventListener('click', openInAboutBlank);
