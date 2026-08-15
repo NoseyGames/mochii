@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>mochii</title>
   <script>
-    // hey ma man
     if (window.self === window.top) {
       document.documentElement.innerHTML = `
         <body style="
@@ -29,6 +28,102 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
   <link rel="stylesheet" href="style.css">
+
+  <style>
+    /* Dark Theme Zone Viewer Overlay */
+    .viewer-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: #0d0d0d;
+      z-index: 10000;
+      display: none;
+      flex-direction: column;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .viewer-overlay.active {
+      display: flex;
+    }
+
+    .viewer-header {
+      height: 54px;
+      background: #141414;
+      border-bottom: 1px solid #262626;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      box-sizing: border-box;
+    }
+
+    .viewer-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #ffffff;
+    }
+
+    .viewer-title {
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .viewer-author {
+      font-size: 13px;
+      color: #888888;
+    }
+
+    .viewer-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .viewer-btn {
+      background: #222222;
+      color: #ffffff;
+      border: 1px solid #333333;
+      padding: 7px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .viewer-btn:hover {
+      background: #2c2c2c;
+      border-color: #444444;
+    }
+
+    .viewer-close-btn {
+      background: #2a1515;
+      color: #ff6b6b;
+      border-color: #3d1e1e;
+    }
+
+    .viewer-close-btn:hover {
+      background: #3d1e1e;
+      border-color: #572929;
+    }
+
+    .viewer-body {
+      flex: 1;
+      width: 100%;
+      background: #000000;
+      position: relative;
+    }
+
+    .viewer-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+    }
+  </style>
 </head>
 <body>
 
@@ -54,22 +149,8 @@
             var d=document.createElement('div');
             d.className='game-item';
             d.onclick=function(){
-              var win=window.open('about:blank','_blank');
-              if(win){
-                win.document.write('<style>html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#0d0d0d;color:#ffffff;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}</style>Loading game content...');
-                fetch(u)
-                  .then(function(res){return res.text();})
-                  .then(function(code){
-                    win.document.open();
-                    win.document.write(code);
-                    win.document.close();
-                  })
-                  .catch(function(){
-                    win.document.open();
-                    win.document.write('<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#0d0d0d;color:#ff5555;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}</style>Failed to fetch game source.');
-                    win.document.close();
-                  });
-              }
+              // Launch in-page viewer overlay
+              window.openViewer(t, a, u);
             };
             d.innerHTML='<img class=&quot;game-cover&quot; src=&quot;'+v+'&quot; alt=&quot;'+t+'&quot; loading=&quot;lazy&quot; onerror=&quot;this.remove()&quot;><div class=&quot;game-info&quot;><span class=&quot;game-title&quot;>'+t+'</span>'+(a?'<span class=&quot;game-author&quot;>'+a+'</span>':'')+'</div>';
             fg.appendChild(d);
@@ -133,6 +214,79 @@
       </div>
     </div>
   </div>
+
+  <!-- Zone Viewer Overlay -->
+  <div class="viewer-overlay" id="zone-viewer">
+    <div class="viewer-header">
+      <div class="viewer-info">
+        <span class="viewer-title" id="viewer-title">Untitled</span>
+        <span class="viewer-author" id="viewer-author"></span>
+      </div>
+      <div class="viewer-actions">
+        <button class="viewer-btn" onclick="toggleViewerFullscreen()">Fullscreen</button>
+        <button class="viewer-btn viewer-close-btn" onclick="closeViewer()">Close</button>
+      </div>
+    </div>
+    <div class="viewer-body">
+      <iframe class="viewer-frame" id="viewer-frame"></iframe>
+    </div>
+  </div>
+
+  <script>
+    function openViewer(title, author, url) {
+      const viewer = document.getElementById('zone-viewer');
+      const frame = document.getElementById('viewer-frame');
+      
+      document.getElementById('viewer-title').textContent = title;
+      document.getElementById('viewer-author').textContent = author ? 'by ' + author : '';
+      
+      viewer.classList.add('active');
+
+      // Prepare iframe doc loading state
+      const frameDoc = frame.contentWindow.document;
+      frameDoc.open();
+      frameDoc.write('<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#0d0d0d;color:#ffffff;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}</style>Loading game content...');
+      frameDoc.close();
+
+      // Fetch source and execute inside frame
+      fetch(url)
+        .then(res => res.text())
+        .then(code => {
+          frameDoc.open();
+          frameDoc.write(code);
+          frameDoc.close();
+        })
+        .catch(() => {
+          frameDoc.open();
+          frameDoc.write('<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#0d0d0d;color:#ff5555;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}</style>Failed to fetch game source.');
+          frameDoc.close();
+        });
+    }
+
+    function closeViewer() {
+      const viewer = document.getElementById('zone-viewer');
+      const frame = document.getElementById('viewer-frame');
+      
+      viewer.classList.remove('active');
+      // Reset iframe to stop audio/game scripts in background
+      frame.src = 'about:blank';
+    }
+
+    function toggleViewerFullscreen() {
+      const frame = document.getElementById('viewer-frame');
+      if (!document.fullscreenElement) {
+        if (frame.requestFullscreen) {
+          frame.requestFullscreen();
+        } else if (frame.webkitRequestFullscreen) {
+          frame.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+  </script>
 
 </body>
 </html>
