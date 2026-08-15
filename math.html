@@ -5,8 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>mochii</title>
   <script>
-  
-    // whatcha doing here bud?
+    // hey ma man
     if (window.self === window.top) {
       document.documentElement.innerHTML = `
         <body style="
@@ -61,12 +60,6 @@
                 fetch(u)
                   .then(function(res){return res.text();})
                   .then(function(code){
-                    var b='<base href=&quot;'+u+'&quot;>';
-                    if(code.indexOf('<head>')!==-1){
-                      code=code.replace('<head>','<head>'+b);
-                    }else{
-                      code=b+code;
-                    }
                     win.document.open();
                     win.document.write(code);
                     win.document.close();
