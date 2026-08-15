@@ -39,13 +39,24 @@
       height: 100vh;
       background: #0d0d0d;
       z-index: 10000;
-      display: none;
+      display: flex;
       flex-direction: column;
       font-family: 'Inter', sans-serif;
+      
+      /* Animation state (Hidden) */
+      opacity: 0;
+      visibility: hidden;
+      transform: scale(0.96);
+      transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), 
+                  transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), 
+                  visibility 0.25s;
     }
 
+    /* Animated Entrance (Active) */
     .viewer-overlay.active {
-      display: flex;
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1);
     }
 
     .viewer-header {
@@ -91,12 +102,16 @@
       font-size: 13px;
       font-weight: 500;
       cursor: pointer;
-      transition: background 0.2s, border-color 0.2s;
+      transition: background 0.2s, border-color 0.2s, transform 0.1s;
     }
 
     .viewer-btn:hover {
       background: #2c2c2c;
       border-color: #444444;
+    }
+
+    .viewer-btn:active {
+      transform: scale(0.96);
     }
 
     .viewer-close-btn {
@@ -149,7 +164,6 @@
             var d=document.createElement('div');
             d.className='game-item';
             d.onclick=function(){
-              // Launch in-page viewer overlay
               window.openViewer(t, a, u);
             };
             d.innerHTML='<img class=&quot;game-cover&quot; src=&quot;'+v+'&quot; alt=&quot;'+t+'&quot; loading=&quot;lazy&quot; onerror=&quot;this.remove()&quot;><div class=&quot;game-info&quot;><span class=&quot;game-title&quot;>'+t+'</span>'+(a?'<span class=&quot;game-author&quot;>'+a+'</span>':'')+'</div>';
@@ -240,6 +254,7 @@
       document.getElementById('viewer-title').textContent = title;
       document.getElementById('viewer-author').textContent = author ? 'by ' + author : '';
       
+      // Trigger animation
       viewer.classList.add('active');
 
       // Prepare iframe doc loading state
@@ -267,9 +282,13 @@
       const viewer = document.getElementById('zone-viewer');
       const frame = document.getElementById('viewer-frame');
       
+      // Play exit animation
       viewer.classList.remove('active');
-      // Reset iframe to stop audio/game scripts in background
-      frame.src = 'about:blank';
+
+      // Reset iframe after the 250ms fade animation completes
+      setTimeout(() => {
+        frame.src = 'about:blank';
+      }, 250);
     }
 
     function toggleViewerFullscreen() {
