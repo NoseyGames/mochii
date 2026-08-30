@@ -22,14 +22,14 @@
           font-weight:600;
           letter-spacing:-0.5px;
         ">
-          nice try IT 😂
+          access restricted
         </body>
       `;
     }
   </script>
 
-  <!-- External Stylesheet & Google Fonts/Symbols -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+  <!-- Google Fonts & Icons -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
   <link rel="stylesheet" href="style.css">
 </head>
@@ -62,10 +62,9 @@
     <main class="main-container">
       <div class="hero-content">
         <h1 class="title">mochii</h1>
-        <p class="subtitle">banana mode</p>
         
         <div class="search-container">
-          <input type="text" class="search-input" placeholder="search anything... (Press '/' to focus)" autofocus id="hero-search">
+          <input type="text" class="search-input" placeholder="Search anything... (Press '/' to focus)" autofocus id="hero-search">
           <span class="material-symbols-outlined search-icon">search</span>
         </div>
 
@@ -97,7 +96,7 @@
       </div>
 
       <div class="popover-content" id="game-list">
-        <div class="loading-text">Loading game catalog...</div>
+        <div class="loading-text">Loading catalog...</div>
       </div>
     </div>
   </div>
@@ -115,7 +114,7 @@
         <div class="setting-item">
           <div class="setting-info">
             <span class="setting-title">Enable Advertisements</span>
-            <span class="setting-desc">Toggle background ad zones on or off</span>
+            <span class="setting-desc">Toggle background ad network integration</span>
           </div>
           <label class="switch">
             <input type="checkbox" id="ad-toggle" onchange="toggleAds(this.checked)">
@@ -143,11 +142,11 @@
     </div>
   </div>
 
-  <!-- Ad Script Target Area -->
+  <!-- Ad Script Target Container -->
   <div id="ad-container-zone"></div>
 
   <script>
-    /* Dynamic Ad Controller */
+    /* Ad Controller */
     let adsEnabled = localStorage.getItem('mochii_ads_enabled') === 'true';
 
     function initAds() {
@@ -192,7 +191,7 @@
     const canvas = document.getElementById('bg-canvas');
     const ctx = canvas.getContext('2d');
     let particles = [];
-    let mouse = { x: null, y: null, radius: 120 };
+    let mouse = { x: null, y: null, radius: 140 };
 
     function resizeCanvas() {
       canvas.width = window.innerWidth;
@@ -215,7 +214,7 @@
         this.baseX = this.x;
         this.baseY = this.y;
         this.density = (Math.random() * 20) + 1;
-        this.alpha = Math.random() * 0.4 + 0.1;
+        this.alpha = Math.random() * 0.3 + 0.1;
       }
 
       draw() {
@@ -251,7 +250,7 @@
 
     function initParticles() {
       particles = [];
-      const count = Math.floor((canvas.width * canvas.height) / 12000);
+      const count = Math.floor((canvas.width * canvas.height) / 10000);
       for (let i = 0; i < count; i++) {
         particles.push(new Particle());
       }
@@ -269,7 +268,7 @@
     initParticles();
     animateParticles();
 
-    /* Keyboard Shortcuts */
+    /* Focus Shortcut */
     window.addEventListener('keydown', (e) => {
       if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
         e.preventDefault();
@@ -277,7 +276,7 @@
       }
     });
 
-    /* Modals & Popover Navigation */
+    /* Modals & Navigation */
     function openGamesPopover() {
       document.getElementById('esports-popover').classList.add('active');
       if (!window.loaded) {
@@ -332,7 +331,7 @@
             window.loaded = true;
           })
           .catch(() => {
-            document.getElementById('game-list').innerHTML = '<div class="loading-text">Failed to load games list.</div>';
+            document.getElementById('game-list').innerHTML = '<div class="loading-text">Failed to load catalog.</div>';
           });
       }
     }
@@ -352,12 +351,12 @@
     function openCloakedTab() {
       const w = window.open('about:blank', '_blank');
       if (w) {
-        w.document.write('<!DOCTYPE html><html><head><title>mochii</title><style>body,html{margin:0;padding:0;height:100%;overflow:hidden;background:#09090b;}iframe{width:100vw;height:100vh;border:none;display:block;}</style></head><body><iframe src="about:blank"></iframe></body></html>');
+        w.document.write('<!DOCTYPE html><html><head><title>mochii</title><style>body,html{margin:0;padding:0;height:100%;overflow:hidden;background:#060608;}iframe{width:100vw;height:100vh;border:none;display:block;}</style></head><body><iframe src="about:blank"></iframe></body></html>');
         w.document.close();
       }
     }
 
-    /* Game Viewer Runtime */
+    /* Viewer Runtime */
     function openViewer(title, author, url) {
       closeGamesPopover();
       const viewer = document.getElementById('zone-viewer');
@@ -370,7 +369,7 @@
 
       const frameDoc = frame.contentWindow.document;
       frameDoc.open();
-      frameDoc.write('<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#09090b;color:#f4f4f5;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}</style>Loading content...');
+      frameDoc.write('<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#060608;color:#f8fafc;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}</style>Loading content...');
       frameDoc.close();
 
       fetch(url)
@@ -382,7 +381,7 @@
         })
         .catch(() => {
           frameDoc.open();
-          frameDoc.write('<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#09090b;color:#a1a1aa;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}</style>Failed to fetch content source.');
+          frameDoc.write('<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#060608;color:#94a3b8;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}</style>Failed to load content.');
           frameDoc.close();
         });
     }
