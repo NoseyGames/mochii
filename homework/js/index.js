@@ -20,17 +20,39 @@ const error = document.getElementById("uv-error");
  */
 const errorCode = document.getElementById("uv-error-code");
 
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  try {
-    await registerSW();
-  } catch (err) {
-    error.textContent = "Failed to register service worker.";
-    errorCode.textContent = err.toString();
-    throw err;
-  }
-
-  const url = search(address.value, searchEngine.value);
-  location.href = __uv$config.prefix + __uv$config.encodeUrl(url);
+// Wait for config to load
+window.addEventListener('load', () => {
+  setupForm();
 });
+
+function setupForm() {
+  if (!form) return;
+  
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    try {
+      await registerSW();
+    } catch (err) {
+      console.error('Service worker registration error:', err);
+    }
+
+    const url = search(address.value, searchEngine.value);
+    if (url) {
+      try {
+        const encoded = __uv$config.encodeUrl(url);
+        location.href = __uv$config.prefix + encoded;
+      } catch (err) {
+        console.error('Encoding error:', err);
+        location.href = __uv$config.prefix + encodeURIComponent(url);
+      }
+    }
+  });
+
+  // Allow Enter key to submit
+  address.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      form.dispatchEvent(new Event('submit'));
+    }
+  });
+}
