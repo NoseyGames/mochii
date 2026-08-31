@@ -11,14 +11,6 @@ const address = document.getElementById("uv-addressloc");
  * @type {HTMLInputElement}
  */
 const searchEngine = document.getElementById("uv-search-enginepref");
-/**
- * @type {HTMLParagraphElement}
- */
-const error = document.getElementById("uv-error");
-/**
- * @type {HTMLPreElement}
- */
-const errorCode = document.getElementById("uv-error-code");
 
 // Wait for config to load
 window.addEventListener('load', () => {
@@ -26,13 +18,19 @@ window.addEventListener('load', () => {
 });
 
 function setupForm() {
-  if (!form) return;
+  if (!form || !address || !searchEngine) {
+    console.error('Form elements not found');
+    return;
+  }
   
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    console.log('Form submitted');
 
     try {
-      await registerSW();
+      if (navigator.serviceWorker) {
+        await registerSW();
+      }
     } catch (err) {
       console.error('Service worker registration error:', err);
     }
@@ -40,12 +38,17 @@ function setupForm() {
     const url = search(address.value, searchEngine.value);
     if (url) {
       try {
+        console.log('Original URL:', url);
         const encoded = __uv$config.encodeUrl(url);
-        location.href = __uv$config.prefix + encoded;
+        const proxyUrl = __uv$config.prefix + encoded;
+        console.log('Proxy URL:', proxyUrl);
+        location.href = proxyUrl;
       } catch (err) {
         console.error('Encoding error:', err);
-        location.href = __uv$config.prefix + encodeURIComponent(url);
+        alert('Error: Could not encode URL. Check console for details.');
       }
+    } else {
+      alert('Please enter a valid URL or search term');
     }
   });
 
@@ -55,4 +58,6 @@ function setupForm() {
       form.dispatchEvent(new Event('submit'));
     }
   });
+
+  console.log('Form setup complete');
 }

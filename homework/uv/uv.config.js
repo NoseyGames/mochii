@@ -1,6 +1,6 @@
 
 self.__uv$config = {
-    prefix: '/uv/service/',
+    prefix: '/homework/uv/service/',
 
     bare: [
         'https://bare.benrogo.net/',
@@ -12,9 +12,9 @@ self.__uv$config = {
     
     encodeUrl: Ultraviolet.codec.xor.encode,
     decodeUrl: Ultraviolet.codec.xor.decode,
-    handler: '/uv/uv.handler.js',
-    client: '/uv/uv.client.js',
-    bundle: '/uv/uv.bundle.js',
-    config: '/uv/uv.config.js',
-    sw: '/uv/uv.sw.js',
+    handler: '/homework/uv/uv.handler.js',
+    client: '/homework/uv/uv.client.js',
+    bundle: '/homework/uv/uv.bundle.js',
+    config: '/homework/uv/uv.config.js',
+    sw: '/homework/uv/uv.sw.js',
 };
