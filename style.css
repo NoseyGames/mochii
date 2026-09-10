@@ -1,32 +1,25 @@
 /* ===================================================
-   Base & Reset - Modern Clean Aesthetic
+   Base & Reset - Monochrome Aesthetic
    =================================================== */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   user-select: none;
 }
 
 :root {
-  --bg-main: #060608;
-  --bg-card: rgba(18, 18, 22, 0.75);
-  --bg-card-hover: rgba(28, 28, 35, 0.85);
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(255, 255, 255, 0.2);
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --text-dim: #64748b;
-  --accent-glow: rgba(255, 255, 255, 0.12);
+  --bg-main: #000000;
+  --bg-card: #111111;
+  --bg-card-hover: #222222;
+  --border-color: #333333;
+  --border-hover: #777777;
+  --text-main: #ffffff;
+  --text-muted: #888888;
+  --text-dim: #555555;
   
-  /* Modern Rounded Radius System */
-  --radius-xl: 28px;
-  --radius-lg: 20px;
-  --radius-md: 14px;
-  --radius-sm: 10px;
-  
-  --transition-smooth: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --radius: 8px;
 }
 
 body, html {
@@ -37,99 +30,66 @@ body, html {
   color: var(--text-main);
 }
 
-/* Background Interactive Canvas */
-#bg-canvas {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 1;
-  pointer-events: none;
-}
-
 /* Viewport Layout */
 .app-viewport {
-  position: relative;
-  z-index: 2;
   display: flex;
   flex-direction: column;
   height: 100vh;
   width: 100vw;
 }
 
-/* Animations */
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(20px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes pulseGlow {
-  0%, 100% { transform: scale(1); opacity: 0.8; }
-  50% { transform: scale(1.3); opacity: 1; }
-}
-
 /* ===================================================
    Navigation Bar
    =================================================== */
 .nav-bar {
-  height: 72px;
-  padding: 0 32px;
+  height: 60px;
+  padding: 0 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-color);
-  background: rgba(6, 6, 8, 0.65);
-  backdrop-filter: blur(20px);
-  z-index: 10;
+  background: var(--bg-main);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: -0.5px;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 18px;
   color: var(--text-main);
 }
 
 .brand-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   background-color: var(--text-main);
   border-radius: 50%;
-  box-shadow: 0 0 14px rgba(255, 255, 255, 0.8);
-  animation: pulseGlow 3s infinite ease-in-out;
 }
 
 .nav-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .nav-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
   border: 1px solid var(--border-color);
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
   cursor: pointer;
-  transition: var(--transition-smooth);
 }
 
 .nav-icon:hover {
   color: var(--text-main);
   border-color: var(--border-hover);
   background: var(--bg-card-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
 }
 
 /* ===================================================
@@ -141,54 +101,43 @@ body, html {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  position: relative;
+  padding: 20px;
 }
 
 .hero-content {
   text-align: center;
-  max-width: 620px;
+  max-width: 500px;
   width: 100%;
-  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .title {
-  font-size: 64px;
-  font-weight: 800;
-  letter-spacing: -2.5px;
+  font-size: 48px;
+  font-weight: 700;
   color: var(--text-main);
-  margin-bottom: 24px;
-  background: linear-gradient(180deg, #ffffff 0%, #94a3b8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  margin-bottom: 20px;
 }
 
-/* Modern Rounded Search Box */
+/* Search Box */
 .search-container {
   position: relative;
   width: 100%;
-  margin-bottom: 28px;
+  margin-bottom: 20px;
 }
 
 .search-input {
   width: 100%;
-  height: 60px;
-  padding: 0 56px 0 24px;
+  height: 50px;
+  padding: 0 45px 0 16px;
   background: var(--bg-card);
-  backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius);
   color: var(--text-main);
-  font-size: 16px;
+  font-size: 15px;
   outline: none;
-  transition: var(--transition-smooth);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
 }
 
 .search-input:focus {
   border-color: var(--border-hover);
-  box-shadow: 0 0 0 4px var(--accent-glow), 0 16px 48px rgba(0, 0, 0, 0.6);
-  transform: translateY(-1px);
 }
 
 .search-input::placeholder {
@@ -197,35 +146,31 @@ body, html {
 
 .search-icon {
   position: absolute;
-  right: 20px;
+  right: 16px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-dim);
   pointer-events: none;
-  font-size: 22px;
 }
 
 /* Status Pill */
 .status-badge {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 20px;
+  gap: 8px;
+  padding: 6px 14px;
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
-  border-radius: 9999px;
-  font-size: 13px;
+  border-radius: 50px;
+  font-size: 12px;
   color: var(--text-muted);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .status-indicator {
-  width: 8px;
-  height: 8px;
-  background-color: #10b981;
+  width: 6px;
+  height: 6px;
+  background-color: var(--text-main);
   border-radius: 50%;
-  box-shadow: 0 0 8px #10b981;
 }
 
 /* ===================================================
@@ -234,15 +179,14 @@ body, html {
 .overlay-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(12px);
-  z-index: 1000;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
   visibility: hidden;
-  transition: var(--transition-smooth);
+  transition: opacity 0.2s ease;
 }
 
 .overlay-backdrop.active {
@@ -251,26 +195,19 @@ body, html {
 }
 
 .modal-card {
-  background: rgba(14, 14, 18, 0.9);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius);
   width: 90%;
-  max-width: 840px;
-  max-height: 85vh;
+  max-width: 700px;
+  max-height: 80vh;
   display: flex;
   flex-direction: column;
-  transform: scale(0.95) translateY(15px);
-  transition: var(--transition-smooth);
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.9);
   overflow: hidden;
 }
 
-.overlay-backdrop.active .modal-card {
-  transform: scale(1) translateY(0);
-}
-
 .modal-header {
-  padding: 24px 28px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
@@ -278,10 +215,9 @@ body, html {
 }
 
 .modal-title {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--text-main);
-  letter-spacing: -0.3px;
 }
 
 .close-btn {
@@ -289,12 +225,8 @@ body, html {
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px;
-  border-radius: var(--radius-md);
-  transition: var(--transition-smooth);
+  padding: 4px 8px;
+  border-radius: 4px;
 }
 
 .close-btn:hover {
@@ -303,103 +235,62 @@ body, html {
 }
 
 .controls-row {
-  padding: 16px 28px;
+  padding: 12px 20px;
   display: flex;
-  gap: 14px;
+  gap: 10px;
   border-bottom: 1px solid var(--border-color);
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-main);
+}
+
+.modal-search-box, .modal-sort-select {
+  height: 38px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 0 12px;
+  color: var(--text-main);
+  outline: none;
+  font-size: 13px;
 }
 
 .modal-search-box {
   flex: 1;
-  height: 44px;
-  background: var(--bg-main);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 0 16px;
-  color: var(--text-main);
-  outline: none;
-  font-size: 14px;
-  transition: var(--transition-smooth);
 }
 
-.modal-search-box:focus {
-  border-color: var(--border-hover);
-  box-shadow: 0 0 0 2px var(--accent-glow);
-}
-
-.modal-search-box::placeholder {
-  color: var(--text-dim);
-}
-
-.modal-sort-select {
-  height: 44px;
-  background: var(--bg-main);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 0 16px;
-  color: var(--text-main);
-  outline: none;
-  font-size: 14px;
-  cursor: pointer;
-  transition: var(--transition-smooth);
-}
-
-.modal-sort-select:hover {
+.modal-search-box:focus, .modal-sort-select:focus {
   border-color: var(--border-hover);
 }
 
 /* Catalog Grid */
 .popover-content {
-  padding: 28px;
+  padding: 20px;
   overflow-y: auto;
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 15px;
 }
 
-.popover-content::-webkit-scrollbar {
-  width: 8px;
-}
-
-.popover-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.popover-content::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 10px;
-}
-
-.popover-content::-webkit-scrollbar-thumb:hover {
-  background: var(--border-hover);
-}
-
-/* Game Card Modern Styling */
 .game-item {
   background: var(--bg-main);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 12px;
+  border-radius: var(--radius);
+  padding: 10px;
   cursor: pointer;
-  transition: var(--transition-smooth);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .game-item:hover {
   border-color: var(--border-hover);
-  transform: translateY(-4px) scale(1.02);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
 }
 
 .game-cover {
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
-  border-radius: var(--radius-md);
+  border-radius: 4px;
   background: var(--border-color);
 }
 
@@ -410,7 +301,7 @@ body, html {
 }
 
 .game-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-main);
   white-space: nowrap;
@@ -419,63 +310,52 @@ body, html {
 }
 
 .game-author {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.loading-text {
-  grid-column: 1 / -1;
-  text-align: center;
-  padding: 40px;
-  color: var(--text-dim);
-  font-size: 14px;
 }
 
 /* ===================================================
    Settings Components
    =================================================== */
 .settings-body {
-  padding: 28px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 15px;
 }
 
 .setting-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px;
+  padding: 16px;
   background: var(--bg-main);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
 }
 
 .setting-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .setting-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 .setting-desc {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-dim);
 }
 
-/* Modern Switch Toggle */
+/* Switch Toggle */
 .switch {
   position: relative;
   display: inline-block;
-  width: 50px;
-  height: 28px;
+  width: 40px;
+  height: 22px;
 }
 
 .switch input {
@@ -489,20 +369,19 @@ body, html {
   cursor: pointer;
   inset: 0;
   background-color: var(--border-color);
-  transition: var(--transition-smooth);
-  border-radius: 28px;
-  border: 1px solid var(--border-hover);
+  transition: 0.2s;
+  border-radius: 22px;
 }
 
 .slider:before {
   position: absolute;
   content: "";
-  height: 20px;
-  width: 20px;
+  height: 16px;
+  width: 16px;
   left: 3px;
   bottom: 3px;
   background-color: var(--text-muted);
-  transition: var(--transition-smooth);
+  transition: 0.2s;
   border-radius: 50%;
 }
 
@@ -511,88 +390,74 @@ input:checked + .slider {
 }
 
 input:checked + .slider:before {
-  transform: translateX(22px);
+  transform: translateX(18px);
   background-color: var(--bg-main);
 }
 
 /* ===================================================
-   Zone Viewer Overlay
+   Viewer Overlay
    =================================================== */
 .viewer-overlay {
   position: fixed;
   inset: 0;
   background: var(--bg-main);
-  z-index: 10000;
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   opacity: 0;
   visibility: hidden;
-  transform: scale(0.98);
-  transition: var(--transition-smooth);
+  transition: opacity 0.2s ease;
 }
 
 .viewer-overlay.active {
   opacity: 1;
   visibility: visible;
-  transform: scale(1);
 }
 
 .viewer-header {
-  height: 60px;
+  height: 50px;
   background: var(--bg-card);
-  backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 16px;
 }
 
 .viewer-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .viewer-title {
   font-weight: 600;
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .viewer-author {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-dim);
 }
 
 .viewer-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .viewer-btn {
   background: var(--bg-main);
   color: var(--text-main);
   border: 1px solid var(--border-color);
-  padding: 8px 18px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
   cursor: pointer;
-  transition: var(--transition-smooth);
 }
 
 .viewer-btn:hover {
   border-color: var(--border-hover);
   background: var(--bg-card-hover);
-}
-
-.viewer-close-btn {
-  background: var(--border-color);
-  color: var(--text-main);
-}
-
-.viewer-close-btn:hover {
-  background: var(--border-hover);
 }
 
 .viewer-body {
