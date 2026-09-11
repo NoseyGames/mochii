@@ -22,7 +22,7 @@
   --radius-xl: 24px;
   --radius-lg: 16px;
   --radius-md: 12px;
-  --radius-sm: 8px;
+  --radius-pill: 9999px;
 
   --transition-fast: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -51,7 +51,7 @@ body, html {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Background Interactive Canvas */
+/* Background Canvas */
 #bg-canvas {
   position: fixed;
   top: 0;
@@ -79,31 +79,38 @@ body, html {
 }
 
 /* ===================================================
-   Floating Navigation Controls (Top Right)
+   Top Floating Pill Navigation
    =================================================== */
 .floating-nav {
   position: fixed !important;
   top: 24px !important;
-  right: 24px !important;
-  left: auto !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  right: auto !important;
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  padding: 6px;
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
   z-index: 9999;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
 .nav-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: var(--radius-md);
+  height: 38px;
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   color: var(--text-muted);
-  border: 1px solid var(--border-color);
-  background: var(--bg-card);
-  backdrop-filter: blur(16px);
+  border: 1px solid transparent;
+  background: transparent;
   cursor: pointer;
   transition: var(--transition-fast);
 }
@@ -193,7 +200,7 @@ body, html {
   background: var(--bg-card);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
-  border-radius: 9999px;
+  border-radius: var(--radius-pill);
   font-size: 12px;
   color: var(--text-muted);
 }
