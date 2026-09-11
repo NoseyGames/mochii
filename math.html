@@ -144,5 +144,204 @@
     </div>
   </div>
 
+  <!-- Embedded JS Logic -->
+  <script>
+    /* Global State */
+    const state = {
+      games: [
+        { title: "Slope", author: "Y8", cover: "https://via.placeholder.com/300x168/111/fff?text=Slope", url: "https://example.com" },
+        { title: "Retro Bowl", author: "New Star", cover: "https://via.placeholder.com/300x168/111/fff?text=Retro+Bowl", url: "https://example.com" },
+        { title: "2048", author: "Gabriele Cirulli", cover: "https://via.placeholder.com/300x168/111/fff?text=2048", url: "https://example.com" }
+      ],
+      particlesEnabled: true
+    };
+
+    /* Popover & Modal Controls */
+    function openGamesPopover() {
+      const popover = document.getElementById('games-popover');
+      if (popover) {
+        popover.classList.add('active');
+        renderCatalog();
+      }
+    }
+
+    function closeGamesPopover() {
+      const popover = document.getElementById('games-popover');
+      if (popover) popover.classList.remove('active');
+    }
+
+    function openSettingsModal() {
+      const modal = document.getElementById('settings-modal');
+      if (modal) modal.classList.add('active');
+    }
+
+    function closeSettingsModal() {
+      const modal = document.getElementById('settings-modal');
+      if (modal) modal.classList.remove('active');
+    }
+
+    function openCloakedTab() {
+      const url = window.location.href;
+      const win = window.open('about:blank', '_blank');
+      if (win) {
+        win.document.body.style.margin = '0';
+        win.document.body.style.height = '100vh';
+        const iframe = win.document.createElement('iframe');
+        iframe.style.border = 'none';
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.margin = '0';
+        iframe.src = url;
+        win.document.body.appendChild(iframe);
+      }
+    }
+
+    /* Viewer Overlay Handlers */
+    function launchGame(title, author, url) {
+      const viewer = document.getElementById('zone-viewer');
+      const iframe = document.getElementById('viewer-iframe');
+      const titleEl = document.getElementById('viewer-title');
+      const authorEl = document.getElementById('viewer-author');
+
+      if (viewer && iframe) {
+        if (titleEl) titleEl.textContent = title;
+        if (authorEl) authorEl.textContent = author;
+        iframe.src = url;
+        viewer.classList.add('active');
+        closeGamesPopover();
+      }
+    }
+
+    function closeViewer() {
+      const viewer = document.getElementById('zone-viewer');
+      const iframe = document.getElementById('viewer-iframe');
+      if (viewer) viewer.classList.remove('active');
+      if (iframe) iframe.src = 'about:blank';
+    }
+
+    function fullscreenViewer() {
+      const iframe = document.getElementById('viewer-iframe');
+      if (iframe) {
+        if (iframe.requestFullscreen) {
+          iframe.requestFullscreen();
+        } else if (iframe.webkitRequestFullscreen) {
+          iframe.webkitRequestFullscreen();
+        }
+      }
+    }
+
+    /* Render Catalog */
+    function renderCatalog() {
+      const grid = document.getElementById('popover-game-grid');
+      const searchInput = document.getElementById('popover-search-input');
+      const sortSelect = document.getElementById('popover-sort-select');
+
+      if (!grid) return;
+
+      const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+      const sort = sortSelect ? sortSelect.value : 'name-asc';
+
+      let list = state.games.filter(game => 
+        game.title.toLowerCase().includes(query) || 
+        game.author.toLowerCase().includes(query)
+      );
+
+      list.sort((a, b) => {
+        if (sort === 'name-asc') return a.title.localeCompare(b.title);
+        if (sort === 'name-desc') return b.title.localeCompare(a.title);
+        return 0;
+      });
+
+      if (list.length === 0) {
+        grid.innerHTML = '<div class="loading-text">No games found</div>';
+        return;
+      }
+
+      grid.innerHTML = list.map(game => `
+        <div class="game-item" onclick="launchGame('${game.title.replace(/'/g, "\\'")}', '${game.author.replace(/'/g, "\\'")}', '${game.url}')">
+          <img class="game-cover" src="${game.cover}" alt="${game.title}" />
+          <div class="game-info">
+            <span class="game-title">${game.title}</span>
+            <span class="game-author">${game.author}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    /* Particle Background Canvas */
+    function initCanvas() {
+      const canvas = document.getElementById('bg-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      let width = (canvas.width = window.innerWidth);
+      let height = (canvas.height = window.innerHeight);
+
+      window.addEventListener('resize', () => {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+      });
+
+      const particles = Array.from({ length: 60 }, () => ({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        radius: Math.random() * 1.5 + 0.5,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        alpha: Math.random() * 0.5 + 0.2
+      }));
+
+      function animate() {
+        ctx.clearRect(0, 0, width, height);
+
+        if (state.particlesEnabled) {
+          particles.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+
+            if (p.x < 0) p.x = width;
+            if (p.x > width) p.x = 0;
+            if (p.y < 0) p.y = height;
+            if (p.y > height) p.y = 0;
+
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
+            ctx.fill();
+          });
+        }
+
+        requestAnimationFrame(animate);
+      }
+
+      animate();
+    }
+
+    /* Keyboard & Listener Initializations */
+    document.addEventListener('DOMContentLoaded', () => {
+      initCanvas();
+
+      window.addEventListener('keydown', (e) => {
+        if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+          e.preventDefault();
+          const search = document.getElementById('main-search-input');
+          if (search) search.focus();
+        }
+      });
+
+      const popoverSearch = document.getElementById('popover-search-input');
+      const popoverSort = document.getElementById('popover-sort-select');
+
+      if (popoverSearch) popoverSearch.addEventListener('input', renderCatalog);
+      if (popoverSort) popoverSort.addEventListener('change', renderCatalog);
+
+      const particleToggle = document.getElementById('setting-particles-toggle');
+      if (particleToggle) {
+        particleToggle.addEventListener('change', (e) => {
+          state.particlesEnabled = e.target.checked;
+        });
+      }
+    });
+  </script>
 </body>
 </html>
