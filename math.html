@@ -84,6 +84,7 @@
           oninput="window.render && window.render()"
         />
         <select class="modal-sort-select" id="popover-sort-select" onchange="window.render && window.render()">
+          <option value="pop">Popularity</option>
           <option value="az">Name (A-Z)</option>
           <option value="za">Name (Z-A)</option>
         </select>
@@ -268,6 +269,35 @@
       }
     });
 
+    /* Popularity Analytics Store */
+    window.popularityData = {};
+
+    async function fetchPopularity() {
+      try {
+        const response = await fetch("https://data.jsdelivr.com/v1/stats/packages/gh/freebuisness/html@main/files?period=year");
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          data.forEach(file => {
+            const idMatch = file.name ? file.name.match(/\/(\d+)\.html$/) : null;
+            if (idMatch) {
+              const id = parseInt(idMatch[1], 10);
+              window.popularityData[id] = file.hits ? file.hits.total : 0;
+            }
+          });
+        }
+      } catch (error) {
+        window.popularityData[0] = 0;
+      }
+    }
+
+    /* Helper function to resolve numerical ID from game object */
+    function getGameId(game) {
+      if (game.id !== undefined) return parseInt(game.id, 10);
+      const urlStr = game.url || game.file || game.path || '';
+      const match = urlStr.match(/(\d+)\.html/);
+      return match ? parseInt(match[1], 10) : null;
+    }
+
     /* Modals & Popover Navigation */
     function openGamesPopover() {
       const popover = document.getElementById('games-popover');
@@ -275,20 +305,32 @@
 
       if (!window.loaded) {
         window.blocked = ['[!] SUGGEST GAMES .gg/D4c9VFYWyU'];
+
         window.render = function () {
           const searchInput = document.getElementById('popover-search-input');
           const sortSelect = document.getElementById('popover-sort-select');
 
           const q = searchInput ? searchInput.value.toLowerCase().trim() : '';
-          const s = sortSelect ? sortSelect.value : 'az';
+          const s = sortSelect ? sortSelect.value : 'pop';
 
           const f = (window.raw || []).filter(g =>
             (g.name || g.title || '').toLowerCase().includes(q) ||
             (g.author || '').toLowerCase().includes(q)
           );
 
-          if (s === 'az') f.sort((a, b) => (a.name || a.title || '').localeCompare(b.name || b.title || ''));
-          if (s === 'za') f.sort((a, b) => (b.name || b.title || '').localeCompare(a.name || a.title || ''));
+          if (s === 'pop') {
+            f.sort((a, b) => {
+              const idA = getGameId(a);
+              const idB = getGameId(b);
+              const popA = idA !== null && window.popularityData[idA] !== undefined ? window.popularityData[idA] : (a.popularity || 0);
+              const popB = idB !== null && window.popularityData[idB] !== undefined ? window.popularityData[idB] : (b.popularity || 0);
+              return popB - popA;
+            });
+          } else if (s === 'az') {
+            f.sort((a, b) => (a.name || a.title || '').localeCompare(b.name || b.title || ''));
+          } else if (s === 'za') {
+            f.sort((a, b) => (b.name || b.title || '').localeCompare(a.name || a.title || ''));
+          }
 
           const c = document.getElementById('game-list');
           if (!c) return;
@@ -321,21 +363,22 @@
           c.appendChild(fg);
         };
 
-        fetch('https://cdn.jsdelivr.net/gh/freebuisness/assets/zones.json')
-          .then(r => r.json())
-          .then(g => {
-            const l = Array.isArray(g) ? g : Object.values(g);
-            const b = window.blocked.map(n => n.trim().toLowerCase());
-            window.raw = l.filter(x => !b.includes((x.name || x.title || '').trim().toLowerCase()));
-            window.render();
-            window.loaded = true;
-          })
-          .catch(() => {
-            const listContainer = document.getElementById('game-list');
-            if (listContainer) {
-              listContainer.innerHTML = '<div class="loading-text">Failed to load games list.</div>';
-            }
-          });
+        // Fetch popularity stats and catalog simultaneously
+        Promise.all([
+          fetchPopularity(),
+          fetch('https://cdn.jsdelivr.net/gh/freebuisness/assets/zones.json').then(r => r.json())
+        ]).then(([_, g]) => {
+          const l = Array.isArray(g) ? g : Object.values(g);
+          const b = window.blocked.map(n => n.trim().toLowerCase());
+          window.raw = l.filter(x => !b.includes((x.name || x.title || '').trim().toLowerCase()));
+          window.render();
+          window.loaded = true;
+        }).catch(() => {
+          const listContainer = document.getElementById('game-list');
+          if (listContainer) {
+            listContainer.innerHTML = '<div class="loading-text">Failed to load games list.</div>';
+          }
+        });
       }
     }
 
