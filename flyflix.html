@@ -15,7 +15,10 @@
                 if (
                   src.includes('subduepaler.cyou') || 
                   src.includes('fy.illamonvascons.com') || 
-                  srcdoc.includes('TURN ON Ad Blocker')
+                  srcdoc.includes('TURN ON Ad Blocker') ||
+                    srcdoc.includes('Ad Blocker Pro') ||
+                      srcdoc.includes('Ad Blocker)
+                    
                 ) {
                   node.remove();
                   console.warn('Blocked unwanted iframe ad injection.');
