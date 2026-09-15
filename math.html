@@ -171,7 +171,7 @@
   <!-- Script Implementation -->
   <script>
     /* =========================================================
-       1. Core Proxy & Multi-Server Wisp Network Initializer (5 Servers)
+       1. Core Proxy & Multi-Server Wisp Network Initializer
        ========================================================= */
     const wispEndpoints = [
       { name: "Mercury Workshop", url: "wss://wisp.mercuryworkshop.com/" },
@@ -303,8 +303,8 @@
     resizeCanvas();
 
     window.addEventListener('mousemove', (e) => {
-      mouse.x = e.x;
-      mouse.y = e.y;
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
     });
 
     class Particle {
@@ -477,8 +477,16 @@
           f.forEach(g => {
             const t = g.name || g.title || 'Untitled';
             const a = g.author || '';
-            const u = (g.url || g.file || g.path || '').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/html@main');
+            let u = (g.url || g.file || g.path || '').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/html@main');
             const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/covers@main');
+
+            // Encode game URL through Ultraviolet proxy
+            if (typeof __uv$config !== 'undefined' && u) {
+              if (!u.startsWith('http')) {
+                u = 'https://cdn.jsdelivr.net/gh/freebuisness/html@main/' + u;
+              }
+              u = __uv$config.prefix + __uv$config.encodeUrl(u);
+            }
 
             const d = document.createElement('div');
             d.className = 'game-item';
