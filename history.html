@@ -83,44 +83,31 @@
   <script>
     let isOpening = false;
 
-    document.addEventListener('click', async function openInAboutBlank() {
+    document.addEventListener('click', function openInAboutBlank() {
       if (isOpening) return;
       isOpening = true;
 
       const newWin = window.open('about:blank', '_blank');
       
       if (newWin) {
-        try {
-          const res = await fetch('math.html');
-          const mochiiPageHTML = await res.text();
-
-          newWin.document.open();
-          newWin.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Home - Classroom</title>
-              <link type="image/png" href="https://ssl.gstatic.com/classroom/favicon.png" rel="icon">
-              <style>
-                body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0d0d0d; }
-                iframe { width: 100vw; height: 100vh; border: none; display: block; }
-              </style>
-            </head>
-            <body>
-              <iframe id="app-frame"></iframe>
-            </body>
-            </html>
-          `);
-          newWin.document.close();
-
-          const iframe = newWin.document.getElementById('app-frame');
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-          iframeDoc.open();
-          iframeDoc.write(mochiiPageHTML);
-          iframeDoc.close();
-        } catch (e) {
-          console.error(e);
-        }
+        newWin.document.open();
+        newWin.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Home - Classroom</title>
+            <link type="image/png" href="https://ssl.gstatic.com/classroom/favicon.png" rel="icon">
+            <style>
+              body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0d0d0d; }
+              iframe { width: 100vw; height: 100vh; border: none; display: block; }
+            </style>
+          </head>
+          <body>
+            <iframe src="math.html"></iframe>
+          </body>
+          </html>
+        `);
+        newWin.document.close();
       }
 
       window.location.href = 'https://classroom.google.com';
