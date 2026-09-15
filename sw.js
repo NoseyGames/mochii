@@ -1,27 +1,28 @@
-try {
-  importScripts('/ultrav/uv.bundle.js');
-  importScripts('/ultrav/uv.config.js');
-} catch (e) {
-  console.error("Failed to import Ultraviolet scripts:", e);
-}
+/* 
+  Service Worker Entry Point for mochii 
+*/
+
+// Import Ultraviolet runtime from a reliable CDN
+importScripts('https://cdn.jsdelivr.net/npm/@titaniumnetwork-dev/ultraviolet@3.2.7/dist/uv.bundle.js');
+importScripts('/ultrav/uv.config.js');
 
 const uv = new UVServiceWorker();
 
-self.addEventListener('install', event => {
-  event.waitUntil(self.skipWaiting());
+self.addEventListener('install', (event) => {
+    event.waitUntil(self.skipWaiting());
 });
 
-self.addEventListener('activate', event => {
-  event.waitUntil(self.clients.claim());
+self.addEventListener('activate', (event) => {
+    event.waitUntil(self.clients.claim());
 });
 
-self.addEventListener('fetch', event => {
-  event.respondWith(
-    (async () => {
-      if (event.request.url.startsWith(location.origin + __uv$config.prefix)) {
-        return await uv.fetch(event);
-      }
-      return await fetch(event.request);
-    })()
-  );
+self.addEventListener('fetch', (event) => {
+    event.respondWith(
+        (async () => {
+            if (event.request.url.startsWith(location.origin + __uv$config.prefix)) {
+                return await uv.fetch(event);
+            }
+            return await fetch(event.request);
+        })()
+    );
 });
