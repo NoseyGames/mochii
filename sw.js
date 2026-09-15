@@ -1,5 +1,9 @@
-importScripts('https://cdn.jsdelivr.net/npm/@titaniumnetwork-dev/ultraviolet@3.2.7/dist/uv.bundle.js');
-importScripts('/ultrav/uv.config.js');
+try {
+  importScripts('/ultrav/uv.bundle.js');
+  importScripts('/ultrav/uv.config.js');
+} catch (e) {
+  console.error("Failed to import Ultraviolet scripts:", e);
+}
 
 const uv = new UVServiceWorker();
 
