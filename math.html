@@ -193,10 +193,11 @@
       try {
         const connection = new BareMux.BareMuxConnection("/bearmux/worker.js");
         
-        // Single bundled Epoxy transport entrypoint
-        await connection.setTransport("/bearmux/epoxy/index.mjs", [{
-          wisp: endpointObj.url
-        }]);
+        // Updated to load Epoxy transport via CDN to prevent transport module resolution errors
+        await connection.setTransport(
+          "https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@2.1.28/dist/index.mjs",
+          [{ wisp: endpointObj.url }]
+        );
 
         console.log(`Successfully connected to ${endpointObj.name}`);
         return true;
