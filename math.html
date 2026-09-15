@@ -479,28 +479,26 @@
           c.appendChild(fg);
         };
 
-        const defaultAppList = [
-          {
-            name: 'Flyflix',
-            author: 'Flyflix',
-            url: 'flyflix.html',
-            cover: ''
-          },
-
-                    {
-            name: 'Voxiles',
-            author: 'bog',
-            url: '/apps/vox.html',
-            cover: ''
-          }
-          
-                    {
-            name: 'Auk.',
-            author: 'bog',
-            url: 'apps/auk.html',
-            cover: ''
-          },
-        ];
+const defaultAppList = [
+  {
+    name: 'Flyflix',
+    author: 'Flyflix',
+    url: 'flyflix.html',
+    cover: ''
+  },
+  {
+    name: 'Voxiles',
+    author: 'bog',
+    url: '/apps/vox.html',
+    cover: ''
+  }, // <--- ADD COMMA HERE
+  {
+    name: 'Auk.',
+    author: 'bog',
+    url: 'apps/auk.html',
+    cover: ''
+  }
+];
 
         Promise.all([
           fetchPopularity(),
