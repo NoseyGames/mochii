@@ -563,7 +563,7 @@
           f.forEach(g => {
             const t = g.name || g.title || 'Untitled';
             const a = g.author || '';
-            let u = (g.url || g.file || g.path || 'flyflix.html').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/Consessions/html@main');
+            let u = (g.url || g.file || g.path || 'flyflix.html').replace('{HTML_URL}', '/flyflix.html');
             const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/Consessions/covers@main');
 
             if (u && !u.startsWith('http') && !u.startsWith('/')) {
@@ -587,7 +587,7 @@
         };
 
         const defaultAppList = [
-          { name: 'Flyflix', author: 'Flyflix', url: 'flyflix.html', cover: '' },
+          { name: 'Flyflix', author: 'Flyflix', url: '/flyflix.html', cover: '' },
           { name: 'Voxiles', author: 'bog', url: '/apps/vox.html', cover: '' }
         ];
 
