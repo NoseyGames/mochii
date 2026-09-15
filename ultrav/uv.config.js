@@ -1,6 +1,6 @@
 self.__uv$config = {
   prefix: '/service/',
-  bare: 'https://bare.benrovers.nl/', // Public fallback bare endpoint to satisfy meta checks
+  bare: 'https://bare.benrovers.nl/', // or your worker URL
   encodeUrl: Ultraviolet.codec.xor.encode,
   decodeUrl: Ultraviolet.codec.xor.decode,
   handler: '/ultrav/uv.handler.js',
