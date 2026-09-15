@@ -51,7 +51,7 @@
           <input 
             type="text" 
             class="search-input" 
-            id="main-search-input" 
+            id="hero-search" 
             placeholder="Search anything... (Press '/' to focus)" 
             autocomplete="off"
           />
@@ -81,13 +81,14 @@
           class="modal-search-box" 
           id="popover-search-input" 
           placeholder="Search catalog..." 
+          oninput="window.render && window.render()"
         />
-        <select class="modal-sort-select" id="popover-sort-select">
-          <option value="name-asc">Name (A-Z)</option>
-          <option value="name-desc">Name (Z-A)</option>
+        <select class="modal-sort-select" id="popover-sort-select" onchange="window.render && window.render()">
+          <option value="az">Name (A-Z)</option>
+          <option value="za">Name (Z-A)</option>
         </select>
       </div>
-      <div class="popover-content" id="popover-game-grid">
+      <div class="popover-content" id="game-list">
         <div class="loading-text">Loading catalog...</div>
       </div>
     </div>
@@ -105,21 +106,11 @@
       <div class="settings-body">
         <div class="setting-item">
           <div class="setting-info">
-            <span class="setting-title">About:Blank Cloaking</span>
-            <span class="setting-desc">Open pages inside a cloaked tab for extra privacy</span>
+            <span class="setting-title">Enable Advertisements</span>
+            <span class="setting-desc">Toggle dynamic ad scripts on or off</span>
           </div>
           <label class="switch">
-            <input type="checkbox" id="setting-cloaking-toggle" />
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div class="setting-item">
-          <div class="setting-info">
-            <span class="setting-title">Particle Background</span>
-            <span class="setting-desc">Enable interactive animated stars canvas</span>
-          </div>
-          <label class="switch">
-            <input type="checkbox" id="setting-particles-toggle" checked />
+            <input type="checkbox" id="ad-toggle" onchange="toggleAds(this.checked)" />
             <span class="slider"></span>
           </label>
         </div>
@@ -135,33 +126,216 @@
         <span class="viewer-author" id="viewer-author">Author</span>
       </div>
       <div class="viewer-actions">
-        <button class="viewer-btn" onclick="fullscreenViewer()">Fullscreen</button>
+        <button class="viewer-btn" onclick="toggleViewerFullscreen()">Fullscreen</button>
         <button class="viewer-btn viewer-close-btn" onclick="closeViewer()">Close</button>
       </div>
     </div>
     <div class="viewer-body">
-      <iframe class="viewer-frame" id="viewer-iframe" src="about:blank"></iframe>
+      <iframe class="viewer-frame" id="viewer-frame" src="about:blank"></iframe>
     </div>
   </div>
 
-  <!-- Embedded JS Logic -->
+  <!-- Script Implementation -->
   <script>
-    /* Global State */
-    const state = {
-      games: [
-        { title: "Slope", author: "Y8", cover: "https://via.placeholder.com/300x168/111/fff?text=Slope", url: "https://example.com" },
-        { title: "Retro Bowl", author: "New Star", cover: "https://via.placeholder.com/300x168/111/fff?text=Retro+Bowl", url: "https://example.com" },
-        { title: "2048", author: "Gabriele Cirulli", cover: "https://via.placeholder.com/300x168/111/fff?text=2048", url: "https://example.com" }
-      ],
-      particlesEnabled: true
-    };
+    /* Dynamic Ad Controller */
+    let adsEnabled = localStorage.getItem('mochii_ads_enabled') === 'true';
 
-    /* Popover & Modal Controls */
+    function initAds() {
+      const toggle = document.getElementById('ad-toggle');
+      if (toggle) toggle.checked = adsEnabled;
+      if (adsEnabled) injectAdScripts();
+    }
+
+    function toggleAds(enabled) {
+      adsEnabled = enabled;
+      localStorage.setItem('mochii_ads_enabled', enabled);
+      if (enabled) {
+        injectAdScripts();
+      } else {
+        removeAdScripts();
+      }
+    }
+
+    function injectAdScripts() {
+      if (document.getElementById('aclib-script')) return;
+
+      const script = document.createElement('script');
+      script.id = 'aclib-script';
+      script.type = 'text/javascript';
+      script.src = '//acscdn.com/script/aclib.js';
+      script.onload = () => {
+        if (window.aclib && typeof window.aclib.runAutoTag === 'function') {
+          window.aclib.runAutoTag({ zoneId: 'ulwpnee2f4' });
+        }
+      };
+      document.head.appendChild(script);
+    }
+
+    function removeAdScripts() {
+      const script = document.getElementById('aclib-script');
+      if (script) script.remove();
+      const zone = document.getElementById('ad-container-zone');
+      if (zone) zone.innerHTML = '';
+    }
+
+    /* Background Interactive Particle Canvas */
+    const canvas = document.getElementById('bg-canvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let mouse = { x: null, y: null, radius: 120 };
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    window.addEventListener('mousemove', (e) => {
+      mouse.x = e.x;
+      mouse.y = e.y;
+    });
+
+    class Particle {
+      constructor() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.size = Math.random() * 1.5 + 0.5;
+        this.baseX = this.x;
+        this.baseY = this.y;
+        this.density = (Math.random() * 20) + 1;
+        this.alpha = Math.random() * 0.4 + 0.1;
+      }
+
+      draw() {
+        ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      update() {
+        let dx = mouse.x - this.x;
+        let dy = mouse.y - this.y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < mouse.radius) {
+          let force = (mouse.radius - distance) / mouse.radius;
+          let directionX = dx / distance;
+          let directionY = dy / distance;
+          this.x -= directionX * force * this.density * 0.4;
+          this.y -= directionY * force * this.density * 0.4;
+        } else {
+          if (this.x !== this.baseX) {
+            let dx = this.x - this.baseX;
+            this.x -= dx * 0.05;
+          }
+          if (this.y !== this.baseY) {
+            let dy = this.y - this.baseY;
+            this.y -= dy * 0.05;
+          }
+        }
+      }
+    }
+
+    function initParticles() {
+      particles = [];
+      const count = Math.floor((canvas.width * canvas.height) / 12000);
+      for (let i = 0; i < count; i++) {
+        particles.push(new Particle());
+      }
+    }
+
+    function animateParticles() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach(p => {
+        p.draw();
+        p.update();
+      });
+      requestAnimationFrame(animateParticles);
+    }
+
+    initParticles();
+    animateParticles();
+
+    /* Keyboard Shortcuts */
+    window.addEventListener('keydown', (e) => {
+      if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        const searchInput = document.getElementById('hero-search');
+        if (searchInput) searchInput.focus();
+      }
+    });
+
+    /* Modals & Popover Navigation */
     function openGamesPopover() {
       const popover = document.getElementById('games-popover');
-      if (popover) {
-        popover.classList.add('active');
-        renderCatalog();
+      if (popover) popover.classList.add('active');
+
+      if (!window.loaded) {
+        window.blocked = ['[!] SUGGEST GAMES .gg/D4c9VFYWyU'];
+        window.render = function () {
+          const searchInput = document.getElementById('popover-search-input');
+          const sortSelect = document.getElementById('popover-sort-select');
+
+          const q = searchInput ? searchInput.value.toLowerCase().trim() : '';
+          const s = sortSelect ? sortSelect.value : 'az';
+
+          const f = (window.raw || []).filter(g =>
+            (g.name || g.title || '').toLowerCase().includes(q) ||
+            (g.author || '').toLowerCase().includes(q)
+          );
+
+          if (s === 'az') f.sort((a, b) => (a.name || a.title || '').localeCompare(b.name || b.title || ''));
+          if (s === 'za') f.sort((a, b) => (b.name || b.title || '').localeCompare(a.name || a.title || ''));
+
+          const c = document.getElementById('game-list');
+          if (!c) return;
+
+          if (!f.length) {
+            c.innerHTML = '<div class="loading-text">No games found.</div>';
+            return;
+          }
+
+          const fg = document.createDocumentFragment();
+          f.forEach(g => {
+            const t = g.name || g.title || 'Untitled';
+            const a = g.author || '';
+            const u = (g.url || g.file || g.path || '').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/html@main');
+            const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/covers@main');
+
+            const d = document.createElement('div');
+            d.className = 'game-item';
+            d.onclick = () => openViewer(t, a, u);
+            d.innerHTML = `
+              <img class="game-cover" src="${v}" alt="${t}" loading="lazy" onerror="this.style.display='none'">
+              <div class="game-info">
+                <span class="game-title">${t}</span>
+                ${a ? `<span class="game-author">${a}</span>` : ''}
+              </div>
+            `;
+            fg.appendChild(d);
+          });
+          c.innerHTML = '';
+          c.appendChild(fg);
+        };
+
+        fetch('https://cdn.jsdelivr.net/gh/freebuisness/assets/zones.json')
+          .then(r => r.json())
+          .then(g => {
+            const l = Array.isArray(g) ? g : Object.values(g);
+            const b = window.blocked.map(n => n.trim().toLowerCase());
+            window.raw = l.filter(x => !b.includes((x.name || x.title || '').trim().toLowerCase()));
+            window.render();
+            window.loaded = true;
+          })
+          .catch(() => {
+            const listContainer = document.getElementById('game-list');
+            if (listContainer) {
+              listContainer.innerHTML = '<div class="loading-text">Failed to load games list.</div>';
+            }
+          });
       }
     }
 
@@ -181,167 +355,68 @@
     }
 
     function openCloakedTab() {
-      const url = window.location.href;
-      const win = window.open('about:blank', '_blank');
-      if (win) {
-        win.document.body.style.margin = '0';
-        win.document.body.style.height = '100vh';
-        const iframe = win.document.createElement('iframe');
-        iframe.style.border = 'none';
-        iframe.style.width = '100%';
-        iframe.style.height = '100%';
-        iframe.style.margin = '0';
-        iframe.src = url;
-        win.document.body.appendChild(iframe);
+      const w = window.open('about:blank', '_blank');
+      if (w) {
+        w.document.write('<!DOCTYPE html><html><head><title>mochii</title><style>body,html{margin:0;padding:0;height:100%;overflow:hidden;background:#09090b;}iframe{width:100vw;height:100vh;border:none;display:block;}</style></head><body><iframe src="about:blank"></iframe></body></html>');
+        w.document.close();
       }
     }
 
-    /* Viewer Overlay Handlers */
-    function launchGame(title, author, url) {
+    /* Game Viewer Runtime */
+    function openViewer(title, author, url) {
+      closeGamesPopover();
       const viewer = document.getElementById('zone-viewer');
-      const iframe = document.getElementById('viewer-iframe');
-      const titleEl = document.getElementById('viewer-title');
-      const authorEl = document.getElementById('viewer-author');
+      const frame = document.getElementById('viewer-frame');
 
-      if (viewer && iframe) {
-        if (titleEl) titleEl.textContent = title;
-        if (authorEl) authorEl.textContent = author;
-        iframe.src = url;
-        viewer.classList.add('active');
-        closeGamesPopover();
-      }
+      document.getElementById('viewer-title').textContent = title;
+      document.getElementById('viewer-author').textContent = author ? 'by ' + author : '';
+
+      viewer.classList.add('active');
+
+      const frameDoc = frame.contentWindow.document;
+      frameDoc.open();
+      frameDoc.write('<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#09090b;color:#f4f4f5;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}</style>Loading content...');
+      frameDoc.close();
+
+      fetch(url)
+        .then(res => res.text())
+        .then(code => {
+          frameDoc.open();
+          frameDoc.write(code);
+          frameDoc.close();
+        })
+        .catch(() => {
+          frameDoc.open();
+          frameDoc.write('<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#09090b;color:#a1a1aa;display:flex;align-items:center;justify-content:center;font-family:sans-serif;}</style>Failed to fetch content source.');
+          frameDoc.close();
+        });
     }
 
     function closeViewer() {
       const viewer = document.getElementById('zone-viewer');
-      const iframe = document.getElementById('viewer-iframe');
+      const frame = document.getElementById('viewer-frame');
       if (viewer) viewer.classList.remove('active');
-      if (iframe) iframe.src = 'about:blank';
+      setTimeout(() => {
+        if (frame) frame.src = 'about:blank';
+      }, 250);
     }
 
-    function fullscreenViewer() {
-      const iframe = document.getElementById('viewer-iframe');
-      if (iframe) {
-        if (iframe.requestFullscreen) {
-          iframe.requestFullscreen();
-        } else if (iframe.webkitRequestFullscreen) {
-          iframe.webkitRequestFullscreen();
+    function toggleViewerFullscreen() {
+      const frame = document.getElementById('viewer-frame');
+      if (!document.fullscreenElement) {
+        if (frame.requestFullscreen) {
+          frame.requestFullscreen();
+        } else if (frame.webkitRequestFullscreen) {
+          frame.webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
         }
       }
     }
 
-    /* Render Catalog */
-    function renderCatalog() {
-      const grid = document.getElementById('popover-game-grid');
-      const searchInput = document.getElementById('popover-search-input');
-      const sortSelect = document.getElementById('popover-sort-select');
-
-      if (!grid) return;
-
-      const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-      const sort = sortSelect ? sortSelect.value : 'name-asc';
-
-      let list = state.games.filter(game => 
-        game.title.toLowerCase().includes(query) || 
-        game.author.toLowerCase().includes(query)
-      );
-
-      list.sort((a, b) => {
-        if (sort === 'name-asc') return a.title.localeCompare(b.title);
-        if (sort === 'name-desc') return b.title.localeCompare(a.title);
-        return 0;
-      });
-
-      if (list.length === 0) {
-        grid.innerHTML = '<div class="loading-text">No games found</div>';
-        return;
-      }
-
-      grid.innerHTML = list.map(game => `
-        <div class="game-item" onclick="launchGame('${game.title.replace(/'/g, "\\'")}', '${game.author.replace(/'/g, "\\'")}', '${game.url}')">
-          <img class="game-cover" src="${game.cover}" alt="${game.title}" />
-          <div class="game-info">
-            <span class="game-title">${game.title}</span>
-            <span class="game-author">${game.author}</span>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    /* Particle Background Canvas */
-    function initCanvas() {
-      const canvas = document.getElementById('bg-canvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-
-      let width = (canvas.width = window.innerWidth);
-      let height = (canvas.height = window.innerHeight);
-
-      window.addEventListener('resize', () => {
-        width = canvas.width = window.innerWidth;
-        height = canvas.height = window.innerHeight;
-      });
-
-      const particles = Array.from({ length: 60 }, () => ({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        radius: Math.random() * 1.5 + 0.5,
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: (Math.random() - 0.5) * 0.3,
-        alpha: Math.random() * 0.5 + 0.2
-      }));
-
-      function animate() {
-        ctx.clearRect(0, 0, width, height);
-
-        if (state.particlesEnabled) {
-          particles.forEach(p => {
-            p.x += p.vx;
-            p.y += p.vy;
-
-            if (p.x < 0) p.x = width;
-            if (p.x > width) p.x = 0;
-            if (p.y < 0) p.y = height;
-            if (p.y > height) p.y = 0;
-
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
-            ctx.fill();
-          });
-        }
-
-        requestAnimationFrame(animate);
-      }
-
-      animate();
-    }
-
-    /* Keyboard & Listener Initializations */
-    document.addEventListener('DOMContentLoaded', () => {
-      initCanvas();
-
-      window.addEventListener('keydown', (e) => {
-        if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
-          e.preventDefault();
-          const search = document.getElementById('main-search-input');
-          if (search) search.focus();
-        }
-      });
-
-      const popoverSearch = document.getElementById('popover-search-input');
-      const popoverSort = document.getElementById('popover-sort-select');
-
-      if (popoverSearch) popoverSearch.addEventListener('input', renderCatalog);
-      if (popoverSort) popoverSort.addEventListener('change', renderCatalog);
-
-      const particleToggle = document.getElementById('setting-particles-toggle');
-      if (particleToggle) {
-        particleToggle.addEventListener('change', (e) => {
-          state.particlesEnabled = e.target.checked;
-        });
-      }
-    });
+    document.addEventListener('DOMContentLoaded', initAds);
   </script>
 </body>
 </html>
