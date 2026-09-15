@@ -1,9 +1,9 @@
-/* 
+\/* 
   Service Worker Entry Point for mochii 
 */
 
 importScripts('https://cdn.jsdelivr.net/npm/@titaniumnetwork-dev/ultraviolet@3.2.7/dist/uv.bundle.js');
-importScripts('/ultrav/uv.config.js'); // Or your hosted config path
+importScripts('/ultrav/uv.config.js');
 
 const uv = new UVServiceWorker();
 
