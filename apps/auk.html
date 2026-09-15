@@ -1,0 +1,192 @@
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <title>auk.</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" integrity="sha512-p+U1+KqR8K6zLhc1q2QmQfKQFfD5bBm6Tqf+b6abR+u5X7Hz0DvSxYZJ2kDZ6dSE3Ez9OnJ0lzOGC+1G4RzOGw==" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/github-dark.min.css">
+  <link rel="stylesheet" href="style.css">
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag() {
+    dataLayer.push(arguments);
+  }
+  gtag("js", new Date());
+  gtag("config", "G-PXHK7Q7G3Z");
+</script>
+</head>
+
+<body class="dark">
+  <div class="fps-counter" id="fps-counter" aria-label="Frames Per Second" style="display: block;">FPS: <span id="fps">189</span></div>
+  <header>
+    <div class="header-content">
+      <div class="title-group">
+        <h1>auk.</h1>
+        <h2>write code at ease.</h2>
+      </div>
+      <div class="header-actions">
+        <button id="settings-btn" title="Settings" aria-label="Settings"><i class="fas fa-cog"></i> Settings</button>
+      </div>
+    </div>
+  </header>
+  <div class="controls">
+    <div class="button-group">
+      <button id="clear-btn" title="Clear Code" aria-label="Clear Code"><i class="fas fa-trash"></i> Clear</button>
+      <button id="new-file-btn" title="Create New File" aria-label="Create New File"><i class="fas fa-file"></i> New File</button>
+      <div class="dropdown">
+        <button class="dropbtn" aria-haspopup="true" aria-expanded="false"><i class="fas fa-folder-open"></i> File <i class="fas fa-caret-down"></i></button>
+        <div class="dropdown-content" role="menu">
+          <button id="save-btn" title="Save to LocalStorage" aria-label="Save"><i class="fas fa-save"></i> Save</button>
+          <button id="download-btn" title="Download Active File" aria-label="Download"><i class="fas fa-file-download"></i> Download</button>
+        </div>
+      </div>
+    </div>
+    <div class="search-group">
+      <input type="text" id="search-files" placeholder="Search files..." aria-label="Search Files">
+      <i class="fas fa-search"></i>
+    </div>
+  </div>
+  <div class="main-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h3>Your Files</h3>
+      </div>
+      <ul id="sidebar-files-list">
+      <li data-id="1789435322070" class="active">
+    <span>index.html</span>
+    <button class="delete-sidebar-file" title="Delete File" aria-label="Delete File">×</button>
+  </li></ul>
+    </aside>
+
+    <div class="editor-preview-container">
+      <div class="tabs">
+        <ul id="tabs-list">
+        <li data-id="1789435322070" class="active">index.html <button class="delete-tab" title="Delete File" aria-label="Delete File">×</button></li></ul>
+      </div>
+
+      <div class="editor-container">
+      <div class="editor-panel active" data-id="1789435322070"><div class="panel-header">index.html</div><textarea id="editor-1789435322070" placeholder="Write your HTML code here..." style="display: none;"></textarea><div class="CodeMirror cm-s-default CodeMirror-wrap" translate="no" style="clip-path: inset(0px); width: 100%; height: 100%; font-size: 14px;"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 4px; left: 48px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; min-height: 1em; outline: none;"></textarea></div><div class="CodeMirror-vscrollbar" tabindex="-1" cm-not-content="true"><div style="min-width: 1px; height: 0px;"></div></div><div class="CodeMirror-hscrollbar" tabindex="-1" cm-not-content="true"><div style="height: 100%; min-height: 1px; width: 0px;"></div></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 44px; margin-bottom: -15px; border-right-width: 35px; min-height: 25px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre class="CodeMirror-line-like"><span>xxxxxxxxxx</span></pre><div class="CodeMirror-linenumber CodeMirror-gutter-elt"><div>1</div></div></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-cursors"><div class="CodeMirror-cursor" style="left: 4px; top: 0px; height: 17px;">&nbsp;</div></div><div class="CodeMirror-code" role="presentation"><div style="position: relative;"><div class="CodeMirror-gutter-wrapper" aria-hidden="true" style="left: -44px;"><div class="CodeMirror-linenumber CodeMirror-gutter-elt" style="left: 0px; width: 21px;">1</div></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="">&ZeroWidthSpace;</span></span></pre></div></div></div></div></div></div><div style="position: absolute; height: 35px; width: 1px; border-bottom: 0px solid transparent; top: 25px;"></div><div class="CodeMirror-gutters" style="left: 0px; height: 60px;"><div class="CodeMirror-gutter CodeMirror-linenumbers" style="width: 29px;"></div></div></div></div></div></div>
+      <div class="preview-container">
+        <div class="preview-header">Preview</div>
+      <iframe class="preview-iframe" id="preview-1789435322070" sandbox="allow-scripts allow-same-origin" srcdoc="&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+  &lt;meta charset=&quot;UTF-8&quot;&gt;
+  &lt;title&gt;Preview of index.html&lt;/title&gt;&lt;/head&gt;
+&lt;body&gt;&lt;/body&gt;
+&lt;/html&gt;" style="display: block;"></iframe></div>
+    </div>
+  </div>
+  <div class="modal" id="new-file-modal" aria-hidden="true" role="dialog" aria-labelledby="new-file-modal-title">
+    <div class="modal-content">
+      <span class="close" id="close-new-file" aria-label="Close">×</span>
+      <h2 id="new-file-modal-title">Create New File</h2>
+      <div class="form-group">
+        <label for="file-language">Language:</label>
+        <select id="file-language">
+          <option value="html">HTML</option>
+          <option value="css">CSS</option>
+          <option value="javascript">JavaScript</option>
+          <option value="python">Python</option>
+          <option value="ruby">Ruby</option>
+          <option value="typescript">TypeScript</option>
+          <option value="java">Java</option>
+          <option value="csharp">C#</option>
+          <option value="php">PHP</option>
+          <option value="go">Go</option>
+          <option value="swift">Swift</option>
+          <option value="kotlin">Kotlin</option>
+          <option value="rust">Rust</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="file-name">File Name:</label>
+        <input type="text" id="file-name" placeholder="Enter file name">
+      </div>
+      <button id="create-file-btn"><i class="fas fa-plus"></i> Create</button>
+      <button id="cancel-file-btn" class="secondary"><i class="fas fa-times"></i> Cancel</button>
+    </div>
+  </div>
+  <div class="modal" id="settings-modal" aria-hidden="true" role="dialog" aria-labelledby="settings-modal-title">
+    <div class="modal-content">
+      <span class="close" id="close-settings" aria-label="Close">×</span>
+      <h2 id="settings-modal-title">Settings</h2>
+      <div class="form-group">
+        <label for="theme-select">Theme:</label>
+        <select id="theme-select">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+          <option value="solarized">Solarized</option>
+          <option value="dracula">Dracula</option>
+          <option value="monokai">Monokai</option>
+          <option value="github-dark">GitHub Dark</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="font-size">Editor Font Size:</label>
+        <input type="range" id="font-size" min="12" max="24" value="14">
+        <span id="font-size-value">14px</span>
+      </div>
+      <div class="form-group">
+        <label for="auto-run-toggle">Auto-Run Preview:</label>
+        <input type="checkbox" id="auto-run-toggle" checked="">
+      </div>
+      <div class="form-group">
+        <label for="line-numbers-toggle">Show Line Numbers:</label>
+        <input type="checkbox" id="line-numbers-toggle" checked="">
+      </div>
+      <div class="form-group">
+        <label for="tab-size">Tab Size:</label>
+        <select id="tab-size">
+          <option value="2">2 Spaces</option>
+          <option value="4" selected="">4 Spaces</option>
+          <option value="8">8 Spaces</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="show-fps-toggle">Show FPS Counter:</label>
+        <input type="checkbox" id="show-fps-toggle" checked="">
+      </div>
+      <!-- Additional Settings -->
+      <div class="form-group">
+        <label for="autosave-toggle">Enable Autosave:</label>
+        <input type="checkbox" id="autosave-toggle" checked="">
+      </div>
+      <div class="form-group">
+        <label for="shortcuts-toggle">Show Keyboard Shortcuts:</label>
+        <input type="checkbox" id="shortcuts-toggle" checked="">
+      </div>
+    </div>
+  </div>
+  <div class="modal" id="shortcuts-modal" aria-hidden="false" role="dialog" aria-labelledby="shortcuts-modal-title" style="display: flex;">
+    <div class="modal-content">
+      <span class="close" id="close-shortcuts" aria-label="Close">×</span>
+      <h2 id="shortcuts-modal-title">Keyboard Shortcuts</h2>
+      <ul class="shortcuts-list">
+        <li><strong>Ctrl + N</strong>: New File</li>
+        <li><strong>Ctrl + S</strong>: Save</li>
+        <li><strong>Ctrl + D</strong>: Download</li>
+        <li><strong>Ctrl + F</strong>: Search Files</li>
+        <li><strong>Ctrl + Shift + C</strong>: Clear Code</li>
+        <li><strong>Ctrl + P</strong>: Toggle Preview</li>
+      </ul>
+    </div>
+  </div>
+  <div id="notification-container" aria-live="polite" aria-atomic="true"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/xml/xml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/css/css.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/python/python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/ruby/ruby.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/php/php.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/go/go.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/swift/swift.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/clike/clike.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/rust/rust.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/Consessions/flyflix@main/auxscript.js"></script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=WLTG1S4STB"></script>
+
+
+
+</body></html>
