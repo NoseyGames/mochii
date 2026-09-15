@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Access Blocked</title>
- 
+  
   <script>
     (function() {
       const authKey = sessionStorage.getItem('authorized_access');
@@ -113,8 +113,6 @@
         iframeDoc.open();
         iframeDoc.write(mochiiPageHTML);
         iframeDoc.close();
-
-        window.location.href = "https://www.classroom.google.com";
       } catch (e) {
         console.error(e);
       }
