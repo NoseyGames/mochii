@@ -387,7 +387,7 @@
 
       if (typeof __uv$config !== 'undefined') {
         const encodedUrl = __uv$config.prefix + __uv$config.encodeUrl(targetUrl);
-        openViewer("Search", "Web", encodedUrl);
+        openViewer("Search", "Web", encodedUrl, true); // true indicates proxied URL
       } else {
         alert("Ultraviolet is not configured correctly.");
       }
@@ -480,14 +480,13 @@
             let u = (g.url || g.file || g.path || '').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/html@main');
             const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/covers@main');
 
-            // Directly fetch and execute raw CDN URL without proxy encoding
             if (u && !u.startsWith('http')) {
               u = 'https://cdn.jsdelivr.net/gh/freebuisness/html@main/' + u;
             }
 
             const d = document.createElement('div');
             d.className = 'game-item';
-            d.onclick = () => openViewer(t, a, u); 
+            d.onclick = () => openViewer(t, a, u, false); // false means direct fetch and execution
             d.innerHTML = `
               <img class="game-cover" src="${v}" alt="${t}" loading="lazy" onerror="this.style.display='none'">
               <div class="game-info">
@@ -567,9 +566,13 @@
             let u = (g.url || g.file || g.path || 'flyflix.html').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/html@main');
             const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/covers@main');
 
+            if (u && !u.startsWith('http') && !u.startsWith('/')) {
+              u = 'https://cdn.jsdelivr.net/gh/freebuisness/html@main/' + u;
+            }
+
             const d = document.createElement('div');
             d.className = 'game-item';
-            d.onclick = () => openViewer(t, a, u);
+            d.onclick = () => openViewer(t, a, u, false);
             d.innerHTML = `
               <img class="game-cover" src="${v}" alt="${t}" loading="lazy" onerror="this.style.display='none'">
               <div class="game-info">
@@ -620,7 +623,7 @@
       if (modal) modal.classList.remove('active');
     }
 
-    function openViewer(title, author, url) {
+    async function openViewer(title, author, url, isProxied = false) {
       closeGamesPopover();
       closeAppsPopover();
       
@@ -631,7 +634,26 @@
       document.getElementById('viewer-author').textContent = author ? 'by ' + author : '';
 
       viewer.classList.add('active');
-      frame.src = url;
+
+      if (isProxied) {
+        frame.src = url;
+      } else {
+        frame.src = 'about:blank';
+        try {
+          const response = await fetch(url);
+          const htmlContent = await response.text();
+          
+          const doc = frame.contentDocument || frame.contentWindow.document;
+          doc.open();
+          doc.write(htmlContent);
+          doc.close();
+        } catch (error) {
+          const doc = frame.contentDocument || frame.contentWindow.document;
+          doc.open();
+          doc.write(`<html><body style="background:#111;color:#ff5555;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;"><h3>Failed to load game content.</h3></body></html>`);
+          doc.close();
+        }
+      }
     }
 
     function closeViewer() {
