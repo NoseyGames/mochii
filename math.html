@@ -191,10 +191,10 @@
       }
 
       try {
-        // Pointing to local worker and transport files under /bearmux/
         const connection = new BareMux.BareMuxConnection("/bearmux/worker.js");
         
-        await connection.setTransport("/bearmux/index.mjs", [{
+        // Pointing to the specific transport implementation (epoxy)
+        await connection.setTransport("/bearmux/epoxy/index.mjs", [{
           wisp: endpointObj.url
         }]);
 
