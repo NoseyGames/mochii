@@ -35,7 +35,7 @@
       <button class="nav-icon" title="Games" onclick="openGamesPopover()">
         <span class="material-symbols-outlined">sports_esports</span>
       </button>
-      <button class="nav-icon" title="Open Cloaked Tab" onclick="openCloakedTab()">
+      <button class="nav-icon" title="Apps & Sites" onclick="openAppsPopover()">
         <span class="material-symbols-outlined">desktop_windows</span>
       </button>
       <button class="nav-icon" title="Settings" onclick="openSettingsModal()">
@@ -81,15 +81,44 @@
           class="modal-search-box" 
           id="popover-search-input" 
           placeholder="Search catalog..." 
-          oninput="window.render && window.render()"
+          oninput="window.renderGames && window.renderGames()"
         />
-        <select class="modal-sort-select" id="popover-sort-select" onchange="window.render && window.render()">
+        <select class="modal-sort-select" id="popover-sort-select" onchange="window.renderGames && window.renderGames()">
           <option value="pop">Popularity</option>
           <option value="az">Name (A-Z)</option>
           <option value="za">Name (Z-A)</option>
         </select>
       </div>
       <div class="popover-content" id="game-list">
+        <div class="loading-text">Loading catalog...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Apps Modal Overlay -->
+  <div class="overlay-backdrop" id="apps-popover">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">Apps & Sites</h2>
+        <button class="close-btn" onclick="closeAppsPopover()">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="controls-row">
+        <input 
+          type="text" 
+          class="modal-search-box" 
+          id="apps-search-input" 
+          placeholder="Search apps..." 
+          oninput="window.renderApps && window.renderApps()"
+        />
+        <select class="modal-sort-select" id="apps-sort-select" onchange="window.renderApps && window.renderApps()">
+          <option value="pop">Popularity</option>
+          <option value="az">Name (A-Z)</option>
+          <option value="za">Name (Z-A)</option>
+        </select>
+      </div>
+      <div class="popover-content" id="apps-list">
         <div class="loading-text">Loading catalog...</div>
       </div>
     </div>
@@ -290,7 +319,6 @@
       }
     }
 
-    /* Helper function to resolve numerical ID from game object */
     function getGameId(game) {
       if (game.id !== undefined) return parseInt(game.id, 10);
       const urlStr = game.url || game.file || game.path || '';
@@ -298,22 +326,23 @@
       return match ? parseInt(match[1], 10) : null;
     }
 
-    /* Modals & Popover Navigation */
+    /* Games Catalog */
     function openGamesPopover() {
+      closeAppsPopover();
       const popover = document.getElementById('games-popover');
       if (popover) popover.classList.add('active');
 
-      if (!window.loaded) {
+      if (!window.gamesLoaded) {
         window.blocked = ['[!] SUGGEST GAMES .gg/D4c9VFYWyU'];
 
-        window.render = function () {
+        window.renderGames = function () {
           const searchInput = document.getElementById('popover-search-input');
           const sortSelect = document.getElementById('popover-sort-select');
 
           const q = searchInput ? searchInput.value.toLowerCase().trim() : '';
           const s = sortSelect ? sortSelect.value : 'pop';
 
-          const f = (window.raw || []).filter(g =>
+          const f = (window.rawGames || []).filter(g =>
             (g.name || g.title || '').toLowerCase().includes(q) ||
             (g.author || '').toLowerCase().includes(q)
           );
@@ -363,16 +392,15 @@
           c.appendChild(fg);
         };
 
-        // Fetch popularity stats and catalog simultaneously
         Promise.all([
           fetchPopularity(),
           fetch('https://cdn.jsdelivr.net/gh/freebuisness/assets/zones.json').then(r => r.json())
         ]).then(([_, g]) => {
           const l = Array.isArray(g) ? g : Object.values(g);
           const b = window.blocked.map(n => n.trim().toLowerCase());
-          window.raw = l.filter(x => !b.includes((x.name || x.title || '').trim().toLowerCase()));
-          window.render();
-          window.loaded = true;
+          window.rawGames = l.filter(x => !b.includes((x.name || x.title || '').trim().toLowerCase()));
+          window.renderGames();
+          window.gamesLoaded = true;
         }).catch(() => {
           const listContainer = document.getElementById('game-list');
           if (listContainer) {
@@ -387,6 +415,102 @@
       if (popover) popover.classList.remove('active');
     }
 
+    /* Apps & Sites Catalog (Loads flyflix.html and app catalog) */
+    function openAppsPopover() {
+      closeGamesPopover();
+      const popover = document.getElementById('apps-popover');
+      if (popover) popover.classList.add('active');
+
+      if (!window.appsLoaded) {
+        window.renderApps = function () {
+          const searchInput = document.getElementById('apps-search-input');
+          const sortSelect = document.getElementById('apps-sort-select');
+
+          const q = searchInput ? searchInput.value.toLowerCase().trim() : '';
+          const s = sortSelect ? sortSelect.value : 'pop';
+
+          const f = (window.rawApps || []).filter(g =>
+            (g.name || g.title || '').toLowerCase().includes(q) ||
+            (g.author || '').toLowerCase().includes(q)
+          );
+
+          if (s === 'pop') {
+            f.sort((a, b) => {
+              const idA = getGameId(a);
+              const idB = getGameId(b);
+              const popA = idA !== null && window.popularityData[idA] !== undefined ? window.popularityData[idA] : (a.popularity || 0);
+              const popB = idB !== null && window.popularityData[idB] !== undefined ? window.popularityData[idB] : (b.popularity || 0);
+              return popB - popA;
+            });
+          } else if (s === 'az') {
+            f.sort((a, b) => (a.name || a.title || '').localeCompare(b.name || b.title || ''));
+          } else if (s === 'za') {
+            f.sort((a, b) => (b.name || b.title || '').localeCompare(a.name || a.title || ''));
+          }
+
+          const c = document.getElementById('apps-list');
+          if (!c) return;
+
+          if (!f.length) {
+            c.innerHTML = '<div class="loading-text">No apps found.</div>';
+            return;
+          }
+
+          const fg = document.createDocumentFragment();
+          f.forEach(g => {
+            const t = g.name || g.title || 'Untitled';
+            const a = g.author || '';
+            const u = (g.url || g.file || g.path || 'flyflix.html').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/html@main');
+            const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/covers@main');
+
+            const d = document.createElement('div');
+            d.className = 'game-item';
+            d.onclick = () => openViewer(t, a, u);
+            d.innerHTML = `
+              <img class="game-cover" src="${v}" alt="${t}" loading="lazy" onerror="this.style.display='none'">
+              <div class="game-info">
+                <span class="game-title">${t}</span>
+                ${a ? `<span class="game-author">${a}</span>` : ''}
+              </div>
+            `;
+            fg.appendChild(d);
+          });
+          c.innerHTML = '';
+          c.appendChild(fg);
+        };
+
+        const defaultAppList = [
+          {
+            name: 'Flyflix',
+            author: 'Flyflix',
+            url: 'flyflix.html',
+            cover: ''
+          }
+        ];
+
+        Promise.all([
+          fetchPopularity(),
+          fetch('https://cdn.jsdelivr.net/gh/freebuisness/assets/apps.json')
+            .then(r => r.ok ? r.json() : [])
+            .catch(() => [])
+        ]).then(([_, fetchedApps]) => {
+          const l = Array.isArray(fetchedApps) ? fetchedApps : Object.values(fetchedApps);
+          window.rawApps = [...defaultAppList, ...l];
+          window.renderApps();
+          window.appsLoaded = true;
+        }).catch(() => {
+          window.rawApps = defaultAppList;
+          window.renderApps();
+          window.appsLoaded = true;
+        });
+      }
+    }
+
+    function closeAppsPopover() {
+      const popover = document.getElementById('apps-popover');
+      if (popover) popover.classList.remove('active');
+    }
+
     function openSettingsModal() {
       const modal = document.getElementById('settings-modal');
       if (modal) modal.classList.add('active');
@@ -397,17 +521,10 @@
       if (modal) modal.classList.remove('active');
     }
 
-    function openCloakedTab() {
-      const w = window.open('about:blank', '_blank');
-      if (w) {
-        w.document.write('<!DOCTYPE html><html><head><title>mochii</title><style>body,html{margin:0;padding:0;height:100%;overflow:hidden;background:#09090b;}iframe{width:100vw;height:100vh;border:none;display:block;}</style></head><body><iframe src="about:blank"></iframe></body></html>');
-        w.document.close();
-      }
-    }
-
     /* Game Viewer Runtime */
     function openViewer(title, author, url) {
       closeGamesPopover();
+      closeAppsPopover();
       const viewer = document.getElementById('zone-viewer');
       const frame = document.getElementById('viewer-frame');
 
