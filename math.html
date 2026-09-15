@@ -193,7 +193,7 @@
       try {
         const connection = new BareMux.BareMuxConnection("/bearmux/worker.js");
         
-        // Pointing to the specific transport implementation (epoxy)
+        // Single bundled Epoxy transport entrypoint
         await connection.setTransport("/bearmux/epoxy/index.mjs", [{
           wisp: endpointObj.url
         }]);
