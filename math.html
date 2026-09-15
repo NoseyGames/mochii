@@ -11,6 +11,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
 
+  <!-- BareMux Client Library -->
+  <script src="https://cdn.jsdelivr.net/npm/@mercuryworkshop/bare-mux@2.0.0/dist/bare-mux.js"></script>
+
   <!-- Stylesheet -->
   <link rel="stylesheet" href="style.css" />
 
@@ -167,6 +170,56 @@
 
   <!-- Script Implementation -->
   <script>
+    /* Wisp Connection & Fallback Controller */
+    const wispEndpoints = {
+      primary: {
+        name: "Mercury Workshop",
+        url: "wss://wisp.mercuryworkshop.com/"
+      },
+      secondary: {
+        name: "Titanium Network",
+        url: "wss://wisp.titaniumnetwork.org/"
+      }
+    };
+
+    let currentEndpoint = wispEndpoints.primary;
+
+    async function connectWisp(endpointObj) {
+      if (!window.BareMux) {
+        console.error("BareMux library is not loaded.");
+        return false;
+      }
+
+      try {
+        const connection = new BareMux.BareMuxConnection("/baremux/worker.js");
+        
+        await connection.setTransport("/baremux/wisp/index.mjs", [{
+          wisp: endpointObj.url
+        }]);
+
+        console.log(`Successfully connected to ${endpointObj.name}`);
+        return true;
+      } catch (error) {
+        console.error(`Failed to connect to ${endpointObj.name}:`, error);
+        handleWispFailure(endpointObj);
+        return false;
+      }
+    }
+
+    function handleWispFailure(failedEndpoint) {
+      const isPrimary = failedEndpoint.name === wispEndpoints.primary.name;
+      const alternate = isPrimary ? wispEndpoints.secondary : wispEndpoints.primary;
+
+      const shouldSwap = confirm(
+        `Connection to ${failedEndpoint.name} failed.\n\nWould you like to switch to ${alternate.name}?`
+      );
+
+      if (shouldSwap) {
+        currentEndpoint = alternate;
+        connectWisp(currentEndpoint);
+      }
+    }
+
     /* Dynamic Ad Controller */
     let adsEnabled = localStorage.getItem('mochii_ads_enabled') === 'true';
 
@@ -204,8 +257,6 @@
     function removeAdScripts() {
       const script = document.getElementById('aclib-script');
       if (script) script.remove();
-      const zone = document.getElementById('ad-container-zone');
-      if (zone) zone.innerHTML = '';
     }
 
     /* Background Interactive Particle Canvas */
@@ -289,7 +340,25 @@
     initParticles();
     animateParticles();
 
-    /* Keyboard Shortcuts */
+    /* Search & Navigation Handlers */
+    function handleHeroSearch(query) {
+      const trimmed = query.trim();
+      if (!trimmed) return;
+
+      let targetUrl = "";
+      const urlPattern = /^(https?:\/\/)?([\w\-]+(\.[\w\-]+)+)([\w\-\.,@?^=%&:/~\+#]*[\w\-\@?^=%&/~\+#])?$/i;
+
+      if (urlPattern.test(trimmed)) {
+        targetUrl = trimmed.startsWith("http://") || trimmed.startsWith("https://") 
+          ? trimmed 
+          : "https://" + trimmed;
+      } else {
+        targetUrl = "https://duckduckgo.com/?q=" + encodeURIComponent(trimmed);
+      }
+
+      openViewer("Search Result", "Wisp Connection", targetUrl);
+    }
+
     window.addEventListener('keydown', (e) => {
       if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
         e.preventDefault();
@@ -415,7 +484,7 @@
       if (popover) popover.classList.remove('active');
     }
 
-    /* Apps & Sites Catalog (Loads flyflix.html and app catalog) */
+    /* Apps & Sites Catalog */
     function openAppsPopover() {
       closeGamesPopover();
       const popover = document.getElementById('apps-popover');
@@ -479,26 +548,26 @@
           c.appendChild(fg);
         };
 
-const defaultAppList = [
-  {
-    name: 'Flyflix',
-    author: 'Flyflix',
-    url: 'flyflix.html',
-    cover: ''
-  },
-  {
-    name: 'Voxiles',
-    author: 'bog',
-    url: '/apps/vox.html',
-    cover: ''
-  }, // <--- ADD COMMA HERE
-  {
-    name: 'Auk.',
-    author: 'bog',
-    url: 'apps/auk.html',
-    cover: ''
-  }
-];
+        const defaultAppList = [
+          {
+            name: 'Flyflix',
+            author: 'Flyflix',
+            url: 'flyflix.html',
+            cover: ''
+          },
+          {
+            name: 'Voxiles',
+            author: 'bog',
+            url: '/apps/vox.html',
+            cover: ''
+          },
+          {
+            name: 'Auk.',
+            author: 'bog',
+            url: 'apps/auk.html',
+            cover: ''
+          }
+        ];
 
         Promise.all([
           fetchPopularity(),
@@ -533,7 +602,7 @@ const defaultAppList = [
       if (modal) modal.classList.remove('active');
     }
 
-    /* Game Viewer Runtime */
+    /* Viewer Runtime */
     function openViewer(title, author, url) {
       closeGamesPopover();
       closeAppsPopover();
@@ -588,7 +657,21 @@ const defaultAppList = [
       }
     }
 
-    document.addEventListener('DOMContentLoaded', initAds);
+    /* Lifecycle Initialization */
+    document.addEventListener('DOMContentLoaded', () => {
+      initAds();
+      connectWisp(currentEndpoint);
+
+      const heroSearch = document.getElementById('hero-search');
+      if (heroSearch) {
+        heroSearch.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleHeroSearch(heroSearch.value);
+          }
+        });
+      }
+    });
   </script>
 </body>
 </html>
