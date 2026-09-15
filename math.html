@@ -11,10 +11,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
 
- <!-- Local Proxy & BareMux Libraries -->
+  <!-- Local Proxy & BareMux Libraries -->
   <script src="/bearmux/index.js"></script>
   
-  <!-- Updated to point to /ultrav/ -->
+  <!-- Ultraviolet Proxy Scripts (Path updated to /ultrav/) -->
   <script src="/ultrav/uv.bundle.js"></script>
   <script src="/ultrav/uv.config.js"></script>
 
@@ -383,7 +383,7 @@
         targetUrl = "https://duckduckgo.com/?q=" + encodeURIComponent(trimmed);
       }
 
-      // UV Encoder: Requires __uv$config from /uv/uv.config.js
+      // UV Encoder: Requires __uv$config loaded from /ultrav/uv.config.js
       if (typeof __uv$config !== 'undefined') {
         const encodedUrl = __uv$config.prefix + __uv$config.encodeUrl(targetUrl);
         openViewer("Search", "Web", encodedUrl);
@@ -482,7 +482,7 @@
 
             const d = document.createElement('div');
             d.className = 'game-item';
-            d.onclick = () => openViewer(t, a, u); // Launch directly in Iframe
+            d.onclick = () => openViewer(t, a, u); 
             d.innerHTML = `
               <img class="game-cover" src="${v}" alt="${t}" loading="lazy" onerror="this.style.display='none'">
               <div class="game-info">
@@ -562,7 +562,6 @@
             let u = (g.url || g.file || g.path || 'flyflix.html').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/html@main');
             const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/covers@main');
 
-            // Pass known apps through the UV encoder if needed
             if (typeof __uv$config !== 'undefined' && u.startsWith("http")) {
               u = __uv$config.prefix + __uv$config.encodeUrl(u);
             }
@@ -631,9 +630,6 @@
       document.getElementById('viewer-author').textContent = author ? 'by ' + author : '';
 
       viewer.classList.add('active');
-      
-      // Because we have registered a Service Worker, setting the src directly 
-      // allows the proxy SW to intercept the request and handle CORS/Rewriting natively.
       frame.src = url;
     }
 
@@ -655,14 +651,16 @@
           frame.webkitRequestFullscreen();
         }
       } else {
-        if (document.exitFullscreen) document.exitFullscreen();
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
       }
     }
 
     /* Boot Sequence */
     document.addEventListener('DOMContentLoaded', () => {
       initAds();
-      initializeNetwork(); // Boot Service Worker and BareMux
+      initializeNetwork(); 
 
       const heroSearch = document.getElementById('hero-search');
       if (heroSearch) {
