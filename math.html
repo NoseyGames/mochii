@@ -171,19 +171,21 @@
   <!-- Script Implementation -->
   <script>
     /* =========================================================
-       1. Core Proxy & Wisp Network Initializer
+       1. Core Proxy & Multi-Server Wisp Network Initializer (5 Servers)
        ========================================================= */
-    const wispEndpoints = {
-      primary: { name: "Mercury Workshop", url: "wss://wisp.mercuryworkshop.com/" },
-      secondary: { name: "Titanium Network", url: "wss://wisp.rhw.one/" }
-    };
+    const wispEndpoints = [
+      { name: "Mercury Workshop", url: "wss://wisp.mercuryworkshop.com/" },
+      { name: "Titanium Network", url: "wss://wisp.rhw.one/" },
+      { name: "Backup Server 3", url: "wss://anura.mercuryworkshop.com/" }, 
+      { name: "Backup Server 4", url: "wss://wisp.luckycolt.net/" }, 
+      { name: "Backup Server 5", url: "wss://wisp.petridish.pw/" }  
+    ];
 
-    let currentEndpoint = wispEndpoints.primary;
+    let currentEndpointIndex = 0;
     let retryCount = 0;
-    const MAX_RETRIES = 2; 
+    const MAX_RETRIES_PER_SERVER = 1; 
 
     async function initializeNetwork() {
-      // Prevent service worker registration error inside about:blank frames
       if ('serviceWorker' in navigator && window.location.protocol !== 'about:') {
         try {
           await navigator.serviceWorker.register('/sw.js', { scope: '/' });
@@ -193,14 +195,16 @@
         }
       }
 
-      await connectWisp(currentEndpoint);
+      await connectWisp();
     }
 
-    async function connectWisp(endpointObj) {
+    async function connectWisp() {
       if (!window.BareMux) {
         updateStatus("Failed: BareMux Missing", "red");
         return false;
       }
+
+      const endpointObj = wispEndpoints[currentEndpointIndex];
 
       try {
         const connection = new BareMux.BareMuxConnection("/bearmux/worker.js");
@@ -212,24 +216,27 @@
         retryCount = 0; 
         return true;
       } catch (error) {
-        handleWispFailure(endpointObj);
+        handleWispFailure();
         return false;
       }
     }
 
-    function handleWispFailure(failedEndpoint) {
-      if (retryCount >= MAX_RETRIES) {
-        updateStatus("Network Offline", "red");
+    function handleWispFailure() {
+      retryCount++;
+
+      if (retryCount > MAX_RETRIES_PER_SERVER) {
+        retryCount = 0;
+        currentEndpointIndex++;
+      }
+
+      if (currentEndpointIndex >= wispEndpoints.length) {
+        updateStatus("All Networks Offline", "red");
         return;
       }
 
-      retryCount++;
-      const isPrimary = failedEndpoint.name === wispEndpoints.primary.name;
-      const alternate = isPrimary ? wispEndpoints.secondary : wispEndpoints.primary;
-
-      updateStatus("Reconnecting...", "orange");
-      currentEndpoint = alternate;
-      setTimeout(() => connectWisp(currentEndpoint), 1000);
+      const nextServerName = wispEndpoints[currentEndpointIndex].name;
+      updateStatus(`Trying ${nextServerName}...`, "orange");
+      setTimeout(() => connectWisp(), 1000);
     }
 
     function updateStatus(text, color) {
