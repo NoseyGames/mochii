@@ -480,12 +480,9 @@
             let u = (g.url || g.file || g.path || '').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/html@main');
             const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/covers@main');
 
-            // Encode game URL through Ultraviolet proxy
-            if (typeof __uv$config !== 'undefined' && u) {
-              if (!u.startsWith('http')) {
-                u = 'https://cdn.jsdelivr.net/gh/freebuisness/html@main/' + u;
-              }
-              u = __uv$config.prefix + __uv$config.encodeUrl(u);
+            // Directly fetch and execute raw CDN URL without proxy encoding
+            if (u && !u.startsWith('http')) {
+              u = 'https://cdn.jsdelivr.net/gh/freebuisness/html@main/' + u;
             }
 
             const d = document.createElement('div');
@@ -569,10 +566,6 @@
             const a = g.author || '';
             let u = (g.url || g.file || g.path || 'flyflix.html').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/html@main');
             const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/freebuisness/covers@main');
-
-            if (typeof __uv$config !== 'undefined' && u.startsWith("http")) {
-              u = __uv$config.prefix + __uv$config.encodeUrl(u);
-            }
 
             const d = document.createElement('div');
             d.className = 'game-item';
