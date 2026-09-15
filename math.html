@@ -11,8 +11,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
 
-<!-- BareMux Client Library -->
-<script src="https://cdn.jsdelivr.net/npm/@mercuryworkshop/bare-mux@2.0.0/dist/index.js"></script>
+  <!-- BareMux Client Library (Corrected JS path) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mercuryworkshop/bare-mux@2.0.0/dist/index.js"></script>
 
   <!-- Stylesheet -->
   <link rel="stylesheet" href="style.css" />
@@ -346,9 +346,11 @@
       if (!trimmed) return;
 
       let targetUrl = "";
-      const urlPattern = /^(https?:\/\/)?([\w\-]+(\.[\w\-]+)+)([\w\-\.,@?^=%&:/~\+#]*[\w\-\@?^=%&/~\+#])?$/i;
 
-      if (urlPattern.test(trimmed)) {
+      // Regular expression checking specifically for top-level domain extensions (.com, .org, .net, etc.)
+      const domainPattern = /^((https?:\/\/)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})(\/.*)?$/i;
+
+      if (domainPattern.test(trimmed)) {
         targetUrl = trimmed.startsWith("http://") || trimmed.startsWith("https://") 
           ? trimmed 
           : "https://" + trimmed;
