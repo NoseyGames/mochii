@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>mochii</title>
 
+  <!-- Frame-Only Enforcement: Redirects if opened directly -->
+  <script>
+    if (window.self === window.top) {
+      window.location.href = 'https://classroom.google.com';
+    }
+  </script>
+
   <!-- Google Fonts: Inter & Material Symbols Outlined -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,21 +21,12 @@
   <!-- Local Proxy & BareMux Libraries -->
   <script src="/bearmux/index.js"></script>
   
-  <!-- Ultraviolet Proxy Scripts (Path updated to /ultrav/) -->
+  <!-- Ultraviolet Proxy Scripts -->
   <script src="/ultrav/uv.bundle.js"></script>
   <script src="/ultrav/uv.config.js"></script>
 
   <!-- Stylesheet -->
   <link rel="stylesheet" href="style.css" />
-
-  <!-- Safe Frame Guard -->
-  <script>
-    try {
-      if (window.self !== window.top) {
-        window.top.location = window.self.location;
-      }
-    } catch (e) {}
-  </script>
 </head>
 <body>
 
@@ -185,7 +183,6 @@
     const MAX_RETRIES = 2; 
 
     async function initializeNetwork() {
-      // Step 1: Register the Service Worker for Proxy Routing
       if ('serviceWorker' in navigator) {
         try {
           await navigator.serviceWorker.register('/sw.js', { scope: '/' });
@@ -195,7 +192,6 @@
         }
       }
 
-      // Step 2: Connect BareMux to route proxy traffic over WSS
       await connectWisp(currentEndpoint);
     }
 
@@ -211,12 +207,10 @@
 
         await connection.setTransport(transportUrl, [{ wisp: endpointObj.url }]);
 
-        console.log(`Successfully connected to ${endpointObj.name}`);
         updateStatus(`Connected to ${endpointObj.name}`, "#22c55e");
         retryCount = 0; 
         return true;
       } catch (error) {
-        console.error(`Wisp Connection Error (${endpointObj.name}):`, error);
         handleWispFailure(endpointObj);
         return false;
       }
@@ -383,12 +377,11 @@
         targetUrl = "https://duckduckgo.com/?q=" + encodeURIComponent(trimmed);
       }
 
-      // UV Encoder: Requires __uv$config loaded from /ultrav/uv.config.js
       if (typeof __uv$config !== 'undefined') {
         const encodedUrl = __uv$config.prefix + __uv$config.encodeUrl(targetUrl);
         openViewer("Search", "Web", encodedUrl);
       } else {
-        alert("Ultraviolet is not configured correctly. Proxy search cannot launch.");
+        alert("Ultraviolet is not configured correctly.");
       }
     }
 
@@ -400,7 +393,6 @@
       }
     });
 
-    /* Catalog State Variables */
     window.popularityData = {};
     window.gamesLoaded = false;
     window.appsLoaded = false;
@@ -657,7 +649,6 @@
       }
     }
 
-    /* Boot Sequence */
     document.addEventListener('DOMContentLoaded', () => {
       initAds();
       initializeNetwork(); 
