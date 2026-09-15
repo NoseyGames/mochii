@@ -1,11 +1,9 @@
 /* 
   Service Worker Entry Point for mochii 
-  Routing through /ultrav/ directory
 */
 
 importScripts('/ultrav/uv.bundle.js');
 importScripts('/ultrav/uv.config.js');
-importScripts('/ultrav/uv.sw.js');
 
 const uv = new UVServiceWorker();
 
