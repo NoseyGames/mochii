@@ -183,7 +183,8 @@
     const MAX_RETRIES = 2; 
 
     async function initializeNetwork() {
-      if ('serviceWorker' in navigator) {
+      // Prevent service worker registration error inside about:blank frames
+      if ('serviceWorker' in navigator && window.location.protocol !== 'about:') {
         try {
           await navigator.serviceWorker.register('/sw.js', { scope: '/' });
           console.log("Service Worker Registered Successfully");
