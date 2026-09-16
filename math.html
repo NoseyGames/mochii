@@ -169,86 +169,178 @@
   </div>
 
   <!-- Script Implementation -->
-  <script>
-    /* =========================================================
-       1. Core Proxy & Multi-Server Wisp Network Initializer
-       ========================================================= */
-    const wispEndpoints = [
-      { name: "Mercury Workshop", url: "wss://wisp.mercuryworkshop.com/" },
-      { name: "Titanium Network", url: "wss://wisp.rhw.one/" },
-      { name: "Backup Server 3", url: "wss://anura.mercuryworkshop.com/" }, 
-      { name: "Backup Server 4", url: "wss://wisp.luckycolt.net/" }, 
-      { name: "Backup Server 5", url: "wss://wisp.petridish.pw/" }  
-    ];
+<script>
+  /* =========================================================
+     Core Proxy and Multi-Server Wisp Network Initializer
+     ========================================================= */
 
-    let currentEndpointIndex = 0;
-    let retryCount = 0;
-    const MAX_RETRIES_PER_SERVER = 1; 
+  const wispEndpoints = [
+    {
+      name: "Mercury Workshop",
+      url: "wss://wisp.mercuryworkshop.com/"
+    },
+    {
+      name: "Titanium Network",
+      url: "wss://wisp.rhw.one/"
+    },
+    {
+      name: "Backup Server 3",
+      url: "wss://anura.mercuryworkshop.com/"
+    },
+    {
+      name: "Backup Server 4",
+      url: "wss://wisp.luckycolt.net/"
+    },
+    {
+      name: "Backup Server 5",
+      url: "wss://wisp.petridish.pw/"
+    }
+  ];
 
-    async function initializeNetwork() {
-      if ('serviceWorker' in navigator && window.location.protocol !== 'about:') {
-        try {
-          await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-          console.log("Service Worker Registered Successfully");
-        } catch (e) {
-          console.warn("Service Worker registration failed:", e);
+  const BAREMUX_WORKER_PATH = "/bearmux/worker.js";
+  const EPOXY_TRANSPORT_PATH = "/bearmux/epoxy/index.mjs";
+
+  let currentEndpointIndex = 0;
+  let retryCount = 0;
+  let connection = null;
+
+  const MAX_RETRIES_PER_SERVER = 1;
+  const RETRY_DELAY_MS = 1000;
+
+  async function initializeNetwork() {
+    if (!("serviceWorker" in navigator)) {
+      updateStatus("Service Workers Unsupported", "red");
+      return false;
+    }
+
+    if (window.location.protocol === "about:") {
+      updateStatus("Invalid Page Protocol", "red");
+      return false;
+    }
+
+    try {
+      await navigator.serviceWorker.register("/sw.js", {
+        scope: "/"
+      });
+
+      console.log("Service worker registered successfully.");
+    } catch (error) {
+      console.warn("Service worker registration failed:", error);
+      updateStatus("Service Worker Failed", "red");
+      return false;
+    }
+
+    return connectWisp();
+  }
+
+  async function connectWisp() {
+    if (!window.BareMux) {
+      updateStatus("Failed: BareMux Missing", "red");
+      console.error("BareMux is not available on window.");
+      return false;
+    }
+
+    if (currentEndpointIndex >= wispEndpoints.length) {
+      updateStatus("All Networks Offline", "red");
+      console.error("No Wisp endpoints remain.");
+      return false;
+    }
+
+    const endpoint = wispEndpoints[currentEndpointIndex];
+
+    try {
+      /*
+       * The transport module must be served at this exact URL:
+       *
+       * /bearmux/epoxy/index.mjs
+       *
+       * Use setTransport(), not setManualTransport().
+       */
+      connection = new BareMux.BareMuxConnection(
+        BAREMUX_WORKER_PATH
+      );
+
+      await connection.setTransport(EPOXY_TRANSPORT_PATH, [
+        {
+          wisp: endpoint.url
         }
-      }
+      ]);
 
-      await connectWisp();
+      retryCount = 0;
+
+      updateStatus(
+        `Transport Ready: ${endpoint.name}`,
+        "#22c55e"
+      );
+
+      console.log(
+        `Transport initialized for Wisp endpoint: ${endpoint.name}`
+      );
+
+      return true;
+    } catch (error) {
+      console.warn(
+        `Failed to initialize ${endpoint.name}:`,
+        error
+      );
+
+      handleWispFailure();
+      return false;
+    }
+  }
+
+  function handleWispFailure() {
+    retryCount++;
+
+    if (retryCount > MAX_RETRIES_PER_SERVER) {
+      retryCount = 0;
+      currentEndpointIndex++;
     }
 
-    async function connectWisp() {
-      if (!window.BareMux) {
-        updateStatus("Failed: BareMux Missing", "red");
-        return false;
-      }
-
-      const endpointObj = wispEndpoints[currentEndpointIndex];
-
-      try {
-        const connection = new BareMux.BareMuxConnection("/bearmux/worker.js");
-        const transportUrl = "https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@2.1.28/dist/index.js";
-
-        // Set manual transport with WISP configuration
-        await connection.setManualTransport(transportUrl, [{ wisp: endpointObj.url }]);
-
-        updateStatus(`Connected to ${endpointObj.name}`, "#22c55e");
-        retryCount = 0; 
-        console.log(`✓ Connected to WISP: ${endpointObj.name}`);
-        return true;
-      } catch (error) {
-        console.warn(`Failed to connect to ${endpointObj.name}:`, error);
-        handleWispFailure();
-        return false;
-      }
+    if (currentEndpointIndex >= wispEndpoints.length) {
+      updateStatus("All Networks Offline", "red");
+      console.error("All Wisp endpoints failed.");
+      return;
     }
 
-    function handleWispFailure() {
-      retryCount++;
+    const nextEndpoint = wispEndpoints[currentEndpointIndex];
 
-      if (retryCount > MAX_RETRIES_PER_SERVER) {
-        retryCount = 0;
-        currentEndpointIndex++;
-      }
+    updateStatus(
+      `Trying ${nextEndpoint.name}...`,
+      "orange"
+    );
 
-      if (currentEndpointIndex >= wispEndpoints.length) {
-        updateStatus("All Networks Offline", "red");
-        return;
-      }
+    window.setTimeout(() => {
+      connectWisp();
+    }, RETRY_DELAY_MS);
+  }
 
-      const nextServerName = wispEndpoints[currentEndpointIndex].name;
-      updateStatus(`Trying ${nextServerName}...`, "orange");
-      setTimeout(() => connectWisp(), 1000);
+  function updateStatus(text, color) {
+    const statusBadge = document.getElementById(
+      "connection-status"
+    );
+
+    if (!statusBadge) {
+      return;
     }
 
-    function updateStatus(text, color) {
-      const statusBadge = document.getElementById('connection-status');
-      if (statusBadge) {
-        statusBadge.innerHTML = `<span class="status-indicator" style="background: ${color};"></span><span>${text}</span>`;
-      }
-    }
+    statusBadge.innerHTML = `
+      <span
+        class="status-indicator"
+        style="background-color: ${color};"
+      ></span>
+      <span>${escapeHtml(text)}</span>
+    `;
+  }
 
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
     /* =========================================================
        2. Ad Controller 
        ========================================================= */
