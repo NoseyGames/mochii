@@ -239,8 +239,12 @@
       try {
         connection = new BareMux.BareMuxConnection(BAREMUX_WORKER_PATH);
 
-        // Fixed setTransport signature for Epoxy transport initialization
-        await connection.setTransport(EPOXY_TRANSPORT_PATH, [{ wisp: endpoint.url }]);
+        // Attempt setWisp natively first if available
+        if (typeof connection.setWisp === "function") {
+          await connection.setWisp(endpoint.url);
+        } else {
+          await connection.setTransport(EPOXY_TRANSPORT_PATH, [{ wisp: endpoint.url }]);
+        }
 
         retryCount = 0;
 
@@ -256,12 +260,26 @@
         return true;
       } catch (error) {
         console.warn(
-          `Failed to initialize ${endpoint.name}:`,
+          `Failed primary initialization for ${endpoint.name}:`,
           error
         );
 
-        handleWispFailure();
-        return false;
+        // Fallback execution path
+        try {
+          if (connection && typeof connection.setWisp === "function") {
+            await connection.setWisp(endpoint.url);
+          } else {
+            await connection.setTransport(EPOXY_TRANSPORT_PATH, [{ wisp: endpoint.url }]);
+          }
+
+          retryCount = 0;
+          updateStatus(`Transport Ready: ${endpoint.name}`, "#22c55e");
+          return true;
+        } catch (fallbackErr) {
+          console.warn(`Fallback failed for ${endpoint.name}:`, fallbackErr);
+          handleWispFailure();
+          return false;
+        }
       }
     }
 
