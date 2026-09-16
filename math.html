@@ -210,7 +210,6 @@
         await navigator.serviceWorker.register("/sw.js", {
           scope: "/"
         });
-
         console.log("Service worker registered successfully.");
       } catch (error) {
         console.warn("Service worker registration failed:", error);
@@ -237,12 +236,16 @@
       const endpoint = wispEndpoints[currentEndpointIndex];
 
       try {
-        connection = new BareMux.BareMuxConnection(BAREMUX_WORKER_PATH);
+        if (!connection) {
+          connection = new BareMux.BareMuxConnection(BAREMUX_WORKER_PATH);
+        }
 
-        // Resolve absolute URL for module dynamically
-        const transportUrl = new URL(EPOXY_TRANSPORT_PATH, window.location.origin).toString();
+        // Dynamically import epoxy ES module and resolve transport constructor class
+        const epoxyModule = await import(EPOXY_TRANSPORT_PATH);
+        const EpoxyTransportClass = epoxyModule.EpoxyTransport || epoxyModule.default || epoxyModule;
 
-        await connection.setTransport(transportUrl, [{ wisp: endpoint.url }]);
+        // Pass resolved transport directly instead of raw string path
+        await connection.setTransport(EpoxyTransportClass, [{ wisp: endpoint.url }]);
 
         retryCount = 0;
 
