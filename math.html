@@ -18,8 +18,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
 
-  <!-- Local Proxy & BareMux Libraries -->
+  <!-- Local Proxy, BareMux & Epoxy Browser Bundles -->
   <script src="/bearmux/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@2.0.0/dist/index.js"></script>
   
   <!-- Ultraviolet Proxy Scripts -->
   <script src="/ultrav/uv.bundle.js"></script>
@@ -186,7 +187,6 @@
     ];
 
     const BAREMUX_WORKER_PATH = "/bearmux/worker.js";
-    const EPOXY_TRANSPORT_CDN = "https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@2.0.0/dist/index.mjs";
 
     let currentEndpointIndex = 0;
     let retryCount = 0;
@@ -207,9 +207,7 @@
       }
 
       try {
-        await navigator.serviceWorker.register("/sw.js", {
-          scope: "/"
-        });
+        await navigator.serviceWorker.register("/sw.js", { scope: "/" });
         console.log("Service worker registered successfully.");
       } catch (error) {
         console.warn("Service worker registration failed:", error);
@@ -240,8 +238,13 @@
           connection = new BareMux.BareMuxConnection(BAREMUX_WORKER_PATH);
         }
 
-        // Send the CDN ES Module URL string directly into BareMux worker
-        await connection.setTransport(EPOXY_TRANSPORT_CDN, [{ wisp: endpoint.url }]);
+        const TransportClass = window.EpoxyTransport || (window.BareMux && window.BareMux.BareTransport);
+
+        if (!TransportClass) {
+          throw new Error("EpoxyTransport is not available globally.");
+        }
+
+        await connection.setTransport(TransportClass, [{ wisp: endpoint.url }]);
 
         retryCount = 0;
 
