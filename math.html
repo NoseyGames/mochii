@@ -18,7 +18,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
 
-  <!-- Local Proxy, BareMux & Epoxy Browser Bundles -->
+  <!-- Local Proxy, BareMux & Epoxy Bundles -->
   <script src="/bearmux/index.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@2.0.0/dist/index.js"></script>
   
@@ -238,13 +238,22 @@
           connection = new BareMux.BareMuxConnection(BAREMUX_WORKER_PATH);
         }
 
-        const TransportClass = window.EpoxyTransport || (window.BareMux && window.BareMux.BareTransport);
+        // Dynamically locate the global Epoxy transport class across package export signatures
+        const TransportClass = 
+          window.EpoxyTransport || 
+          window.Epoxy || 
+          (window.EpxMux && window.EpxMux.EpoxyTransport) ||
+          (window.BareMux && window.BareMux.BareTransport);
 
         if (!TransportClass) {
-          throw new Error("EpoxyTransport is not available globally.");
+          // If the CDN script failed to export to window, load via path string
+          await connection.setTransport(
+            "https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@2.0.0/dist/index.mjs",
+            [{ wisp: endpoint.url }]
+          );
+        } else {
+          await connection.setTransport(TransportClass, [{ wisp: endpoint.url }]);
         }
-
-        await connection.setTransport(TransportClass, [{ wisp: endpoint.url }]);
 
         retryCount = 0;
 
