@@ -210,12 +210,15 @@
         const connection = new BareMux.BareMuxConnection("/bearmux/worker.js");
         const transportUrl = "https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@2.1.28/dist/index.js";
 
-        await connection.setTransport(transportUrl, [{ wisp: endpointObj.url }]);
+        // Set manual transport with WISP configuration
+        await connection.setManualTransport(transportUrl, [{ wisp: endpointObj.url }]);
 
         updateStatus(`Connected to ${endpointObj.name}`, "#22c55e");
         retryCount = 0; 
+        console.log(`✓ Connected to WISP: ${endpointObj.name}`);
         return true;
       } catch (error) {
+        console.warn(`Failed to connect to ${endpointObj.name}:`, error);
         handleWispFailure();
         return false;
       }
@@ -650,7 +653,7 @@
         } catch (error) {
           const doc = frame.contentDocument || frame.contentWindow.document;
           doc.open();
-          doc.write(`<html><body style="background:#111;color:#ff5555;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;"><h3>Failed to load game content.</h3></body></html>`);
+          doc.write(`<html><body style="background:#111;color:#ff5555;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;"><h3>Failed to load game</h3><p>${error.message}</p></body></html>`);
           doc.close();
         }
       }
