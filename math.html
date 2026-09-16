@@ -477,11 +477,11 @@
           f.forEach(g => {
             const t = g.name || g.title || 'Untitled';
             const a = g.author || '';
-            let u = (g.url || g.file || g.path || '').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/Consessions/html@main');
-            const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/Consessions/covers@main');
+            let u = (g.url || g.file || g.path || '').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/securlycdn/html@main');
+            const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/securlycdn/covers@main');
 
             if (u && !u.startsWith('http')) {
-              u = 'https://cdn.jsdelivr.net/gh/Consessions/html@main/' + u;
+              u = 'https://cdn.jsdelivr.net/gh/securlycdn/html@main/' + u;
             }
 
             const d = document.createElement('div');
@@ -502,7 +502,7 @@
 
         Promise.all([
           fetchPopularity(),
-          fetch('https://cdn.jsdelivr.net/gh/Consessions/assets/zones.json').then(r => r.json())
+          fetch('https://cdn.jsdelivr.net/gh/securlycdn/assets/zones.json').then(r => r.json())
         ]).then(([_, g]) => {
           const l = Array.isArray(g) ? g : Object.values(g);
           const b = window.blocked.map(n => n.trim().toLowerCase());
@@ -564,10 +564,10 @@
             const t = g.name || g.title || 'Untitled';
             const a = g.author || '';
             let u = (g.url || g.file || g.path || 'flyflix.html').replace('{HTML_URL}', '/flyflix.html');
-            const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/Consessions/covers@main');
+            const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/securlycdn/covers@main');
 
             if (u && !u.startsWith('http') && !u.startsWith('/')) {
-              u = 'https://cdn.jsdelivr.net/gh/Consessions/html@main/' + u;
+              u = 'https://cdn.jsdelivr.net/gh/securlycdn/html@main/' + u;
             }
 
             const d = document.createElement('div');
@@ -593,7 +593,7 @@
 
         Promise.all([
           fetchPopularity(),
-          fetch('https://cdn.jsdelivr.net/gh/Consessions/assets/apps.json')
+          fetch('https://cdn.jsdelivr.net/gh/securlycdn/assets/apps.json')
             .then(r => r.ok ? r.json() : []).catch(() => [])
         ]).then(([_, fetchedApps]) => {
           const l = Array.isArray(fetchedApps) ? fetchedApps : Object.values(fetchedApps);
