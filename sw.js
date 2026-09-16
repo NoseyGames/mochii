@@ -1,4 +1,5 @@
 importScripts('/ultrav/uv.bundle.js');
+importScripts('/ultrav/uv.handler.js');
 importScripts('/ultrav/uv.config.js');
 
 const uv = new UVServiceWorker();
