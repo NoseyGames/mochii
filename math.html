@@ -237,11 +237,18 @@
           connection = new BareMux.BareMuxConnection(BAREMUX_WORKER_PATH);
         }
 
-        // Pass direct path string so BareMux worker can load it automatically
-        await connection.setTransport(
-          "https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@2.0.0/dist/index.mjs",
-          [{ wisp: endpoint.url }]
-        );
+        // Try setting epoxy transport via standard BareMux ES Module resolution
+        try {
+          await connection.setTransport(
+            "https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@2.0.0/dist/index.mjs",
+            [{ wisp: endpoint.url }]
+          );
+        } catch (e) {
+          // Fallback to local BareMux bareclient path if module bundle structure mismatch occurs
+          await connection.setTransport("/bearmux/transport.js", [
+            { wisp: endpoint.url }
+          ]);
+        }
 
         retryCount = 0;
 
