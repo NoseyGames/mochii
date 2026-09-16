@@ -171,7 +171,7 @@
   <!-- Script Implementation -->
   <script>
     /* =========================================================
-       Core Proxy and Multi-Server Wisp Network Initializer
+       1. Core Proxy and Multi-Server Wisp Network Initializer
        ========================================================= */
 
     const wispEndpoints = [
@@ -186,7 +186,7 @@
     ];
 
     const BAREMUX_WORKER_PATH = "/bearmux/worker.js";
-    const EPOXY_TRANSPORT_PATH = "/bearmux/epoxy/index.mjs";
+    const EPOXY_TRANSPORT_CDN = "https://cdn.jsdelivr.net/npm/@mercuryworkshop/epoxy-transport@2.0.0/dist/index.mjs";
 
     let currentEndpointIndex = 0;
     let retryCount = 0;
@@ -240,12 +240,8 @@
           connection = new BareMux.BareMuxConnection(BAREMUX_WORKER_PATH);
         }
 
-        // Dynamically import epoxy ES module and resolve transport constructor class
-        const epoxyModule = await import(EPOXY_TRANSPORT_PATH);
-        const EpoxyTransportClass = epoxyModule.EpoxyTransport || epoxyModule.default || epoxyModule;
-
-        // Pass resolved transport directly instead of raw string path
-        await connection.setTransport(EpoxyTransportClass, [{ wisp: endpoint.url }]);
+        // Send the CDN ES Module URL string directly into BareMux worker
+        await connection.setTransport(EPOXY_TRANSPORT_CDN, [{ wisp: endpoint.url }]);
 
         retryCount = 0;
 
