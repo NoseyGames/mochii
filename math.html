@@ -169,178 +169,165 @@
   </div>
 
   <!-- Script Implementation -->
-<script>
-  /* =========================================================
-     Core Proxy and Multi-Server Wisp Network Initializer
-     ========================================================= */
+  <script>
+    /* =========================================================
+       Core Proxy and Multi-Server Wisp Network Initializer
+       ========================================================= */
 
-  const wispEndpoints = [
-    {
-      name: "Mercury Workshop",
-      url: "wss://wisp.mercuryworkshop.com/"
-    },
-    {
-      name: "Titanium Network",
-      url: "wss://wisp.rhw.one/"
-    },
-    {
-      name: "Backup Server 3",
-      url: "wss://anura.mercuryworkshop.com/"
-    },
-    {
-      name: "Backup Server 4",
-      url: "wss://wisp.luckycolt.net/"
-    },
-    {
-      name: "Backup Server 5",
-      url: "wss://wisp.petridish.pw/"
-    }
-  ];
+    const wispEndpoints = [
+      {
+        name: "Mercury Workshop",
+        url: "wss://wisp.mercuryworkshop.com/"
+      },
+      {
+        name: "Titanium Network",
+        url: "wss://wisp.rhw.one/"
+      },
+      {
+        name: "Backup Server 3",
+        url: "wss://anura.mercuryworkshop.com/"
+      },
+      {
+        name: "Backup Server 4",
+        url: "wss://wisp.luckycolt.net/"
+      },
+      {
+        name: "Backup Server 5",
+        url: "wss://wisp.petridish.pw/"
+      }
+    ];
 
-  const BAREMUX_WORKER_PATH = "/bearmux/worker.js";
-  const EPOXY_TRANSPORT_PATH = "/bearmux/epoxy/index.mjs";
+    const BAREMUX_WORKER_PATH = "/bearmux/worker.js";
+    const EPOXY_TRANSPORT_PATH = "/bearmux/epoxy/index.mjs";
 
-  let currentEndpointIndex = 0;
-  let retryCount = 0;
-  let connection = null;
+    let currentEndpointIndex = 0;
+    let retryCount = 0;
+    let connection = null;
 
-  const MAX_RETRIES_PER_SERVER = 1;
-  const RETRY_DELAY_MS = 1000;
+    const MAX_RETRIES_PER_SERVER = 1;
+    const RETRY_DELAY_MS = 1000;
 
-  async function initializeNetwork() {
-    if (!("serviceWorker" in navigator)) {
-      updateStatus("Service Workers Unsupported", "red");
-      return false;
-    }
+    async function initializeNetwork() {
+      if (!("serviceWorker" in navigator)) {
+        updateStatus("Service Workers Unsupported", "red");
+        return false;
+      }
 
-    if (window.location.protocol === "about:") {
-      updateStatus("Invalid Page Protocol", "red");
-      return false;
-    }
+      if (window.location.protocol === "about:") {
+        updateStatus("Invalid Page Protocol", "red");
+        return false;
+      }
 
-    try {
-      await navigator.serviceWorker.register("/sw.js", {
-        scope: "/"
-      });
+      try {
+        await navigator.serviceWorker.register("/sw.js", {
+          scope: "/"
+        });
 
-      console.log("Service worker registered successfully.");
-    } catch (error) {
-      console.warn("Service worker registration failed:", error);
-      updateStatus("Service Worker Failed", "red");
-      return false;
-    }
+        console.log("Service worker registered successfully.");
+      } catch (error) {
+        console.warn("Service worker registration failed:", error);
+        updateStatus("Service Worker Failed", "red");
+        return false;
+      }
 
-    return connectWisp();
-  }
-
-  async function connectWisp() {
-    if (!window.BareMux) {
-      updateStatus("Failed: BareMux Missing", "red");
-      console.error("BareMux is not available on window.");
-      return false;
+      return connectWisp();
     }
 
-    if (currentEndpointIndex >= wispEndpoints.length) {
-      updateStatus("All Networks Offline", "red");
-      console.error("No Wisp endpoints remain.");
-      return false;
+    async function connectWisp() {
+      if (!window.BareMux) {
+        updateStatus("Failed: BareMux Missing", "red");
+        console.error("BareMux is not available on window.");
+        return false;
+      }
+
+      if (currentEndpointIndex >= wispEndpoints.length) {
+        updateStatus("All Networks Offline", "red");
+        console.error("No Wisp endpoints remain.");
+        return false;
+      }
+
+      const endpoint = wispEndpoints[currentEndpointIndex];
+
+      try {
+        connection = new BareMux.BareMuxConnection(BAREMUX_WORKER_PATH);
+
+        // Fixed setTransport signature for Epoxy transport initialization
+        await connection.setTransport(EPOXY_TRANSPORT_PATH, [{ wisp: endpoint.url }]);
+
+        retryCount = 0;
+
+        updateStatus(
+          `Transport Ready: ${endpoint.name}`,
+          "#22c55e"
+        );
+
+        console.log(
+          `Transport initialized for Wisp endpoint: ${endpoint.name}`
+        );
+
+        return true;
+      } catch (error) {
+        console.warn(
+          `Failed to initialize ${endpoint.name}:`,
+          error
+        );
+
+        handleWispFailure();
+        return false;
+      }
     }
 
-    const endpoint = wispEndpoints[currentEndpointIndex];
+    function handleWispFailure() {
+      retryCount++;
 
-    try {
-      /*
-       * The transport module must be served at this exact URL:
-       *
-       * /bearmux/epoxy/index.mjs
-       *
-       * Use setTransport(), not setManualTransport().
-       */
-      connection = new BareMux.BareMuxConnection(
-        BAREMUX_WORKER_PATH
-      );
+      if (retryCount > MAX_RETRIES_PER_SERVER) {
+        retryCount = 0;
+        currentEndpointIndex++;
+      }
 
-      await connection.setTransport(EPOXY_TRANSPORT_PATH, [
-        {
-          wisp: endpoint.url
-        }
-      ]);
+      if (currentEndpointIndex >= wispEndpoints.length) {
+        updateStatus("All Networks Offline", "red");
+        console.error("All Wisp endpoints failed.");
+        return;
+      }
 
-      retryCount = 0;
+      const nextEndpoint = wispEndpoints[currentEndpointIndex];
 
       updateStatus(
-        `Transport Ready: ${endpoint.name}`,
-        "#22c55e"
+        `Trying ${nextEndpoint.name}...`,
+        "orange"
       );
 
-      console.log(
-        `Transport initialized for Wisp endpoint: ${endpoint.name}`
-      );
-
-      return true;
-    } catch (error) {
-      console.warn(
-        `Failed to initialize ${endpoint.name}:`,
-        error
-      );
-
-      handleWispFailure();
-      return false;
-    }
-  }
-
-  function handleWispFailure() {
-    retryCount++;
-
-    if (retryCount > MAX_RETRIES_PER_SERVER) {
-      retryCount = 0;
-      currentEndpointIndex++;
+      window.setTimeout(() => {
+        connectWisp();
+      }, RETRY_DELAY_MS);
     }
 
-    if (currentEndpointIndex >= wispEndpoints.length) {
-      updateStatus("All Networks Offline", "red");
-      console.error("All Wisp endpoints failed.");
-      return;
+    function updateStatus(text, color) {
+      const statusBadge = document.getElementById("connection-status");
+
+      if (!statusBadge) {
+        return;
+      }
+
+      statusBadge.innerHTML = `
+        <span
+          class="status-indicator"
+          style="background-color: ${color};"
+        ></span>
+        <span>${escapeHtml(text)}</span>
+      `;
     }
 
-    const nextEndpoint = wispEndpoints[currentEndpointIndex];
-
-    updateStatus(
-      `Trying ${nextEndpoint.name}...`,
-      "orange"
-    );
-
-    window.setTimeout(() => {
-      connectWisp();
-    }, RETRY_DELAY_MS);
-  }
-
-  function updateStatus(text, color) {
-    const statusBadge = document.getElementById(
-      "connection-status"
-    );
-
-    if (!statusBadge) {
-      return;
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
     }
 
-    statusBadge.innerHTML = `
-      <span
-        class="status-indicator"
-        style="background-color: ${color};"
-      ></span>
-      <span>${escapeHtml(text)}</span>
-    `;
-  }
-
-  function escapeHtml(value) {
-    return String(value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
     /* =========================================================
        2. Ad Controller 
        ========================================================= */
@@ -482,7 +469,7 @@
 
       if (typeof __uv$config !== 'undefined') {
         const encodedUrl = __uv$config.prefix + __uv$config.encodeUrl(targetUrl);
-        openViewer("Search", "Web", encodedUrl, true); // true indicates proxied URL
+        openViewer("Search", "Web", encodedUrl, true);
       } else {
         alert("Ultraviolet is not configured correctly.");
       }
@@ -581,7 +568,7 @@
 
             const d = document.createElement('div');
             d.className = 'game-item';
-            d.onclick = () => openViewer(t, a, u, false); // false means direct fetch and execution
+            d.onclick = () => openViewer(t, a, u, false);
             d.innerHTML = `
               <img class="game-cover" src="${v}" alt="${t}" loading="lazy" onerror="this.style.display='none'">
               <div class="game-info">
