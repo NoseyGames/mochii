@@ -301,6 +301,69 @@ test('an explicit forced retry can recover before cooldown expires', async () =>
   app.manager.dispose();
 });
 
+test('explicit retry immediately replaces a dead active endpoint without waiting for the monitor', async () => {
+  const attempts = [];
+  let primaryDown = false;
+  const app = network({ probe: async url => {
+    attempts.push(url);
+    if (primaryDown && url === primary) throw new Error('down');
+  } });
+  await app.manager.connect();
+  primaryDown = true;
+  assert.equal(await app.manager.connect({ force: true }), backup);
+  assert.deepEqual(attempts, [primary, primary, backup]);
+  assert.deepEqual(app.activated, [primary, backup]);
+  assert.equal(app.manager.state.status, 'connected');
+  assert.equal(app.time.count, 1);
+  app.manager.dispose();
+});
+
+test('explicit retry rebuilds a healthy endpoint transport and simultaneous retries coalesce', async () => {
+  const gate = deferred();
+  const activated = [];
+  const app = network({ activate: async url => {
+    activated.push(url);
+    if (activated.length === 2) await gate.promise;
+  } });
+  await app.manager.connect();
+  const retry = app.manager.connect({ force: true });
+  const repeatedRetry = app.manager.connect({ force: true });
+  assert.equal(retry, repeatedRetry);
+  await flush();
+  assert.deepEqual(app.probed, [primary, primary]);
+  assert.deepEqual(activated, [primary, primary]);
+  assert.equal(app.manager.activeEndpoint, null);
+  gate.resolve();
+  assert.equal(await retry, primary);
+  assert.equal(app.time.count, 1);
+  app.manager.dispose();
+});
+
+test('explicit retry queued during a health check still reconnects after its first failure', async () => {
+  const gate = deferred();
+  const attempts = [];
+  let primaryDown = false;
+  const app = network({ probe: async url => {
+    attempts.push(url);
+    if (attempts.length === 2) return gate.promise;
+    if (primaryDown && url === primary) throw new Error('down');
+  } });
+  await app.manager.connect();
+  const monitor = app.manager.reportFailure();
+  await flush();
+  const retry = app.manager.connect({ force: true });
+  const repeatedRetry = app.manager.connect({ force: true });
+  primaryDown = true;
+  gate.reject(new Error('down'));
+  await monitor;
+  assert.equal(await retry, backup);
+  assert.equal(await repeatedRetry, backup);
+  assert.deepEqual(attempts, [primary, primary, primary, backup]);
+  assert.deepEqual(app.activated, [primary, backup]);
+  assert.equal(app.time.count, 1);
+  app.manager.dispose();
+});
+
 test('offline pauses probes and online resumes after a connection failure', async () => {
   const app = network({ online: false });
   assert.equal(app.manager.state.status, 'offline');

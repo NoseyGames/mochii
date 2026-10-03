@@ -10,6 +10,7 @@
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "start": "node server.mjs",
+    "build": "node scripts/build-static.mjs",
     "check": "node scripts/check-syntax.mjs",
     "test": "node --test test/*.test.mjs"
   },

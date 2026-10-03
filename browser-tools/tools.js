@@ -459,10 +459,12 @@ $('browser-address').addEventListener('submit', event => {
 });
 $('browser-reload').addEventListener('click', async () => {
   if (!currentUrl) return;
-  if (runtime) {
-    try { await runtime.reload(); }
-    catch (error) { addEntry('warn', [error.message]); }
-  } else frame.src = frame.src;
+  try {
+    if (runtime) await runtime.reload();
+    // srcdoc overrides src for catalog games and error placeholders. Let the
+    // shell retry its original navigation instead of reassigning an inert src.
+    else await window.retryViewerNavigation?.();
+  } catch (error) { addEntry('warn', [error.message]); }
 });
 
 const resize = $('tools-resize');

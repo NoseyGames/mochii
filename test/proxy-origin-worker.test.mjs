@@ -12,6 +12,7 @@ function worker(origin, configuredOrigin) {
   let configFails = false;
   let configResponse;
   const context = vm.createContext({
+    MonkehUseBackendConfig: true,
     Response, TextEncoder, TextDecoder, AbortSignal,
     importScripts(path) {
       if (path === '/browser-tools/config.js') vm.runInContext(configSource, context);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import '../browser-tools/config.js';
 
-const { fetchConfig } = globalThis.MonkehConfig;
+const { fetchBackendConfig: fetchConfig } = globalThis.MonkehConfig;
 const json = (body, type = 'application/json') => new Response(body, { headers: { 'Content-Type': type } });
 
 test('configuration requests are same-origin, uncached, bounded by a deadline and explicitly ask for JSON', async () => {

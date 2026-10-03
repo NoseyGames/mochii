@@ -1,0 +1,11 @@
+{
+  "name": "monkeh",
+  "compatibility_date": "2026-10-03",
+  "build": {
+    "command": "node scripts/build-static.mjs"
+  },
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}

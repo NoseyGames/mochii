@@ -54,6 +54,7 @@ function createPage({ protocol = 'http:', storageUnavailable = false } = {}) {
     removeEventListener(type) { serviceWorkerListeners.delete(type); }
   };
   const page = {
+    MonkehUseBackendConfig: true,
     console: { log() {}, warn() {}, error() {} },
     URL, TextEncoder, TextDecoder, AbortSignal, AbortController, setTimeout, clearTimeout,
     requestAnimationFrame() {},
@@ -154,13 +155,14 @@ test('HTML from a missing API route shows a deployment error, blocks browsing, a
   await page.openViewer('Search', 'Web', 'https://example.com/', true);
   assert.equal(element('viewer-frame').src, 'about:blank');
   assert.match(element('viewer-frame').srcdoc, /proxy backend is not connected/);
-  assert.match(element('connection-status').innerHTML, /Proxy backend unavailable/);
+  assert.match(element('connection-status').innerHTML, /Proxy unavailable/);
   assert.match(element('network-detail').textContent, /api\/config/);
   assert.doesNotMatch(element('viewer-frame').srcdoc, /Unexpected token|App fallback/);
   assert.equal(page.MonkehProxyOrigin, undefined);
   page.fetch = workingFetch;
-  await page.openViewer('Search', 'Web', 'https://example.com/', true);
+  await page.retryViewerNavigation();
   assert.equal(element('viewer-frame').src, 'http://localhost:3001/proxy-host.html#https%3A%2F%2Fexample.com%2F');
+  assert.equal(element('viewer-frame').srcdoc, '');
 });
 
 test('closing and reopening the viewer prevents an old remote load from replacing a local app', async () => {
@@ -276,4 +278,31 @@ test('external catalog HTML runs in an opaque sandbox and a local app clears tha
   assert.doesNotMatch(frame.sandbox, /allow-same-origin|allow-top-navigation/);
   await page.openViewer('Auk', '', '/apps/auk.html');
   assert.equal(frame.sandbox, '');
+});
+
+test('retry reloads a catalog srcdoc from its original URL and retains its isolation', async () => {
+  const { page, element } = createPage();
+  const requests = [];
+  page.fetch = async url => {
+    requests.push(url);
+    return { ok: true, url, text: async () => `<h1>Game load ${requests.length}</h1>` };
+  };
+  page.DOMParser = class {
+    parseFromString(source) {
+      return { querySelector: () => null, createElement: () => ({ getAttribute: () => null }),
+        head: { prepend() {} }, documentElement: { outerHTML: source } };
+    }
+  };
+  await page.openViewer('Game', 'Author', 'https://cdn.example/game.html');
+  assert.match(element('viewer-frame').srcdoc, /Game load 1/);
+  await page.retryViewerNavigation();
+  assert.deepEqual(requests, ['https://cdn.example/game.html', 'https://cdn.example/game.html']);
+  assert.match(element('viewer-frame').srcdoc, /Game load 2/);
+  assert.doesNotMatch(element('viewer-frame').sandbox, /allow-same-origin|allow-top-navigation/);
+  assert.equal(element('viewer-title').textContent, 'Game');
+  assert.equal(element('viewer-author').textContent, 'by Author');
+  page.closeViewer();
+  await page.retryViewerNavigation();
+  assert.equal(requests.length, 2, 'closing clears the saved retry target');
+  assert.equal(element('zone-viewer').classList.contains('active'), false);
 });

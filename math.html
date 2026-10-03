@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="/browser-tools/tools.css" />
   <script src="/browser-tools/config.js"></script>
+  <script src="/browser-tools/shell-entry.js"></script>
   <script type="module" src="/browser-tools/tools.js"></script>
 
 </head>
@@ -313,7 +314,7 @@
         return true;
       })().catch(error => {
         networkErrorMessage = error.message || 'Browser configuration failed. Try again.';
-        updateStatus('Proxy backend unavailable', '#ef4444');
+        updateStatus('Proxy unavailable', '#ef4444');
         document.getElementById('network-detail').textContent = networkErrorMessage;
         return false;
       }).finally(() => { networkPromise = null; });
@@ -752,6 +753,7 @@
 
     let viewerNavigation = 0;
     let viewerRequest = null;
+    let viewerTarget = null;
 
     function showViewerMessage(message) {
       const frame = document.getElementById('viewer-frame');
@@ -760,6 +762,7 @@
     }
 
     async function openViewer(title, author, url, isProxied = false) {
+      viewerTarget = { title, author, url, isProxied };
       viewerIsProxied = isProxied;
       lastEndpoint = null;
       if (!isProxied && window.MonkehProxyOrigin) updateStatus('Isolated browser ready', '#22c55e');
@@ -831,7 +834,14 @@
       }
     }
 
+    function retryViewerNavigation() {
+      if (!viewerTarget) return;
+      const { title, author, url, isProxied } = viewerTarget;
+      return openViewer(title, author, url, isProxied);
+    }
+
     function closeViewer() {
+      viewerTarget = null;
       viewerIsProxied = false;
       lastEndpoint = null;
       if (window.MonkehProxyOrigin) updateStatus('Isolated browser ready', '#22c55e');

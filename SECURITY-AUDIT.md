@@ -1,8 +1,17 @@
 # Security and reliability review
 
-Reviewed 2026-10-02 (local time). This is a source review with targeted automated
-and browser checks, not a certification or a claim that every possible bug was
-eliminated. No GitHub upload or public deployment was performed.
+Reviewed 2026-10-02, updated for static hosting 2026-10-03. This is a source review
+with targeted automated and browser checks, not a certification or a claim that
+every possible bug was eliminated.
+
+Static deployments now use a code-defined external Wisp list and two existing
+origins, without API requests. The limited browser bridge and manual userscript
+execution remain. Both hosts serve a curated static build; shell entry pages on
+the proxy host redirect to the app. The Node-specific authentication, private
+destination filtering and resource limits below apply only to optional Node
+hosting, not third-party Wisp servers. Public server availability and destination
+policies remain outside this project's control. Only one working public endpoint
+is currently included; support for ten backups is not ten deployed servers.
 
 ## Findings addressed
 

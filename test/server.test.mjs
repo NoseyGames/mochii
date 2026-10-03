@@ -50,7 +50,7 @@ test('health reports the same-origin Wisp endpoint', async () => {
 });
 
 test('the frontend config reader accepts the real backend response', async () => {
-  const config = await globalThis.MonkehConfig.fetchConfig({ fetch: (url, options) => get(url, options) });
+  const config = await globalThis.MonkehConfig.fetchBackendConfig({ fetch: (url, options) => get(url, options) });
   assert.equal(typeof config.proxyOrigin, 'string');
   assert(config.wispEndpoints.length > 0);
 });

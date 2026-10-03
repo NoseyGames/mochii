@@ -52,6 +52,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
     async reportFailure() { this.failures++; }, async setOnline() {}, dispose() { this.disposed++; },
   };
   const sandbox = {
+    MonkehUseBackendConfig: true,
     window: contextWindow, document: doc, location, isSecureContext: true,
     navigator: { onLine: true, serviceWorker: { async register() {}, ready: Promise.resolve(), controller: {}, addEventListener() {}, removeEventListener() {} } },
     URL, AbortSignal, AbortController, TextEncoder, TextDecoder, Map, WeakMap, Set, decodeURIComponent, encodeURIComponent,

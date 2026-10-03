@@ -1,0 +1,4 @@
+# ws works without building its optional native acceleration package.
+# Keep pnpm's strict default for every other unreviewed dependency script.
+allowBuilds:
+  bufferutil: false

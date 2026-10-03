@@ -225,6 +225,22 @@ test('reload uses the proxy RPC without accessing a cross-origin Location object
   assert.equal(app.sessions[0].reloaded, true);
 });
 
+test('reload delegates srcdoc games and error placeholders to the shell retry navigation', async () => {
+  const app = harness();
+  let retries = 0;
+  app.window.retryViewerNavigation = async () => { retries++; };
+  app.window.MonkehTools.prepareNavigation('https://cdn.example/game.html');
+  const frame = app.get('viewer-frame');
+  frame.srcdoc = '<h1>Game or error placeholder</h1>';
+  Object.defineProperty(frame, 'src', {
+    get: () => 'about:blank',
+    set() { throw new Error('Reassigning src cannot reload a srcdoc document'); },
+  });
+  await app.get('browser-reload').fire('click');
+  assert.equal(retries, 1);
+  assert.doesNotMatch(app.text('console-output'), /Reassigning src/);
+});
+
 test('the network retry action reaches the isolated host through the narrow reconnect method', async () => {
   const app = harness();
   app.window.MonkehTools.prepareNavigation('https://example.com/');

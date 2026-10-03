@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
-import { realpath, stat } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { baremuxPath } from '@mercuryworkshop/bare-mux/node';
@@ -135,6 +135,11 @@ async function serve(req, res, config, proxyMode) {
     if (pathname === '/sw.js') headers['Service-Worker-Allowed'] = '/';
     res.writeHead(200, headers);
     if (req.method === 'HEAD') res.end();
+    else if (pathname === '/browser-tools/config.js') {
+      // Optional Node hosting opts into its API. The checked-in file and static
+      // build always use the public server list without requesting /api/config.
+      res.end('globalThis.MonkehUseBackendConfig = true;\n' + await readFile(filename, 'utf8'));
+    }
     else createReadStream(filename).on('error', () => res.destroy()).pipe(res);
   } catch (error) {
     if (error.code === 'ENOENT' || error.code === 'ENOTDIR') reply(req, res, 404, 'Not found');

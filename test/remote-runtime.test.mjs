@@ -115,6 +115,14 @@ test('console events have a per-second cap and bounded text instead of live obje
   assert.equal(app.events.logs[0].args[1], '');
 });
 
+test('console.table output reaches the console as bounded log text', async t => {
+  const app = harness(t);
+  await app.send('console', { level: 'table', args: ['[{name: Example, count: 3}]'], time: Date.now() });
+  assert.equal(app.events.logs.length, 1);
+  assert.equal(app.events.logs[0].level, 'log');
+  assert.deepEqual(app.events.logs[0].args, ['[{name: Example, count: 3}]']);
+});
+
 test('a malicious host cannot flood shell repaint events with tree or selection updates', async t => {
   const app = harness(t);
   for (let i = 0; i < 8; i++) await app.send('page', { url: 'https://example.com/', tree: tree() });

@@ -120,7 +120,8 @@ export function probeWisp(url, {
  * Serializes transport replacement and health checks for an administrator-owned
  * primary plus up to ten backups. It never navigates or reloads a page.
  *
- * connect({ force: true }) bypasses cooldown for an explicit Retry action.
+ * connect({ force: true }) probes and replaces the active transport, and bypasses
+ * cooldown for an explicit Retry action.
  * reportFailure() checks the proxy itself: a broken destination page is not
  * sufficient reason to replace a healthy proxy.
  */
@@ -255,9 +256,20 @@ export function createProxyNetwork({
   function connect({ force = false } = {}) {
     if (disposed) return Promise.reject(aborted());
     if (!online) return Promise.reject(new Error('Your device is offline.'));
+    // Preserve an explicit retry while a monitor is still checking the active
+    // endpoint. Its first failed probe alone must not swallow the Retry action.
+    if (force && active && pending && !controller?.signal.aborted) {
+      return pending.catch(() => {}).then(() => connect({ force: true }));
+    }
     const inFlight = existingOrCancelled({ force }, connect);
     if (inFlight) return inFlight;
-    if (active) return Promise.resolve(active);
+    if (active) {
+      if (!force) return Promise.resolve(active);
+      // Rebuild a broken transport even if a fresh handshake is healthy. Keep
+      // the current endpoint first, then immediately try backups if it fails.
+      nextIndex = urls.indexOf(active);
+      active = null;
+    }
     return run(signal => chooseEndpoint(signal, force));
   }
   function reportFailure() {

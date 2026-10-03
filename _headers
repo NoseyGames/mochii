@@ -1,0 +1,30 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+
+/browser-tools/config.js
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache
+
+# App entrypoints may be embedded only by their own origin. Proxy host and
+# provider frames intentionally remain embeddable by the separate shell.
+/
+  X-Frame-Options: SAMEORIGIN
+/index.html
+  X-Frame-Options: SAMEORIGIN
+/math
+  X-Frame-Options: SAMEORIGIN
+/math.html
+  X-Frame-Options: SAMEORIGIN
+/history
+  X-Frame-Options: SAMEORIGIN
+/history.html
+  X-Frame-Options: SAMEORIGIN
+/flyflix
+  X-Frame-Options: SAMEORIGIN
+/flyflix.html
+  X-Frame-Options: SAMEORIGIN
+/apps/*
+  X-Frame-Options: SAMEORIGIN

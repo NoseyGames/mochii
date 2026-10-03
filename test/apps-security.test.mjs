@@ -22,6 +22,7 @@ function contextFor(source, overrides = {}) {
     };
   }
   const page = {
+    MonkehUseBackendConfig: true,
     console, performance, URL, Blob, TextEncoder, TextDecoder, Uint8Array, AbortController, AbortSignal,
     setTimeout, clearTimeout, setInterval, clearInterval,
     document: { getElementById: element, querySelector: element, createElement: element, addEventListener() {} },

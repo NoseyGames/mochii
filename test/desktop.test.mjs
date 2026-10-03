@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { desktopProfileUrl, validateDesktopGateway, openDesktopInMonkeh, mountDesktopLauncher } from '../apps/desktop.js';
+globalThis.MonkehUseBackendConfig = true;
 
 function harness(config = {}) {
   const nodes = new Map();

@@ -157,8 +157,9 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
         case 'console': {
           const now = Date.now();
           if (now - consoleWindow >= 1000) { consoleWindow = now; consoleCount = 0; }
-          if (++consoleCount > 100 || !['log', 'info', 'warn', 'error', 'debug', 'clear'].includes(event.level)) return;
-          callbacks.onConsole?.({ level: event.level, args: Array.isArray(event.args) ? event.args.slice(0, 40).map(item => text(item)) : [],
+          const level = event.level === 'table' ? 'log' : event.level;
+          if (++consoleCount > 100 || !['log', 'info', 'warn', 'error', 'debug', 'clear'].includes(level)) return;
+          callbacks.onConsole?.({ level, args: Array.isArray(event.args) ? event.args.slice(0, 40).map(item => text(item)) : [],
             time: Number.isFinite(event.time) && Math.abs(event.time - now) < 86400000 * 365 ? event.time : now });
           break;
         }

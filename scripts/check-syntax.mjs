@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { Script } from 'node:vm';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const ignoredDirectories = new Set(['node_modules', '.pnpm-store', '.git', '.codex', '.agents', '.cache', '.shipping', 'test-results', 'playwright-report']);
+const ignoredDirectories = new Set(['node_modules', '.pnpm-store', '.git', '.codex', '.agents', '.cache', '.shipping', '.wrangler', 'dist', 'test-results', 'playwright-report']);
 const failures = [];
 let checked = 0;
 
