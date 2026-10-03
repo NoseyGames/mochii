@@ -23,6 +23,7 @@
     <a href="https://github.com/Consessions/flyflix" target="_blank" rel="noopener noreferrer">Provider source</a>
   </header>
   <iframe id="provider" title="Isolated Flyflix provider" sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock" allow="fullscreen" referrerpolicy="no-referrer"></iframe>
+  <script src="/browser-tools/config.js"></script>
   <script>
     const frame = document.getElementById('provider');
     const status = document.getElementById('status');
@@ -41,11 +42,8 @@
       const current = ++generation;
       status.textContent = 'Opening provider content in an isolated view…';
       try {
-        const response = await fetch('/api/config', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
-        if (!response.ok) throw new Error('The provider configuration could not be loaded.');
-        const raw = await response.text();
-        if (raw.length > 65536) throw new Error('The provider configuration is too large.');
-        const origin = validateProviderOrigin(JSON.parse(raw).proxyOrigin);
+        const config = await globalThis.MonkehConfig.fetchConfig();
+        const origin = validateProviderOrigin(config.proxyOrigin);
         if (current !== generation) return;
         providerOrigin = origin;
         frame.src = `${origin}/flyflix-provider.html?run=${current}`;

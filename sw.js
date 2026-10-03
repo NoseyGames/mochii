@@ -8,15 +8,14 @@
 importScripts("/ultrav/uv.bundle.js");
 importScripts("/ultrav/uv.config.js");
 importScripts(__uv$config.sw || "/ultrav/uv.sw.js");
+importScripts('/browser-tools/config.js');
 
 const uv = new UVServiceWorker();
 let originCheck;
 
 function isProxyOrigin() {
 	if (!originCheck) {
-		originCheck = fetch('/api/config', { cache: 'no-store' }).then(async response => {
-			if (!response.ok) throw new Error('Proxy configuration unavailable');
-			const config = await response.json();
+		originCheck = globalThis.MonkehConfig.fetchConfig().then(config => {
 			return config.proxyOrigin === self.location.origin;
 		}).catch(() => { originCheck = null; return false; });
 	}

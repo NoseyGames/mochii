@@ -1,5 +1,6 @@
 import { createProxyNetwork } from './proxy-network.js';
 import { attachRuntime, formatValue } from './runtime.js';
+import './config.js';
 
 // This entire document is on the expendable proxy origin. It never receives
 // shell storage, credentials, or saved scripts unless the user runs a draft.
@@ -205,10 +206,10 @@ async function start() {
   starting = (async () => {
     if (!isSecureContext || !navigator.serviceWorker || !window.SharedWorker) throw new Error('Proxy browsing requires HTTPS or localhost and a browser with SharedWorker support.');
     if (!config) {
-      const response = await fetch('/api/config', { signal: AbortSignal.timeout(10000), cache: 'no-store' });
-      if (!response.ok) throw new Error(`Proxy configuration returned HTTP ${response.status}.`);
-      config = await response.json();
-      if (!Array.isArray(config.shellOrigins) || config.proxyOrigin !== location.origin) throw new Error('The isolated proxy origin is misconfigured.');
+      const loadedConfig = await globalThis.MonkehConfig.fetchConfig();
+      if (!Array.isArray(loadedConfig.shellOrigins) || loadedConfig.proxyOrigin !== location.origin ||
+          !Array.isArray(loadedConfig.wispEndpoints) || loadedConfig.wispEndpoints.length < 1 || loadedConfig.wispEndpoints.length > 11) throw new Error('The isolated proxy origin is misconfigured.');
+      config = loadedConfig;
       // Ask the shell to retry its init message now that allowed origins loaded.
       for (const origin of config.shellOrigins) window.parent.postMessage({ type: 'monkeh-proxy:ready' }, origin);
     }

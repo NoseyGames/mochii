@@ -21,6 +21,7 @@
   <!-- Stylesheet -->
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="/browser-tools/tools.css" />
+  <script src="/browser-tools/config.js"></script>
   <script type="module" src="/browser-tools/tools.js"></script>
 
 </head>
@@ -285,9 +286,7 @@
       networkErrorMessage = '';
       updateStatus('Checking browser configuration…', '#f59e0b');
       networkPromise = (async () => {
-        const response = await fetch('/api/config', { signal: AbortSignal.timeout(10000), cache: 'no-store' });
-        if (!response.ok) throw new Error(`Proxy configuration returned HTTP ${response.status}.`);
-        const config = JSON.parse(await readResponseText(response, 65536));
+        const config = await globalThis.MonkehConfig.fetchConfig();
         if (!Array.isArray(config.wispEndpoints) || !config.wispEndpoints.length || config.wispEndpoints.length > 11) throw new Error('Invalid proxy server configuration.');
         const origin = new URL(config.proxyOrigin);
         if (origin.origin !== config.proxyOrigin || origin.origin === location.origin || origin.username || origin.password || !['http:', 'https:'].includes(origin.protocol)) throw new Error('The proxy must use a separate browser origin.');
@@ -314,7 +313,8 @@
         return true;
       })().catch(error => {
         networkErrorMessage = error.message || 'Browser configuration failed. Try again.';
-        updateStatus(networkErrorMessage, '#ef4444');
+        updateStatus('Proxy backend unavailable', '#ef4444');
+        document.getElementById('network-detail').textContent = networkErrorMessage;
         return false;
       }).finally(() => { networkPromise = null; });
       return networkPromise;

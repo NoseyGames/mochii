@@ -5,6 +5,8 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const html = readFileSync(new URL('../math.html', import.meta.url), 'utf8');
+const configSource = readFileSync(new URL('../browser-tools/config.js', import.meta.url), 'utf8');
+const configResponse = config => new Response(JSON.stringify(config), { headers: { 'Content-Type': 'application/json' } });
 const inlineScripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
   .filter(([, attributes]) => !/\bsrc\s*=/i.test(attributes))
   .map(([, , source]) => source);
@@ -76,7 +78,7 @@ function createPage({ protocol = 'http:', storageUnavailable = false } = {}) {
     innerWidth: 100,
     innerHeight: 100,
     addEventListener() {},
-    async fetch() { return { ok: true, text: async () => JSON.stringify({ proxyOrigin: `${protocol}//localhost:3001`, wispEndpoints: [{ name: 'Primary', url: '/wisp/' }] }) }; },
+    async fetch() { return configResponse({ proxyOrigin: `${protocol}//localhost:3001`, wispEndpoints: [{ name: 'Primary', url: '/wisp/' }] }); },
     createMonkehNetwork({ endpoints, activate, onStatus }) {
       let active = null;
       return {
@@ -103,6 +105,7 @@ function createPage({ protocol = 'http:', storageUnavailable = false } = {}) {
   };
   page.window = page;
   vm.createContext(page);
+  vm.runInContext(configSource, page, { filename: 'browser-tools/config.js' });
   for (const source of inlineScripts) vm.runInContext(source, page, { filename: 'math.html' });
 
   return {
@@ -132,16 +135,32 @@ test('search waits for isolated origin configuration and then navigates the remo
   const navigation = page.openViewer('Search', 'Web', 'https://example.com/', true);
   await nextTurn();
   assert.equal(element('viewer-frame').src, 'about:blank');
-  config.resolve({ ok: true, text: async () => JSON.stringify({ proxyOrigin: 'https://proxy.example.org', wispEndpoints: [{ name: 'Primary', url: '/wisp/' }] }) });
+  config.resolve(configResponse({ proxyOrigin: 'https://proxy.example.org', wispEndpoints: [{ name: 'Primary', url: '/wisp/' }] }));
   await navigation;
   assert.equal(element('viewer-frame').src, 'https://proxy.example.org/proxy-host.html#https%3A%2F%2Fexample.com%2F');
 });
 
 test('shell refuses a proxy configured on its own origin', async () => {
   const { page } = createPage();
-  page.fetch = async () => ({ ok: true, text: async () => JSON.stringify({ proxyOrigin: 'http://localhost:3000', wispEndpoints: [{ url: '/wisp/' }] }) });
+  page.fetch = async () => configResponse({ proxyOrigin: 'http://localhost:3000', wispEndpoints: [{ url: '/wisp/' }] });
   assert.equal(await page.initializeNetwork(), false);
   assert.equal(page.MonkehProxyOrigin, undefined);
+});
+
+test('HTML from a missing API route shows a deployment error, blocks browsing, and can recover', async () => {
+  const { page, element } = createPage();
+  const workingFetch = page.fetch;
+  page.fetch = async () => new Response('<!DOCTYPE html><html>App fallback</html>', { headers: { 'Content-Type': 'text/html' } });
+  await page.openViewer('Search', 'Web', 'https://example.com/', true);
+  assert.equal(element('viewer-frame').src, 'about:blank');
+  assert.match(element('viewer-frame').srcdoc, /proxy backend is not connected/);
+  assert.match(element('connection-status').innerHTML, /Proxy backend unavailable/);
+  assert.match(element('network-detail').textContent, /api\/config/);
+  assert.doesNotMatch(element('viewer-frame').srcdoc, /Unexpected token|App fallback/);
+  assert.equal(page.MonkehProxyOrigin, undefined);
+  page.fetch = workingFetch;
+  await page.openViewer('Search', 'Web', 'https://example.com/', true);
+  assert.equal(element('viewer-frame').src, 'http://localhost:3001/proxy-host.html#https%3A%2F%2Fexample.com%2F');
 });
 
 test('closing and reopening the viewer prevents an old remote load from replacing a local app', async () => {

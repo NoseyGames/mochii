@@ -153,6 +153,24 @@ GitHub Pages cannot run this Node/WebSocket backend. GitHub stores the code; a
 working deployment needs both origins and the Node process. See
 [SECURITY-AUDIT.md](SECURITY-AUDIT.md) for scope, verification and remaining limits.
 
+### If the proxy reports HTML instead of JSON
+
+`Unexpected token '<', "<!DOCTYPE ..." is not valid JSON` means an API request
+received an HTML page. A static host's homepage fallback or sign-in redirect can
+return HTML even with HTTP 200. The app now detects this and reports the missing
+backend route instead of displaying a JSON parser exception.
+
+Check `/api/config` on both your app origin and proxy origin. Each must return
+HTTP 200 with `Content-Type: application/json` and the configured `proxyOrigin`,
+`shellOrigins`, and `wispEndpoints`. A homepage is not a successful API response.
+Start the Node server and route the app origin to `PORT` and the proxy origin to
+`PROXY_PORT`, including WebSocket upgrades. Do not rewrite `/api/*` to
+`index.html`, point the proxy at the app origin, or replace the API with a static
+JSON file: configuration alone cannot provide the `/wisp/` transport.
+
+After correcting the routes, use **Retry** or reload the page. Failed requests
+are not cached, and invalid configuration cannot initialize proxy browsing.
+
 ## Third-party assets
 
 Ultraviolet and legacy transport bundles came with this repository. The server

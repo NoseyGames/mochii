@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import { request } from 'node:http';
 import WebSocket from 'ws';
 import { createAppServer } from '../server.mjs';
+import '../browser-tools/config.js';
 
 let server;
 let origin;
@@ -48,6 +49,12 @@ test('health reports the same-origin Wisp endpoint', async () => {
   assert.deepEqual(await response.json(), { status: 'ok', wispPath: '/wisp/' });
 });
 
+test('the frontend config reader accepts the real backend response', async () => {
+  const config = await globalThis.MonkehConfig.fetchConfig({ fetch: (url, options) => get(url, options) });
+  assert.equal(typeof config.proxyOrigin, 'string');
+  assert(config.wispEndpoints.length > 0);
+});
+
 test('public pages and proxy dependencies are served with browser-usable types', async t => {
   const assets = [
     ['/', /text\/html/i],
@@ -60,6 +67,7 @@ test('public pages and proxy dependencies are served with browser-usable types',
     ['/style.css', /text\/css/i],
     ['/browser-tools/tools.css', /text\/css/i],
     ['/browser-tools/tools.js', /(?:text|application)\/javascript/i],
+    ['/browser-tools/config.js', /(?:text|application)\/javascript/i],
     ['/browser-tools/runtime.js', /(?:text|application)\/javascript/i],
     ['/browser-tools/userscripts.js', /(?:text|application)\/javascript/i],
     ['/sw.js', /(?:text|application)\/javascript/i],

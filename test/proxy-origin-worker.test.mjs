@@ -4,14 +4,18 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const source = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+const configSource = readFileSync(new URL('../browser-tools/config.js', import.meta.url), 'utf8');
 
 function worker(origin, configuredOrigin) {
   const events = new Map();
   let proxyFetches = 0;
   let configFails = false;
+  let configResponse;
   const context = vm.createContext({
-    Response,
-    importScripts() {},
+    Response, TextEncoder, TextDecoder, AbortSignal,
+    importScripts(path) {
+      if (path === '/browser-tools/config.js') vm.runInContext(configSource, context);
+    },
     __uv$config: {},
     UVServiceWorker: class {
       route(event) { return event.request.url.includes('/service/'); }
@@ -19,13 +23,14 @@ function worker(origin, configuredOrigin) {
     },
     fetch: async () => {
       if (configFails) throw new Error('Network unavailable');
-      return new Response(JSON.stringify({ proxyOrigin: configuredOrigin }));
+      return configResponse || new Response(JSON.stringify({ proxyOrigin: configuredOrigin }), { headers: { 'Content-Type': 'application/json' } });
     },
     self: { location: { origin }, addEventListener(name, listener) { events.set(name, listener); } }
   });
   vm.runInContext(source, context);
   return {
     setFail(value) { configFails = value; },
+    setConfigResponse(response) { configResponse = response; },
     get proxyFetches() { return proxyFetches; },
     request(url) {
       let response;
@@ -56,4 +61,14 @@ test('worker origin checks fail closed and retry after configuration recovers', 
   assert.equal(proxy.proxyFetches, 0);
   proxy.setFail(false);
   assert.equal((await proxy.request('https://proxy.example/service/encoded')).status, 200);
+});
+
+test('worker rejects an HTML fallback for configuration and recovers when the API returns JSON', async () => {
+  const proxy = worker('https://proxy.example', 'https://proxy.example');
+  proxy.setConfigResponse(new Response('<!DOCTYPE html><title>Monkeh</title>', { headers: { 'Content-Type': 'text/html' } }));
+  assert.equal((await proxy.request('https://proxy.example/service/encoded')).status, 403);
+  assert.equal(proxy.proxyFetches, 0);
+  proxy.setConfigResponse(null);
+  assert.equal((await proxy.request('https://proxy.example/service/encoded')).status, 200);
+  assert.equal(proxy.proxyFetches, 1);
 });

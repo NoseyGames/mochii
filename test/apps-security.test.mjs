@@ -8,6 +8,9 @@ const vox = readFileSync(new URL('../apps/vox.html', import.meta.url), 'utf8');
 const flyflix = readFileSync(new URL('../flyflix.html', import.meta.url), 'utf8');
 const flyflixProvider = readFileSync(new URL('../flyflix-provider.html', import.meta.url), 'utf8');
 const aukHtml = readFileSync(new URL('../apps/auk.html', import.meta.url), 'utf8');
+const configSource = readFileSync(new URL('../browser-tools/config.js', import.meta.url), 'utf8');
+const inlineScript = html => [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
+  .find(([, attributes]) => !/\bsrc\s*=/.test(attributes))[2];
 const voxScript = [...vox.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
   .find(([, attributes, source]) => !/\bsrc\s*=/.test(attributes) && source.includes('class GameLoaders'))[2];
 
@@ -19,7 +22,7 @@ function contextFor(source, overrides = {}) {
     };
   }
   const page = {
-    console, performance, URL, Blob, TextDecoder, Uint8Array, AbortController,
+    console, performance, URL, Blob, TextEncoder, TextDecoder, Uint8Array, AbortController, AbortSignal,
     setTimeout, clearTimeout, setInterval, clearInterval,
     document: { getElementById: element, querySelector: element, createElement: element, addEventListener() {} },
     addEventListener() {}, removeEventListener() {},
@@ -27,6 +30,7 @@ function contextFor(source, overrides = {}) {
   };
   page.window = page;
   vm.createContext(page);
+  vm.runInContext(configSource, page);
   vm.runInContext(source, page);
   return page;
 }
@@ -177,12 +181,12 @@ test('external app code has integrity checks or executes only in an isolated pro
 });
 
 test('Flyflix refuses shell-origin execution and ignores forged provider status messages', async () => {
-  const script = [...flyflix.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)][0][1];
+  const script = inlineScript(flyflix);
   const listeners = new Map();
   const page = contextFor(script, {
     location: new URL('https://monkeh.test/flyflix.html'), AbortSignal,
     addEventListener: (name, listener) => listeners.set(name, listener),
-    async fetch() { return { ok: true, text: async () => JSON.stringify({ proxyOrigin: 'https://proxy.test' }) }; }
+    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test' }); }
   });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(vm.runInContext('frame.src', page), 'https://proxy.test/flyflix-provider.html?run=1');
@@ -200,12 +204,12 @@ test('Flyflix refuses shell-origin execution and ignores forged provider status 
 });
 
 test('Flyflix provider checks its isolated origin before loading the pinned third-party module', async () => {
-  const script = [...flyflixProvider.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)][0][1];
+  const script = inlineScript(flyflixProvider);
   let loads = 0;
   const badPage = contextFor(script, {
     location: new URL('https://monkeh.test/flyflix-provider.html?run=1'), AbortSignal,
     parent: { postMessage() {} },
-    async fetch() { return { ok: true, text: async () => JSON.stringify({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }) }; },
+    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }); },
   });
   badPage.document.head = { appendChild() { loads++; } };
   await new Promise(resolve => setImmediate(resolve));
@@ -218,10 +222,50 @@ test('Flyflix provider checks its isolated origin before loading the pinned thir
     location: new URL('https://proxy.test/flyflix-provider.html?run=1'), AbortSignal,
     parent: { postMessage() {} }, history: { replaceState(_state, _title, path) { route = path; } },
     MutationObserver: class { observe() {} },
-    async fetch() { return { ok: true, text: async () => JSON.stringify({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }) }; },
+    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }); },
   });
   goodPage.document.head = { appendChild(script) { moduleUrl = script.src; } };
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(route, '/');
   assert.match(moduleUrl, /89bd78c99e75504faa5f1f8d928e3370574f9eab\/main\.js$/);
+});
+
+test('Flyflix reports a missing backend for an HTML fallback and Reload recovers after routing is fixed', async () => {
+  const page = contextFor(inlineScript(flyflix), {
+    location: new URL('https://monkeh.test/flyflix.html'),
+    async fetch() { return new Response('<!DOCTYPE html><title>Monkeh</title>', { headers: { 'Content-Type': 'text/html' } }); }
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(vm.runInContext('status.textContent', page), /backend is not connected.*\/api\/config/);
+  assert.doesNotMatch(vm.runInContext('status.textContent', page), /Unexpected token/);
+  assert.equal(vm.runInContext('frame.src', page), undefined);
+  page.fetch = async () => Response.json({ proxyOrigin: 'https://proxy.test' });
+  await page.loadProvider();
+  assert.equal(vm.runInContext('frame.src', page), 'https://proxy.test/flyflix-provider.html?run=2');
+  vm.runInContext('clearTimeout(timeout)', page);
+});
+
+test('Flyflix provider rejects HTML configuration before loading third-party code and can retry', async () => {
+  let loads = 0;
+  const notice = { hidden: true, textContent: '' };
+  const root = { childElementCount: 0 };
+  const page = contextFor(inlineScript(flyflixProvider), {
+    location: new URL('https://proxy.test/flyflix-provider.html?run=1'),
+    parent: { postMessage() {} },
+    history: { replaceState() {} },
+    MutationObserver: class { observe() {} },
+    document: {
+      getElementById: id => id === 'provider-error' ? notice : root,
+      createElement: () => ({ addEventListener() {} }),
+      head: { appendChild() { loads++; } }
+    },
+    async fetch() { return new Response('<!DOCTYPE html><title>Monkeh</title>', { headers: { 'Content-Type': 'text/html' } }); }
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(notice.hidden, false);
+  assert.match(notice.textContent, /backend is not connected.*\/api\/config/);
+  assert.equal(loads, 0);
+  page.fetch = async () => Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] });
+  await page.startProvider();
+  assert.equal(loads, 1);
 });

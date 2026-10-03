@@ -1,3 +1,5 @@
+import '../browser-tools/config.js';
+
 const profiles = Object.freeze({
   windows2000: 'https://copy.sh/v86/?profile=windows2000',
   windows98: 'https://copy.sh/v86/?profile=windows98',
@@ -57,9 +59,7 @@ export function mountDesktopLauncher(doc = document, context = window) {
 
   // Gateway discovery never blocks the account-free emulators, and never opens
   // a third-party page until the user clicks a launch button.
-  const ready = context.fetch('/api/config', { cache: 'no-store', credentials: 'same-origin', signal: controller.signal }).then(async response => {
-    if (!response.ok) return;
-    const config = await response.json();
+  const ready = globalThis.MonkehConfig.fetchConfig({ fetch: context.fetch.bind(context), signal: controller.signal }).then(config => {
     if (disposed) return;
     const gateway = validateDesktopGateway(config?.windowsVm);
     if (!gateway) return;

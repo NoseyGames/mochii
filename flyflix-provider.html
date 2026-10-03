@@ -11,6 +11,7 @@
 <body>
   <div id="root"></div>
   <p id="provider-error" hidden></p>
+  <script src="/browser-tools/config.js"></script>
   <script>
     // Serve this file only on the proxy origin. The wrapper grants this origin
     // storage and routing, while the browser denies access to the shell origin.
@@ -27,11 +28,7 @@
     }
     async function startProvider() {
       try {
-        const response = await fetch('/api/config', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
-        if (!response.ok) throw new Error('The provider configuration could not be loaded.');
-        const raw = await response.text();
-        if (raw.length > 65536) throw new Error('The provider configuration is too large.');
-        const config = JSON.parse(raw);
+        const config = await globalThis.MonkehConfig.fetchConfig();
         if (config.proxyOrigin !== location.origin || !Array.isArray(config.shellOrigins) || config.shellOrigins.includes(location.origin)) {
           throw new Error('This provider must run on the separate proxy origin.');
         }

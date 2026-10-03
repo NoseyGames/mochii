@@ -14,7 +14,7 @@ const publicFiles = new Set([
 ]);
 const proxyFiles = new Set([
   '/proxy-host.html', '/flyflix-provider.html', '/browser-tools/proxy-host.js',
-  '/browser-tools/runtime.js', '/browser-tools/proxy-network.js', '/sw.js',
+  '/browser-tools/runtime.js', '/browser-tools/proxy-network.js', '/browser-tools/config.js', '/sw.js',
 ]);
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',

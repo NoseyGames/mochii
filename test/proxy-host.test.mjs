@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 
 const source = (await readFile(new URL('../browser-tools/proxy-host.js', import.meta.url), 'utf8')).replace(/^import .+;\r?\n/gm, '');
+const configSource = await readFile(new URL('../browser-tools/config.js', import.meta.url), 'utf8');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const proxyOrigin = 'http://127.0.0.1:3101';
 const shellOrigin = 'http://localhost:3100';
@@ -19,7 +20,7 @@ function node() {
 function port() {
   return { messages: [], starts: 0, closes: 0, postMessage(message) { this.messages.push(message); }, start() { this.starts++; }, close() { this.closes++; }, async request(message) { await this.onmessage?.({ data: message }); await flush(); } };
 }
-async function harness({ config: extraConfig = {}, evaluate = async code => `result: ${code}`, startup } = {}) {
+async function harness({ config: extraConfig = {}, evaluate = async code => `result: ${code}`, startup, fetchConfig } = {}) {
   const allNodes = new Map();
   const get = id => {
     if (!allNodes.has(id)) allNodes.set(id, node());
@@ -53,8 +54,8 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   const sandbox = {
     window: contextWindow, document: doc, location, isSecureContext: true,
     navigator: { onLine: true, serviceWorker: { async register() {}, ready: Promise.resolve(), controller: {}, addEventListener() {}, removeEventListener() {} } },
-    URL, AbortSignal, AbortController, Map, WeakMap, Set, decodeURIComponent, encodeURIComponent,
-    fetch: async () => ({ ok: true, json: async () => ({ shellOrigins: [shellOrigin], proxyOrigin, wispEndpoints: [{ name: 'Primary', url: '/wisp/' }], ...extraConfig }) }),
+    URL, AbortSignal, AbortController, TextEncoder, TextDecoder, Map, WeakMap, Set, decodeURIComponent, encodeURIComponent,
+    fetch: fetchConfig || (async () => new Response(JSON.stringify({ shellOrigins: [shellOrigin], proxyOrigin, wispEndpoints: [{ name: 'Primary', url: '/wisp/' }], ...extraConfig }), { headers: { 'Content-Type': 'application/json' } })),
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn, ms }); return id; }, clearTimeout(id) { timers.delete(id); },
     BareMux: { BareMuxConnection: class { async setTransport() { activated++; if (startup) await startup; } } },
     createProxyNetwork(options) { networkOptions = options; return network; },
@@ -73,7 +74,9 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
       return runtime;
     },
   };
-  vm.runInNewContext(source, sandbox, { filename: 'browser-tools/proxy-host.js' });
+  vm.createContext(sandbox);
+  vm.runInContext(configSource, sandbox, { filename: 'browser-tools/config.js' });
+  vm.runInContext(source, sandbox, { filename: 'browser-tools/proxy-host.js' });
   await flush();
   function init(connection = port(), changes = {}) {
     contextWindow.fire('message', { isTrusted: true, source: contextWindow.parent, origin: shellOrigin, data: { type: 'monkeh-proxy:init' }, ports: [connection], ...changes });
@@ -164,6 +167,34 @@ test('proxy host rejects configuration naming a different proxy origin', async (
   const app = await harness({ config: { proxyOrigin: 'https://wrong.example' } });
   assert.equal(app.activated, 0);
   assert.match(app.get('status-message').textContent, /misconfigured/);
+  app.contextWindow.fire('pagehide');
+});
+
+test('proxy host reports HTML config without starting transport, and retries after routing recovers', async () => {
+  let failed = true;
+  const app = await harness({ fetchConfig: async () => failed
+    ? new Response('<!DOCTYPE html><h1>Fallback</h1>', { headers: { 'Content-Type': 'text/html' } })
+    : new Response(JSON.stringify({ shellOrigins: [shellOrigin], proxyOrigin, wispEndpoints: [{ url: '/wisp/' }] }), { headers: { 'Content-Type': 'application/json' } }) });
+  assert.equal(app.activated, 0);
+  assert.equal(app.navigations.length, 0);
+  assert.match(app.get('status-message').textContent, /proxy backend is not connected/);
+  assert.doesNotMatch(app.get('status-message').textContent, /Unexpected token/);
+  failed = false;
+  app.get('retry').fire('click');
+  await flush();
+  assert.equal(app.activated, 1);
+  assert.equal(app.navigations.length, 1);
+  app.contextWindow.fire('pagehide');
+});
+
+test('invalid configuration is not cached across retry', async () => {
+  let failed = true;
+  const app = await harness({ fetchConfig: async () => new Response(JSON.stringify({ shellOrigins: [shellOrigin], proxyOrigin: failed ? 'https://wrong.example' : proxyOrigin, wispEndpoints: [{ url: '/wisp/' }] }), { headers: { 'Content-Type': 'application/json' } }) });
+  assert.equal(app.activated, 0);
+  failed = false;
+  app.get('retry').fire('click');
+  await flush();
+  assert.equal(app.activated, 1);
   app.contextWindow.fire('pagehide');
 });
 

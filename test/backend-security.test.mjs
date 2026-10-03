@@ -92,7 +92,7 @@ test('the isolated proxy serves its engine but cannot expose the app shell, save
     assert.equal(response.status, 404, pathname);
     await response.text();
   }
-  for (const pathname of ['/proxy-host.html', '/flyflix-provider.html', '/browser-tools/runtime.js', '/ultrav/uv.bundle.js', '/bearmux/worker.js', '/sw.js']) {
+  for (const pathname of ['/proxy-host.html', '/flyflix-provider.html', '/browser-tools/runtime.js', '/browser-tools/config.js', '/ultrav/uv.bundle.js', '/bearmux/worker.js', '/sw.js']) {
     const response = await fetch(origin + pathname);
     assert.equal(response.status, 200, pathname);
     assert.equal(response.headers.get('x-frame-options'), null);

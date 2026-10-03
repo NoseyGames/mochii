@@ -15,7 +15,7 @@ function harness(config = {}) {
   const context = {
     location,
     parent: { location, handleHeroSearch: url => { opened.push(url); } },
-    fetch: async (url, options) => { calls.push({ url, options }); return { ok: true, json: async () => config }; },
+    fetch: async (url, options) => { calls.push({ url, options }); return Response.json(config); },
     setTimeout(fn) { timers.add(fn); return fn; },
     clearTimeout(fn) { timers.delete(fn); },
     listeners: {},
@@ -92,6 +92,18 @@ test('configuration failures preserve the working emulator launcher', async () =
   mounted.dispose();
 });
 
+test('an HTML configuration fallback leaves the optional gateway hidden and emulator buttons usable', async () => {
+  const app = harness();
+  app.context.fetch = async () => new Response('<!DOCTYPE html><title>Monkeh</title>', { headers: { 'Content-Type': 'text/html' } });
+  const mounted = mountDesktopLauncher(app.doc, app.context);
+  await mounted.ready;
+  assert.equal(app.get('gateway-card').hidden, true);
+  assert.equal(app.timers.size, 0);
+  app.get('launch-windows2000').click();
+  assert.deepEqual(app.opened, [desktopProfileUrl('windows2000')]);
+  mounted.dispose();
+});
+
 test('standalone launch gives recovery instructions and leaves buttons usable', async () => {
   const app = harness();
   app.context.parent = app.context;
@@ -111,7 +123,7 @@ test('page teardown aborts gateway fetch and ignores late configuration', async 
   app.context.fetch = () => new Promise(resolve => { finish = resolve; });
   const mounted = mountDesktopLauncher(app.doc, app.context);
   app.context.listeners.pagehide();
-  finish({ ok: true, json: async () => ({ windowsVm: { url: 'https://desktop.example/', label: 'VM' } }) });
+  finish(Response.json({ windowsVm: { url: 'https://desktop.example/', label: 'VM' } }));
   await mounted.ready;
   assert.equal(app.get('gateway-card').hidden, true);
   assert.equal(app.timers.size, 0);
