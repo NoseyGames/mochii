@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Monkeh browser</title>
+  <script src="/bearmux/index.js"></script>
+  <script src="/ultrav/uv.bundle.js"></script>
+  <script src="/ultrav/uv.config.js"></script>
+  <style>
+    :root{color-scheme:dark;font:14px system-ui,sans-serif;background:#101116;color:#eceaf3}body{margin:0}iframe{position:fixed;inset:0;width:100%;height:100%;border:0;background:#fff}#status{position:fixed;inset:0;display:grid;place-content:center;text-align:center;padding:32px;background:#101116;z-index:2}#status[hidden]{display:none}#status p{max-width:560px;line-height:1.6;color:#aaa6ba}button{font:inherit;padding:10px 20px;border:1px solid #62557e;border-radius:10px;background:#30273f;color:#f1e8ff;cursor:pointer}
+  </style>
+  <script type="module" src="/browser-tools/proxy-host.js"></script>
+</head>
+<body>
+  <iframe id="page" title="Viewed web page" allowfullscreen referrerpolicy="no-referrer"></iframe>
+  <div id="status" role="status"><h2 id="status-title">Connecting your browser</h2><p id="status-message">Starting the isolated proxy…</p><button id="retry" hidden>Try again</button></div>
+</body>
+</html>

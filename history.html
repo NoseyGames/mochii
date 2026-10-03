@@ -6,11 +6,16 @@
   
   <script>
     (function() {
-      const authKey = sessionStorage.getItem('authorized_access');
-      if (authKey !== 'a1qa2d') {
-        window.location.href = 'https://classroom.google.com';
-      } else {
-        sessionStorage.removeItem('authorized_access');
+      // The gate only controls navigation; server authentication is independent.
+      try {
+        const authKey = sessionStorage.getItem('authorized_access');
+        if (authKey !== 'a1qa2d') {
+          window.location.replace('https://classroom.google.com');
+        } else {
+          sessionStorage.removeItem('authorized_access');
+        }
+      } catch (error) {
+        window.location.replace('math.html');
       }
     })();
   </script>
@@ -88,8 +93,14 @@
       isOpening = true;
 
       const newWin = window.open('about:blank', '_blank');
+      if (!newWin) {
+        isOpening = false;
+        document.querySelector('.container p').textContent = 'Allow pop-ups for this site, then click to try again.';
+        return;
+      }
       
       if (newWin) {
+        newWin.opener = null;
         newWin.document.open();
         newWin.document.write(`
           <!DOCTYPE html>
@@ -103,7 +114,7 @@
             </style>
           </head>
           <body>
-            <iframe src="math.html"></iframe>
+            <iframe title="Monkeh browser" src="${new URL('math.html', window.location.href).href.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></iframe>
           </body>
           </html>
         `);
@@ -111,7 +122,7 @@
       }
 
       window.location.href = 'https://classroom.google.com';
-    }, { once: true });
+    });
   </script>
 </body>
 </html>

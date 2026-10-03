@@ -1,0 +1,22 @@
+{
+  "name": "monkeh",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monkeh app with an isolated browser origin and bounded Wisp backend",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node scripts/check-syntax.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@mercuryworkshop/bare-mux": "2.1.9",
+    "@mercuryworkshop/epoxy-transport": "2.1.28",
+    "ipaddr.js": "2.5.0",
+    "ws": "8.22.0"
+  }
+}

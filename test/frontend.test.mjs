@@ -1,0 +1,260 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { setImmediate as nextTurn } from 'node:timers/promises';
+import test from 'node:test';
+import vm from 'node:vm';
+
+const html = readFileSync(new URL('../math.html', import.meta.url), 'utf8');
+const inlineScripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
+  .filter(([, attributes]) => !/\bsrc\s*=/i.test(attributes))
+  .map(([, , source]) => source);
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+// The harness models browser boundaries; the actual page scripts run unchanged.
+function createPage({ protocol = 'http:', storageUnavailable = false } = {}) {
+  const elements = new Map();
+  const serviceWorkerListeners = new Map();
+  const ready = deferred();
+  const calls = { registrations: 0, transports: [], sockets: [] };
+
+  function makeElement() {
+    const classes = new Set();
+    return {
+      value: '', innerHTML: '', textContent: '', src: '', srcdoc: '', children: [],
+      classList: {
+        add(name) { classes.add(name); },
+        remove(name) { classes.delete(name); },
+        contains(name) { return classes.has(name); }
+      },
+      removeAttribute(name) { this[name] = ''; },
+      setAttribute(name, value) { this[name] = value; },
+      appendChild(child) { this.children.push(child); },
+      getContext() { return null; },
+      addEventListener() {}
+    };
+  }
+
+  function element(id) {
+    if (!elements.has(id)) elements.set(id, makeElement());
+    return elements.get(id);
+  }
+
+  const serviceWorker = {
+    controller: null,
+    ready: ready.promise,
+    async register() { calls.registrations++; },
+    addEventListener(type, callback) { serviceWorkerListeners.set(type, callback); },
+    removeEventListener(type) { serviceWorkerListeners.delete(type); }
+  };
+  const page = {
+    console: { log() {}, warn() {}, error() {} },
+    URL, TextEncoder, TextDecoder, AbortSignal, AbortController, setTimeout, clearTimeout,
+    requestAnimationFrame() {},
+    localStorage: {
+      getItem() {
+        if (storageUnavailable) throw new Error('Storage disabled');
+        return null;
+      },
+      setItem() {}
+    },
+    navigator: { serviceWorker },
+    document: {
+      activeElement: null,
+      getElementById: element,
+      createElement: makeElement,
+      createDocumentFragment: makeElement,
+      addEventListener() {}
+    },
+    location: new URL(`${protocol}//localhost:3000/math.html`),
+    isSecureContext: true,
+    SharedWorker: function SharedWorker() {},
+    innerWidth: 100,
+    innerHeight: 100,
+    addEventListener() {},
+    async fetch() { return { ok: true, text: async () => JSON.stringify({ proxyOrigin: `${protocol}//localhost:3001`, wispEndpoints: [{ name: 'Primary', url: '/wisp/' }] }) }; },
+    createMonkehNetwork({ endpoints, activate, onStatus }) {
+      let active = null;
+      return {
+        async connect() {
+          if (!active) { await activate(endpoints[0]); active = endpoints[0]; }
+          onStatus({ status: 'connected', activeEndpoint: active, configuredCount: endpoints.length });
+          return active;
+        },
+        async setOnline() {}, dispose() {}
+      };
+    },
+    WebSocket: class {
+      constructor(url) {
+        calls.sockets.push(url);
+        queueMicrotask(() => this.onopen?.());
+      }
+      close() {}
+    },
+    BareMux: {
+      BareMuxConnection: class {
+        async setTransport(path, options) { calls.transports.push({ path, options }); }
+      }
+    }
+  };
+  page.window = page;
+  vm.createContext(page);
+  for (const source of inlineScripts) vm.runInContext(source, page, { filename: 'math.html' });
+
+  return {
+    page, calls, element,
+    activateWorker() { ready.resolve({ active: {} }); },
+    controlPage() {
+      serviceWorker.controller = {};
+      serviceWorkerListeners.get('controllerchange')?.();
+    }
+  };
+}
+
+test('shell configuration shares concurrent initialization and never creates a shell-origin worker', async () => {
+  const { page, calls } = createPage();
+  const first = page.initializeNetwork();
+  assert.equal(first, page.initializeNetwork());
+  assert.equal(await first, true);
+  assert.equal(page.MonkehProxyOrigin, 'http://localhost:3001');
+  assert.equal(calls.registrations, 0);
+  assert.equal(calls.transports.length, 0);
+});
+
+test('search waits for isolated origin configuration and then navigates the remote host', async () => {
+  const { page, element } = createPage({ protocol: 'https:' });
+  const config = deferred();
+  page.fetch = () => config.promise;
+  const navigation = page.openViewer('Search', 'Web', 'https://example.com/', true);
+  await nextTurn();
+  assert.equal(element('viewer-frame').src, 'about:blank');
+  config.resolve({ ok: true, text: async () => JSON.stringify({ proxyOrigin: 'https://proxy.example.org', wispEndpoints: [{ name: 'Primary', url: '/wisp/' }] }) });
+  await navigation;
+  assert.equal(element('viewer-frame').src, 'https://proxy.example.org/proxy-host.html#https%3A%2F%2Fexample.com%2F');
+});
+
+test('shell refuses a proxy configured on its own origin', async () => {
+  const { page } = createPage();
+  page.fetch = async () => ({ ok: true, text: async () => JSON.stringify({ proxyOrigin: 'http://localhost:3000', wispEndpoints: [{ url: '/wisp/' }] }) });
+  assert.equal(await page.initializeNetwork(), false);
+  assert.equal(page.MonkehProxyOrigin, undefined);
+});
+
+test('closing and reopening the viewer prevents an old remote load from replacing a local app', async () => {
+  const { page, element } = createPage();
+  const pendingResponse = deferred();
+  let signal;
+  page.fetch = (_url, options) => {
+    signal = options.signal;
+    // Deliberately finish even after abort to exercise the stale-result guard.
+    return pendingResponse.promise;
+  };
+  const oldNavigation = page.openViewer('Old game', '', 'https://example.com/old.html');
+  page.closeViewer();
+  assert.equal(signal.aborted, true);
+  await page.openViewer('Auk', '', '/apps/auk.html');
+  pendingResponse.resolve({ ok: true, text: async () => '<h1>Old content</h1>' });
+  await oldNavigation;
+
+  assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/auk.html');
+  assert.equal(element('viewer-frame').srcdoc, '');
+  assert.equal(element('zone-viewer').classList.contains('active'), true);
+});
+
+test('local viewer keeps the app URL so its relative assets resolve correctly', async () => {
+  const { page, element } = createPage();
+  page.fetch = () => { throw new Error('Local apps should use native iframe navigation'); };
+  await page.openViewer('Auk', '', '/apps/auk.html');
+  assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/auk.html');
+  assert.equal(element('viewer-frame').srcdoc, '');
+});
+
+test('search distinguishes addresses from phrases and normalizes uppercase protocols', () => {
+  const { page } = createPage();
+  for (const [query, expected] of [
+    ['HTTPS://EXAMPLE.COM/a?b=2#c', 'https://example.com/a?b=2#c'],
+    ['example.com', 'https://example.com/'],
+    ['localhost:8080/a', 'https://localhost:8080/a'],
+    ['http://[::1]:8080/path', 'http://[::1]:8080/path'],
+    ['  two words  ', 'https://duckduckgo.com/?q=two%20words'],
+    ['javascript:alert(1)', 'https://duckduckgo.com/?q=javascript%3Aalert(1)']
+  ]) assert.equal(page.getSearchUrl(query), expected);
+});
+
+test('viewer rejects script URLs and reports the error as text', async () => {
+  const { page, element } = createPage();
+  await page.openViewer('Invalid entry', '', 'javascript:alert(1)');
+  assert.equal(element('viewer-frame').src, 'about:blank');
+  assert.match(element('viewer-frame').srcdoc, /Only HTTP and HTTPS/);
+});
+
+test('blocked settings storage does not disable search or local apps', async () => {
+  const { page, element } = createPage({ storageUnavailable: true });
+  assert.equal(page.getSearchUrl('example.com'), 'https://example.com/');
+  await page.openViewer('Auk', '', '/apps/auk.html');
+  assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/auk.html');
+});
+
+test('Auk is available from the local catalog before remote requests complete', async () => {
+  const { page } = createPage();
+  const remoteCatalog = deferred();
+  page.fetch = () => remoteCatalog.promise;
+  page.openAppsPopover();
+  assert.ok(page.rawApps.some(app => app.name === 'Auk' && app.url === '/apps/auk.html'));
+  remoteCatalog.resolve({ ok: true, text: async () => '[]' });
+  await nextTurn();
+  assert.equal(page.appsLoaded, true);
+});
+
+test('catalog input is bounded and malformed records are ignored', () => {
+  const { page } = createPage();
+  assert.equal(page.catalogEntries('invalid').length, 0);
+  assert.equal(page.catalogEntries([null, [], 'bad', { name: 'x'.repeat(1000) }]).length, 1);
+  assert.equal(page.catalogEntries([{ name: 'x'.repeat(1000) }])[0].name.length, 200);
+  assert.equal(page.catalogEntries(Array.from({ length: 10001 }, () => ({}))).length, 10000);
+});
+
+test('remote downloads enforce declared and streamed size limits and cancel oversized streams', async () => {
+  const { page } = createPage();
+  await assert.rejects(page.readResponseText({ headers: { get: () => '1000' } }, 100), /size limit/);
+  let cancelled = false;
+  let released = false;
+  const response = { body: { getReader: () => ({
+    read: async () => ({ done: false, value: new Uint8Array(101) }),
+    cancel: async () => { cancelled = true; }, releaseLock() { released = true; }
+  }) } };
+  await assert.rejects(page.readResponseText(response, 100), /size limit/);
+  assert.equal(cancelled, true);
+  assert.equal(released, true);
+});
+
+test('viewer rejects untrusted local navigation and credential-bearing URLs', async () => {
+  const { page, element } = createPage();
+  await page.openViewer('Invalid', '', '/math.html');
+  assert.match(element('viewer-frame').srcdoc, /trusted app list/);
+  await page.openViewer('Invalid', '', 'https://user:password@example.com/');
+  assert.match(element('viewer-frame').srcdoc, /login details/);
+  await page.openViewer('Invalid', '', 'http://localhost:3000/math.html', true);
+  assert.match(element('viewer-frame').srcdoc, /App pages cannot be opened/);
+});
+
+test('external catalog HTML runs in an opaque sandbox and a local app clears that sandbox', async () => {
+  const { page, element } = createPage();
+  page.fetch = async () => ({ ok: true, url: 'https://cdn.example/game.html', text: async () => '<script>parent.attack()</script>' });
+  page.DOMParser = class {
+    parseFromString(source) {
+      return { querySelector: () => null, createElement: () => ({ getAttribute: () => null }),
+        head: { prepend() {} }, documentElement: { outerHTML: source } };
+    }
+  };
+  await page.openViewer('Game', '', 'https://cdn.example/game.html');
+  const frame = element('viewer-frame');
+  assert.match(frame.sandbox, /allow-scripts/);
+  assert.doesNotMatch(frame.sandbox, /allow-same-origin|allow-top-navigation/);
+  await page.openViewer('Auk', '', '/apps/auk.html');
+  assert.equal(frame.sandbox, '');
+});

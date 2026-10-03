@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Desktop · Monkeh</title>
+  <link rel="stylesheet" href="/apps/desktop.css">
+  <script type="module" src="/apps/desktop.js"></script>
+</head>
+<body>
+  <main class="desktop-shell">
+    <header class="masthead"><span class="brand">monkeh<span class="brand-dot">.</span></span><span class="eyebrow">DESKTOP LAB</span></header>
+    <section class="hero" aria-labelledby="title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> BROWSER EMULATION</p>
+        <h1 id="title">A whole desktop.<br><span>Inside your browser.</span></h1>
+        <p class="intro">Boot a real classic Windows environment with v86. Explore its apps, make something, or take a little trip back in time.</p>
+        <div class="pills"><span>No account needed</span><span>Runs on your device</span><span>Opens through Monkeh</span></div>
+      </div>
+      <div class="desktop-art" aria-hidden="true">
+        <div class="art-titlebar"><i></i><i></i><i></i><span>desktop.exe</span></div>
+        <div class="art-screen"><div class="art-grid"><span></span><span></span><span></span><span></span></div><div class="art-window"><div class="art-window-title">Hello, again.</div><div class="art-window-body"><span class="cursor">▍</span><span>Ready when you are.</span></div></div><div class="art-taskbar"><span>start</span><b>00:00</b></div></div>
+        <div class="art-caption">CLASSIC SYSTEMS. REAL EMULATION.</div>
+      </div>
+    </section>
+
+    <section aria-labelledby="choose-title">
+      <div class="section-heading"><h2 id="choose-title">Choose your desktop</h2><span>Hosted by the v86 project</span></div>
+      <div class="profile-grid">
+        <article class="profile recommended">
+          <div class="profile-top"><span class="os-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="tag">FEATURED</span></div>
+          <h3>Windows 2000</h3>
+          <p>A classic desktop packed with creative tools, games, and familiar utilities.</p>
+          <dl><div><dt>Emulated memory</dt><dd>512 MB</dd></div><div><dt>Best for</dt><dd>Exploring classic apps</dd></div></dl>
+          <button type="button" class="launch primary" id="launch-windows2000">Launch Windows 2000 <span aria-hidden="true">↗</span></button>
+        </article>
+        <article class="profile">
+          <div class="profile-top"><span class="os-mark retro" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="tag">LIGHTER OPTION</span></div>
+          <h3>Windows 98</h3>
+          <p>The familiar Start menu, desktop utilities, and games in a smaller environment.</p>
+          <dl><div><dt>Emulated memory</dt><dd>128 MB</dd></div><div><dt>Best for</dt><dd>A quick nostalgia trip</dd></div></dl>
+          <button type="button" class="launch" id="launch-windows98">Launch Windows 98 <span aria-hidden="true">↗</span></button>
+        </article>
+      </div>
+    </section>
+
+    <p id="launch-status" class="launch-status" role="status" aria-live="polite"></p>
+    <div id="standalone-help" class="standalone-help" hidden>Launch this app from Monkeh’s Apps menu to use the proxy. <a href="/math.html" target="_top">Open Monkeh →</a></div>
+
+    <section class="quick-notes" aria-label="Before you launch">
+      <div><span class="note-number">01</span><h3>Give it a moment</h3><p>The first launch downloads the emulator and its starting state. A keyboard and mouse work best.</p></div>
+      <div><span class="note-number">02</span><h3>Keep your progress</h3><p>Use v86’s <strong>Save State</strong> before closing or reloading. Your session is temporary unless you save it.</p></div>
+      <div><span class="note-number">03</span><h3>Know the era</h3><p>These are historic Windows releases for classic software. Modern Windows apps and websites may not work. Guest networking is off by default in Windows 2000.</p></div>
+    </section>
+
+    <section id="gateway-card" class="gateway-card" hidden aria-labelledby="gateway-title">
+      <div><p class="eyebrow">CONNECTED DESKTOP</p><h2 id="gateway-title">Your Windows desktop</h2><p id="gateway-description">Open the remote desktop provided by this Monkeh server. Your provider may require sign-in.</p></div>
+      <button type="button" class="launch" id="launch-gateway">Open desktop <span aria-hidden="true">↗</span></button>
+    </section>
+
+    <footer><p>Emulation by <a href="https://copy.sh/v86/" target="_blank" rel="noopener noreferrer">v86</a>. The desktop runs locally; its website loads through Monkeh’s proxy.</p><a href="https://github.com/copy/v86#compatibility" target="_blank" rel="noopener noreferrer">Compatibility &amp; project details ↗</a></footer>
+    <noscript><p class="standalone-help">JavaScript is required to launch a desktop through Monkeh.</p></noscript>
+  </main>
+</body>
+</html>
