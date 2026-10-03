@@ -1,9 +1,9 @@
+<!DOCTYPE html>
 <html lang="en"><head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>voxiles</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
     <style>
         :root {
             --bg: #111;
@@ -671,15 +671,6 @@
             }
         }
     </style>
-<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-PXHK7Q7G3Z"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag() {
-    dataLayer.push(arguments);
-  }
-  gtag("js", new Date());
-  gtag("config", "G-PXHK7Q7G3Z");
-</script>
 </head>
 
 <body>
@@ -698,13 +689,13 @@
                     </h2>
                 </div>
                 <div class="upload-area" id="upload-area">
-                    <input type="file" id="file-input" accept=".swf" multiple="" hidden="">
+                    <input type="file" id="file-input" accept=".swf,.html,.htm,.js,.zip,.json" multiple="" hidden="">
                     <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-upload"><path d="m21 15v4a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                    <p class="upload-text">drag &amp; drop your swf files here</p>
-                    <span class="upload-subtext">or <a href="#" id="browse-files-link">browse files</a></span>
+                    <p class="upload-text">drag &amp; drop your game files here</p>
+                    <span class="upload-subtext">or <a href="#" id="browse-files-link">browse files</a><br>25 MB per file · 100 MB library · ZIPs need a self-contained HTML or SWF game</span>
                 </div>
                 <div class="upload-url-section">
-                    <input type="url" id="url-input" class="search-input" placeholder="paste SWF URL here...">
+                    <input type="url" id="url-input" class="search-input" placeholder="paste game URL here...">
                     <button class="btn btn-primary btn-full" id="upload-url-btn">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-link"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                         upload from url
@@ -778,442 +769,141 @@
     
 
     <script>
-        class SwfPlayer {
-            constructor() {
-                this.loadedGames = [];
-                this.activeGames = [];
-                this.modalPromise = null;
-                this.init();
+        const MAX_GAME_BYTES = 25 * 1024 * 1024;
+        const MAX_LIBRARY_BYTES = 100 * 1024 * 1024;
+        const MAX_GAME_COUNT = 50;
+        const gameObjectUrls = new Set();
+
+        function remoteGameUrl(value, base) {
+            if (typeof value !== 'string' || value.length > 8192) throw new Error('Invalid game URL');
+            const url = new URL(value, base);
+            if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+                throw new Error('Game URLs must use HTTP or HTTPS without embedded credentials');
             }
+            return url.href;
+        }
 
-            init() {
-                this.bindEvents();
-                this.updateStats();
-                this.renderGameList();
-            }
+        function createGameUrl(blob) {
+            const url = URL.createObjectURL(blob);
+            gameObjectUrls.add(url);
+            return url;
+        }
 
-            bindEvents() {
-                const uploadArea = document.getElementById('upload-area');
-                const fileInput = document.getElementById('file-input');
-                const browseFilesLink = document.getElementById('browse-files-link');
-                const urlInput = document.getElementById('url-input'); // New
-                const uploadUrlBtn = document.getElementById('upload-url-btn'); // New
-                const gameList = document.getElementById('game-list');
-                const gameSearch = document.getElementById('game-search');
-                const clearAllBtn = document.getElementById('clear-all-btn');
-                const gameContainer = document.getElementById('game-container');
-                const gameViewport = document.getElementById('game-viewport');
-                const modalConfirmBtn = document.getElementById('modal-confirm');
-                const modalCancelBtn = document.getElementById('modal-cancel');
+        function revokeGameUrl(url) {
+            if (gameObjectUrls.delete(url)) URL.revokeObjectURL(url);
+        }
 
-                browseFilesLink.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    fileInput.click();
-                });
-
-                uploadUrlBtn.addEventListener('click', () => { 
-                    const url = urlInput.value.trim();
-                    if (url) {
-                        this.addGameFromUrl(url);
-                        urlInput.value = ''; 
-                    } else {
-                        this.showNotification('please enter a valid swf url', 'warning');
-                    }
-                });
-
-                uploadArea.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    uploadArea.classList.add('drag-over');
-                });
-                uploadArea.addEventListener('dragleave', () => {
-                    uploadArea.classList.remove('drag-over');
-                });
-                uploadArea.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    uploadArea.classList.remove('drag-over');
-                    Array.from(e.dataTransfer.files).forEach(file => this.addGame(file));
-                });
-
-                fileInput.addEventListener('change', (e) => {
-                    Array.from(e.target.files).forEach(file => this.addGame(file));
-                    e.target.value = '';
-                });
-
-                gameList.addEventListener('click', (e) => {
-                    const gameItem = e.target.closest('.game-item');
-                    if (!gameItem) return;
-                    const id = parseFloat(gameItem.dataset.id);
-                    const game = this.loadedGames.find(g => g.id === id);
-
-                    if (e.target.closest('.play-btn')) {
-                        this.playGame(game);
-                    } else if (e.target.closest('.remove-btn')) {
-                        this.removeGame(id);
-                    } else {
-                        this.switchToGame(id);
-                    }
-                });
-
-                gameSearch.addEventListener('input', () => this.renderGameList());
-
-                clearAllBtn.addEventListener('click', () => this.clearAll());
-
-                gameContainer.addEventListener('click', (e) => {
-                    const closeBtn = e.target.closest('.close-instance');
-                    const fullscreenBtn = e.target.closest('.fullscreen-btn');
-                    const activeSwf = gameContainer.querySelector('.game-instance.active');
-                    
-                    if (closeBtn) {
-                        const instance = closeBtn.closest('.game-instance');
-                        this.closeGame(parseFloat(instance.dataset.id));
-                    } else if (fullscreenBtn && activeSwf) {
-                        this.toggleFullscreen(gameViewport);
-                    }
-                });
-                
-                document.addEventListener('fullscreenchange', () => {
-                    if (document.fullscreenElement) {
-                        gameViewport.classList.add('fullscreen-active');
-                    } else {
-                        gameViewport.classList.remove('fullscreen-active');
-                    }
-                });
-                
-                modalConfirmBtn.addEventListener('click', () => {
-                    if (this.modalPromise) {
-                        this.modalPromise.resolve(true);
-                        this.modalPromise = null;
-                        this.hideModal();
-                    }
-                });
-
-                modalCancelBtn.addEventListener('click', () => {
-                    if (this.modalPromise) {
-                        this.modalPromise.resolve(false);
-                        this.modalPromise = null;
-                        this.hideModal();
-                    }
-                });
-            }
-
-            addGame(file) {
-                if (!file.name.toLowerCase().endsWith('.swf')) {
-                    this.showNotification('please upload only swf files', 'error');
-                    return;
+        // Count streamed bytes as well as Content-Length; compressed responses and
+        // chunked transfers must not bypass the download limit.
+        async function readGameBytes(url, limit = MAX_GAME_BYTES) {
+            if (!gameObjectUrls.has(url)) remoteGameUrl(url);
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 20000);
+            let reader;
+            try {
+                const response = await fetch(url, { signal: controller.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (Number(response.headers.get('content-length')) > limit) throw new Error('Game exceeds the file size limit');
+                if (!response.body) throw new Error('This browser cannot stream game downloads');
+                reader = response.body.getReader();
+                const chunks = [];
+                let size = 0;
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    size += value.byteLength;
+                    if (size > limit) throw new Error('Game exceeds the file size limit');
+                    chunks.push(value);
                 }
-
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const game = {
-                        id: Date.now() + Math.random(),
-                        name: file.name.replace(/\.swf$/i, ''),
-                        size: file.size,
-                        url: e.target.result 
-                    };
-                    this.loadedGames.push(game);
-                    this.renderGameList();
-                    this.updateStats();
-                    this.showNotification(`added "${game.name}"`, 'success');
-                };
-                reader.readAsDataURL(file);
-            }
-
-            async addGameFromUrl(url) { 
-                if (!url.toLowerCase().endsWith('.swf')) {
-                    this.showNotification('url must end with .swf', 'error');
-                    return;
-                }
-
-                this.showNotification(`fetching "${url}"...`, 'info');
-                try {
-                    const response = await fetch(url);
-                    if (!response.ok) {
-                        throw new Error(`http error! status: ${response.status}`);
-                    }
-                    const blob = await response.blob();
-
-                    if (blob.type !== 'application/x-shockwave-flash') {
-                        this.showNotification('fetched file is not a valid swf', 'error');
-                        return;
-                    }
-
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const filename = url.substring(url.lastIndexOf('/') + 1);
-                        const game = {
-                            id: Date.now() + Math.random(),
-                            name: filename.replace(/\.swf$/i, ''),
-                            size: blob.size,
-                            url: e.target.result 
-                        };
-                        this.loadedGames.push(game);
-                        this.renderGameList();
-                        this.updateStats();
-                        this.showNotification(`added "${game.name}" from url`, 'success');
-                    };
-                    reader.onerror = () => {
-                        this.showNotification('failed to read swf data from url', 'error');
-                    };
-                    reader.readAsDataURL(blob);
-
-                } catch (error) {
-                    console.error("Error fetching SWF from URL:", error);
-                    this.showNotification(`failed to fetch swf: ${error.message}`, 'error');
-                }
-            }
-
-            playGame(game) {
-                const existingInstance = this.activeGames.find(ag => ag.id === game.id);
-                
-                if (existingInstance) {
-                    this.switchToGame(game.id);
-                    return;
-                }
-
-                const welcomeScreen = document.getElementById('welcome-screen');
-                welcomeScreen.style.display = 'none';
-
-                const gameInstance = document.createElement('div');
-                gameInstance.className = 'game-instance';
-                gameInstance.dataset.id = game.id;
-                gameInstance.innerHTML = `
-                    <div class="ruffle-player-wrapper">
-                        <div class="ruffle-player"></div>
-                    </div>
-                    <div class="control-bar">
-                        <div class="game-info-bar">
-                            <span class="game-name">${game.name}</span>
-                        </div>
-                        <div class="control-buttons">
-                            <button class="btn btn-secondary btn-sm fullscreen-btn" title="fullscreen">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-maximize"><path d="m8 3h-3a2 2 0 0 0-2 2v3m18 0v-3a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3m-18 0v3a2 2 0 0 0 2 2h3"></path></svg>
-                            </button>
-                            <button class="btn btn-secondary btn-sm close-instance" title="close">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-x"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            </button>
-                        </div>
-                    </div>
-                `;
-
-                const rufflePlayerDiv = gameInstance.querySelector('.ruffle-player');
-                document.getElementById('game-container').appendChild(gameInstance);
-                
-                this.switchToGame(game.id);
-
-                try {
-                    const ruffle = window.RufflePlayer.newest();
-                    const player = ruffle.createPlayer();
-                    rufflePlayerDiv.appendChild(player);
-
-                    player.load({ url: game.url });
-
-                    this.activeGames.push({
-                        id: game.id,
-                        name: game.name,
-                        element: gameInstance,
-                        player: player
-                    });
-
-                    this.updateStats();
-                    this.showNotification(`playing "${game.name}"`, 'success');
-                } catch (error) {
-                    console.error("Error loading Ruffle player:", error);
-                    gameInstance.remove();
-                    this.showNotification('error loading game', 'error');
-                }
-            }
-            
-            switchToGame(id) {
-                document.querySelectorAll('.game-instance').forEach(instance => {
-                    instance.classList.remove('active');
-                });
-                const newActive = document.querySelector(`.game-instance[data-id="${id}"]`);
-                if (newActive) {
-                    newActive.classList.add('active');
-                }
-                this.updateActiveGameClass();
-            }
-
-            closeGame(id) {
-                const index = this.activeGames.findIndex(game => game.id === id);
-                if (index > -1) {
-                    const game = this.activeGames[index];
-                    const wasActive = game.element.classList.contains('active');
-                    
-                    game.element.remove();
-                    this.activeGames.splice(index, 1);
-                    this.updateStats();
-                    this.showNotification(`closed "${game.name}"`, 'info');
-
-                    if (this.activeGames.length > 0 && wasActive) {
-                        this.activeGames[this.activeGames.length - 1].element.classList.add('active');
-                    } else if (this.activeGames.length === 0) {
-                        document.getElementById('welcome-screen').style.display = 'flex';
-                    }
-                    this.updateActiveGameClass();
-                }
-            }
-
-            async removeGame(id) {
-                const game = this.loadedGames.find(g => g.id === id);
-                if (!game) return;
-
-                const confirmed = await this.showModal('remove game', `are you sure you want to remove "${game.name}"?`);
-                
-                if (confirmed) {
-                    this.loadedGames = this.loadedGames.filter(g => g.id !== id);
-                    this.renderGameList();
-                    this.updateStats();
-                    this.closeGame(id);
-                    this.showNotification(`removed "${game.name}"`, 'info');
-                }
-            }
-
-            async clearAll() {
-                const confirmed = await this.showModal('clear library', 'are you sure you want to clear all games? this action cannot be undone.');
-                
-                if (confirmed) {
-                    this.loadedGames = [];
-                    this.activeGames.forEach(game => game.element.remove());
-                    this.activeGames = [];
-                    this.renderGameList();
-                    this.updateStats();
-                    this.showNotification('library cleared', 'info');
-                    
-                    document.getElementById('welcome-screen').style.display = 'flex';
-                }
-            }
-            
-            renderGameList() {
-                const gameList = document.getElementById('game-list');
-                const gameSearch = document.getElementById('game-search').value.toLowerCase();
-                
-                gameList.innerHTML = '';
-                
-                const filteredGames = this.loadedGames.filter(game =>
-                    game.name.toLowerCase().includes(gameSearch)
-                );
-
-                filteredGames.forEach(game => {
-                    const li = document.createElement('li');
-                    li.className = 'game-item';
-                    li.dataset.id = game.id;
-                    li.innerHTML = `
-                        <div class="game-info">
-                            <span class="name">${game.name}</span>
-                            <span class="size">${this.formatSize(game.size)}</span>
-                        </div>
-                        <div class="game-actions">
-                            <button class="btn btn-primary btn-sm play-btn" title="play">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-play"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                            </button>
-                            <button class="btn btn-danger btn-sm remove-btn" title="remove">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2"><polyline points="3 6 5 6 21 6"></polyline><path d="m19 6v14a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2v-14m3 0v-2a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                            </button>
-                        </div>
-                    `;
-                    gameList.appendChild(li);
-                });
-
-                this.updateEmptyState();
-                this.updateActiveGameClass();
-            }
-
-            updateStats() {
-                document.getElementById('games-loaded').textContent = this.loadedGames.length;
-                const totalSize = this.loadedGames.reduce((sum, game) => sum + game.size, 0);
-                document.getElementById('total-size').textContent = this.formatSize(totalSize);
-                document.getElementById('active-games').textContent = this.activeGames.length;
-            }
-
-            updateEmptyState() {
-                const emptyState = document.getElementById('empty-state');
-                const hasFilteredGames = document.getElementById('game-list').children.length > 0;
-                emptyState.style.display = hasFilteredGames ? 'none' : 'block';
-            }
-
-            updateActiveGameClass() {
-                const activeGameId = this.activeGames.length > 0 ? this.activeGames[this.activeGames.length - 1].id : null;
-                document.querySelectorAll('.game-item').forEach(item => {
-                    const id = parseFloat(item.dataset.id);
-                    if (id === activeGameId) {
-                        item.classList.add('active');
-                    } else {
-                        item.classList.remove('active');
-                    }
-                });
-            }
-
-            toggleFullscreen(element) {
-                if (!document.fullscreenElement) {
-                    element.requestFullscreen().catch(err => {
-                        this.showNotification(`error: unable to activate fullscreen mode.`, 'error');
-                        console.error("Fullscreen error:", err);
-                    });
-                } else {
-                    document.exitFullscreen();
-                }
-            }
-            
-            formatSize(bytes) {
-                const units = ['b', 'kb', 'mb', 'gb'];
-                let i = 0;
-                while (bytes >= 1024 && i < units.length - 1) {
-                    bytes /= 1024;
-                    i++;
-                }
-                return `${bytes.toFixed(2)} ${units[i]}`;
-            }
-
-            showNotification(message, type = 'info') {
-                const notification = document.createElement('div');
-                notification.className = `notification ${type}`;
-                notification.textContent = message;
-                document.body.appendChild(notification);
-
-                setTimeout(() => {
-                    notification.classList.add('show');
-                }, 10);
-
-                setTimeout(() => {
-                    notification.classList.remove('show');
-                    notification.addEventListener('transitionend', () => notification.remove());
-                }, 3000);
-            }
-
-            showModal(title, message) {
-                const modalOverlay = document.getElementById('confirmation-modal');
-                const modalTitle = document.getElementById('modal-title');
-                const modalMessage = document.getElementById('modal-message');
-
-                modalTitle.textContent = title;
-                modalMessage.textContent = message;
-                modalOverlay.classList.add('show');
-
-                return new Promise((resolve) => {
-                    this.modalPromise = { resolve };
-                });
-            }
-
-            hideModal() {
-                document.getElementById('confirmation-modal').classList.remove('show');
+                const result = new Uint8Array(size);
+                let offset = 0;
+                for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.byteLength; }
+                return result;
+            } finally {
+                clearTimeout(timeout);
+                controller.abort();
+                if (reader) await reader.cancel().catch(() => {});
             }
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            new SwfPlayer();
-        });
-    </script>
-    <script>
+        function extractZipEntry(file, limit = MAX_GAME_BYTES) {
+            return new Promise((resolve, reject) => {
+                const chunks = [];
+                let size = 0;
+                let finished = false;
+                const stream = file.internalStream('uint8array');
+                const timer = setTimeout(() => fail(new Error('ZIP extraction timed out')), 10000);
+                function fail(error) {
+                    if (finished) return;
+                    finished = true;
+                    clearTimeout(timer);
+                    stream.pause();
+                    reject(error);
+                }
+                stream.on('data', chunk => {
+                    if (finished) return;
+                    size += chunk.byteLength;
+                    if (size > limit) return fail(new Error('Extracted game exceeds the 25 MB size limit'));
+                    chunks.push(chunk);
+                }).on('error', fail).on('end', () => {
+                    if (finished) return;
+                    finished = true;
+                    clearTimeout(timer);
+                    resolve(new Blob(chunks));
+                }).resume();
+            });
+        }
+
         class GameLoaders {
             // Flash SWF Loader using Ruffle
             static async loadFlash(game, container) {
+                const bytes = await readGameBytes(game.url);
+                const iframe = document.createElement('iframe');
+                iframe.setAttribute('sandbox', 'allow-scripts allow-pointer-lock');
+                iframe.referrerPolicy = 'no-referrer';
+                iframe.title = 'Isolated Flash game';
+                iframe.style.cssText = 'width:100%;height:100%;border:0;background:#000';
+                const token = crypto.randomUUID();
+                const result = new Promise((resolve, reject) => {
+                    const timer = setTimeout(() => finish(new Error('Flash player could not load. Check your connection and try again.')), 30000);
+                    function finish(error) {
+                        clearTimeout(timer);
+                        window.removeEventListener('message', onMessage);
+                        if (error) { iframe.remove(); reject(error); }
+                        else resolve({ iframe, cleanup: () => iframe.remove() });
+                    }
+                    function onMessage(event) {
+                        if (event.source !== iframe.contentWindow || event.data?.token !== token) return;
+                        if (event.data.type === 'flash-loaded') finish();
+                        if (event.data.type === 'flash-error') finish(new Error(String(event.data.error || 'Unable to load Flash game').slice(0, 300)));
+                    }
+                    window.addEventListener('message', onMessage);
+                    iframe.addEventListener('load', () => {
+                        iframe.contentWindow.postMessage({ type: 'load-flash', token, bytes: bytes.buffer }, '*', [bytes.buffer]);
+                    }, { once: true });
+                });
+                // Ruffle's networking option alone is insufficient: restrict network
+                // requests with CSP and run both the emulator and movie in an opaque frame.
+                iframe.srcdoc = `<!doctype html><html><head><meta charset="utf-8">
+                    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com/@ruffle-rs/ruffle@0.6.0/; style-src 'unsafe-inline'; connect-src https://unpkg.com/@ruffle-rs/ruffle@0.6.0/; img-src data: blob:; media-src data: blob:; worker-src blob:">
+                    <style>html,body,ruffle-player{margin:0;width:100%;height:100%;display:block;background:#000}</style>
+                    <script>window.RufflePlayer={config:{polyfills:false,publicPath:'https://unpkg.com/@ruffle-rs/ruffle@0.6.0/'}};<\/script>
+                    <script src="https://unpkg.com/@ruffle-rs/ruffle@0.6.0/ruffle.js" integrity="sha384-eYV2CNXhSXdisg3+UbVhJIIRzygKoAWlfmBTkftwI9bsN5ctHUovLhbLzCcTelXF" crossorigin="anonymous"><\/script>
+                    </head><body><script>
+                    addEventListener('message', async event => {
+                        if(event.source!==parent || event.data?.type!=='load-flash' || !(event.data.bytes instanceof ArrayBuffer))return;
+                        const token=event.data.token;
+                        try {
+                            const player=window.RufflePlayer.newest().createPlayer();
+                            document.body.appendChild(player);
+                            await player.load({data:new Uint8Array(event.data.bytes),allowScriptAccess:false,allowNetworking:'none',openUrlMode:'deny',maxExecutionDuration:5});
+                            parent.postMessage({type:'flash-loaded',token},'*');
+                        }catch(error){parent.postMessage({type:'flash-error',token,error:String(error.message)},'*');}
+                    },{once:true});
+                    <\/script></body></html>`;
+                container.appendChild(iframe);
                 try {
-                    const ruffle = window.RufflePlayer.newest();
-                    const player = ruffle.createPlayer();
-                    container.appendChild(player);
-                    await player.load({ url: game.url });
-                    return { player, cleanup: () => player.remove() };
+                    return await result;
                 } catch (error) {
                     throw new Error(`Flash loading failed: ${error.message}`);
                 }
@@ -1222,6 +912,9 @@
             // HTML5 Game Loader
             static async loadHTML(game, container) {
                 const iframe = document.createElement('iframe');
+                iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-pointer-lock');
+                iframe.referrerPolicy = 'no-referrer';
+                iframe.title = game.name || 'HTML game';
                 iframe.src = game.url;
                 iframe.style.width = '100%';
                 iframe.style.height = '100%';
@@ -1240,43 +933,22 @@
 
             // JavaScript Game Loader
             static async loadJavaScript(game, container) {
-                const gameFrame = document.createElement('div');
-                gameFrame.style.width = '100%';
-                gameFrame.style.height = '100%';
-                gameFrame.style.background = '#000';
-                gameFrame.innerHTML = `
-                    <canvas id="gameCanvas-${game.id}" width="800" height="600" style="width:100%; height:100%; object-fit:contain;"></canvas>
-                `;
-                
-                container.appendChild(gameFrame);
-                
                 try {
-                    // Create script element and execute
-                    const script = document.createElement('script');
-                    const response = await fetch(game.url);
-                    const jsCode = await response.text();
-                    
-                    // Wrap the code to provide canvas context
-                    const wrappedCode = `
-                        (function() {
-                            const canvas = document.getElementById('gameCanvas-${game.id}');
-                            const ctx = canvas.getContext('2d');
-                            ${jsCode}
-                        })();
-                    `;
-                    
-                    script.textContent = wrappedCode;
-                    document.head.appendChild(script);
-                    
-                    return { 
-                        gameFrame, 
-                        cleanup: () => {
-                            gameFrame.remove();
-                            script.remove();
-                        }
-                    };
+                    const jsCode = new TextDecoder().decode(await readGameBytes(game.url, 1024 * 1024));
+                    const iframe = document.createElement('iframe');
+                    iframe.setAttribute('sandbox', 'allow-scripts allow-pointer-lock');
+                    iframe.referrerPolicy = 'no-referrer';
+                    iframe.title = game.name || 'JavaScript game';
+                    iframe.style.cssText = 'width:100%;height:100%;border:0;background:#000';
+                    // A separate document releases game timers and listeners when it is closed.
+                    const encodedCode = JSON.stringify(jsCode).replace(/</g, '\\u003c');
+                    iframe.srcdoc = '<!DOCTYPE html><html><body style="margin:0;background:#000">' +
+                        '<canvas id="gameCanvas" width="800" height="600" style="width:100%;height:100%;object-fit:contain"></canvas>' +
+                        '<script>const canvas=document.getElementById("gameCanvas");const ctx=canvas.getContext("2d");' +
+                        '(new Function("canvas", "ctx", ' + encodedCode + '))(canvas,ctx);<\/script></body></html>';
+                    container.appendChild(iframe);
+                    return { iframe, cleanup: () => iframe.remove() };
                 } catch (error) {
-                    gameFrame.remove();
                     throw new Error(`JavaScript loading failed: ${error.message}`);
                 }
             }
@@ -1284,10 +956,11 @@
             // ZIP Archive Loader (extracts and loads main file)
             static async loadZIP(game, container) {
                 try {
-                    const response = await fetch(game.url);
-                    const arrayBuffer = await response.arrayBuffer();
+                    if (!window.JSZip) throw new Error('ZIP support could not load. Check your connection and try again.');
+                    const arrayBuffer = await readGameBytes(game.url);
                     const zip = new JSZip();
                     const zipContents = await zip.loadAsync(arrayBuffer);
+                    if (Object.keys(zipContents.files).length > 256) throw new Error('ZIP archives may contain at most 256 entries');
                     
                     // Look for main files in order of priority
                     const mainFiles = ['index.html', 'game.html', 'main.html', 'index.swf', 'game.swf'];
@@ -1314,26 +987,31 @@
                         throw new Error('No playable files found in ZIP archive');
                     }
                     
-                    const fileData = await mainFile.async('blob');
-                    const fileUrl = URL.createObjectURL(fileData);
+                    const fileData = new Blob([await extractZipEntry(mainFile)], {
+                        type: mainFile.name.toLowerCase().endsWith('.swf') ? 'application/x-shockwave-flash' : 'text/html'
+                    });
+                    const fileUrl = createGameUrl(fileData);
                     
                     // Create a temporary game object for the extracted file
                     const extractedGame = {
                         ...game,
                         url: fileUrl,
-                        type: mainFile.name.endsWith('.swf') ? 'swf' : 'html'
+                        type: mainFile.name.toLowerCase().endsWith('.swf') ? 'swf' : 'html'
                     };
                     
                     // Load the extracted file using appropriate loader
-                    const result = mainFile.name.endsWith('.swf') 
-                        ? await this.loadFlash(extractedGame, container)
-                        : await this.loadHTML(extractedGame, container);
+                    let result;
+                    try {
+                        result = extractedGame.type === 'swf'
+                            ? await this.loadFlash(extractedGame, container)
+                            : await this.loadHTML(extractedGame, container);
+                    } catch (error) { revokeGameUrl(fileUrl); throw error; }
                     
                     // Override cleanup to also revoke the blob URL
                     const originalCleanup = result.cleanup;
                     result.cleanup = () => {
                         originalCleanup();
-                        URL.revokeObjectURL(fileUrl);
+                        revokeGameUrl(fileUrl);
                     };
                     
                     return result;
@@ -1345,19 +1023,22 @@
             // JSON Game Config Loader (for web games with metadata)
             static async loadJSON(game, container) {
                 try {
-                    const response = await fetch(game.url);
-                    const config = await response.json();
+                    const config = JSON.parse(new TextDecoder().decode(await readGameBytes(game.url, 256 * 1024)));
                     
-                    if (!config.gameUrl) {
+                    if (!config || typeof config !== 'object' || Array.isArray(config) || typeof config.gameUrl !== 'string') {
                         throw new Error('JSON config missing gameUrl field');
                     }
                     
                     // Create game object from JSON config
+                    const configuredUrl = remoteGameUrl(config.gameUrl, game.sourceUrl || game.url);
+                    const configuredType = config.type || this.detectGameType(configuredUrl);
+                    if (configuredType === 'json') throw new Error('Nested JSON game configs are not supported');
+                    if (!['swf', 'html', 'js', 'zip'].includes(configuredType)) throw new Error('Unsupported game type');
                     const configuredGame = {
                         ...game,
-                        url: config.gameUrl,
-                        name: config.title || game.name,
-                        type: config.type || this.detectGameType(config.gameUrl)
+                        url: configuredUrl,
+                        name: typeof config.title === 'string' ? config.title.slice(0, 200) : game.name,
+                        type: configuredType
                     };
                     
                     // Load the configured game
@@ -1387,7 +1068,7 @@
 
             // Detect game type from file extension or URL
             static detectGameType(url) {
-                const extension = url.split('.').pop().toLowerCase().split('?')[0];
+                const extension = url.split(/[?#]/)[0].split('.').pop().toLowerCase();
                 switch (extension) {
                     case 'swf': return 'swf';
                     case 'html': case 'htm': return 'html';
@@ -1404,6 +1085,7 @@
                 this.loadedGames = [];
                 this.activeGames = [];
                 this.modalPromise = null;
+                this.pendingImports = 0;
                 this.init();
             }
 
@@ -1525,90 +1207,86 @@
                     this.showNotification(`unsupported file type: ${fileExtension}`, 'error');
                     return;
                 }
+                if (!this.canAddGame(file.size)) return;
+                this.addLibraryGame({
+                    id: Date.now() + Math.random(),
+                    name: file.name.replace(/\.(swf|html|htm|js|zip|json)$/i, '').slice(0, 200),
+                    size: file.size,
+                    url: createGameUrl(new Blob([file], { type: fileExtension === 'html' || fileExtension === 'htm' ? 'text/html' : 'application/octet-stream' })),
+                    type: GameLoaders.detectGameType(file.name)
+                });
+            }
 
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const game = {
-                        id: Date.now() + Math.random(),
-                        name: file.name.replace(/\.(swf|html|htm|js|zip|json)$/i, ''),
-                        size: file.size,
-                        url: e.target.result,
-                        type: GameLoaders.detectGameType(file.name)
-                    };
-                    this.loadedGames.push(game);
-                    this.renderGameList();
-                    this.updateStats();
-                    this.showNotification(`added "${game.name}" (${game.type.toUpperCase()})`, 'success');
-                };
-                reader.readAsDataURL(file);
+            canAddGame(size) {
+                if (!Number.isFinite(size) || size < 0 || size > MAX_GAME_BYTES) {
+                    this.showNotification('Each game must be 25 MB or smaller.', 'error');
+                    return false;
+                }
+                if (this.loadedGames.length >= MAX_GAME_COUNT || this.loadedGames.reduce((total, game) => total + game.size, size) > MAX_LIBRARY_BYTES) {
+                    this.showNotification('The library holds up to 50 games and 100 MB. Remove a game before adding another.', 'error');
+                    return false;
+                }
+                return true;
+            }
+
+            addLibraryGame(game) {
+                this.loadedGames.push(game);
+                this.renderGameList();
+                this.updateStats();
+                this.showNotification(`added "${game.name}" (${game.type.toUpperCase()})`, 'success');
             }
 
             async addGameFromUrl(url) {
-                const supportedExtensions = ['swf', 'html', 'htm', 'js', 'zip', 'json'];
-                const urlExtension = url.split('.').pop().toLowerCase().split('?')[0];
-                
-                if (!supportedExtensions.includes(urlExtension)) {
-                    this.showNotification(`unsupported url type: ${urlExtension}`, 'error');
+                let parsedUrl;
+                try {
+                    parsedUrl = new URL(remoteGameUrl(url));
+                    url = parsedUrl.href;
+                } catch (error) {
+                    this.showNotification('enter a valid HTTP or HTTPS game URL', 'error');
                     return;
                 }
-
+                if (!this.canAddGame(0)) return;
+                if (this.pendingImports >= 3) {
+                    this.showNotification('Wait for the current downloads before adding more games.', 'warning');
+                    return;
+                }
+                this.pendingImports++;
                 this.showNotification(`fetching "${url}"...`, 'info');
                 try {
-                    const response = await fetch(url);
-                    if (!response.ok) {
-                        throw new Error(`http error! status: ${response.status}`);
-                    }
-
-                    const filename = url.substring(url.lastIndexOf('/') + 1);
+                    const filename = parsedUrl.pathname.substring(parsedUrl.pathname.lastIndexOf('/') + 1);
                     const gameType = GameLoaders.detectGameType(url);
-                    
-                    if (gameType === 'html' || gameType === 'js' || gameType === 'json') {
-                        // For web-based games, store the URL directly
-                        const game = {
-                            id: Date.now() + Math.random(),
-                            name: filename.replace(/\.(html|htm|js|json)$/i, ''),
-                            size: 0, // Unknown size for URL-based games
-                            url: url,
-                            type: gameType
-                        };
-                        this.loadedGames.push(game);
-                        this.renderGameList();
-                        this.updateStats();
-                        this.showNotification(`added "${game.name}" from url (${game.type.toUpperCase()})`, 'success');
-                    } else {
-                        // For binary files (SWF, ZIP), download and store as data URL
-                        const blob = await response.blob();
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            const game = {
-                                id: Date.now() + Math.random(),
-                                name: filename.replace(/\.(swf|zip)$/i, ''),
-                                size: blob.size,
-                                url: e.target.result,
-                                type: gameType
-                            };
-                            this.loadedGames.push(game);
-                            this.renderGameList();
-                            this.updateStats();
-                            this.showNotification(`added "${game.name}" from url (${game.type.toUpperCase()})`, 'success');
-                        };
-                        reader.onerror = () => {
-                            this.showNotification('failed to read game data from url', 'error');
-                        };
-                        reader.readAsDataURL(blob);
-                    }
+                    // HTML navigates in its sandbox so relative resources retain their
+                    // origin. Other formats are bounded before entering the library.
+                    const limit = gameType === 'json' ? 256 * 1024 : gameType === 'js' ? 1024 * 1024 : MAX_GAME_BYTES;
+                    const bytes = gameType === 'html' ? null : await readGameBytes(url, limit);
+                    if (!this.canAddGame(bytes?.byteLength || 0)) return;
+                    this.addLibraryGame({
+                        id: Date.now() + Math.random(),
+                        name: (filename.replace(/\.(swf|html|htm|js|zip|json)$/i, '') || parsedUrl.hostname).slice(0, 200),
+                        size: bytes?.byteLength || 0,
+                        url: bytes ? createGameUrl(new Blob([bytes])) : url,
+                        sourceUrl: url,
+                        type: gameType
+                    });
 
                 } catch (error) {
                     console.error("Error fetching game from URL:", error);
                     this.showNotification(`failed to fetch game: ${error.message}`, 'error');
+                } finally {
+                    this.pendingImports--;
                 }
             }
 
             async playGame(game) {
+                if (!game) return;
                 const existingInstance = this.activeGames.find(ag => ag.id === game.id);
                 
                 if (existingInstance) {
                     this.switchToGame(game.id);
+                    return;
+                }
+                if (this.activeGames.length >= 6) {
+                    this.showNotification('Close a running game before opening another (maximum 6).', 'warning');
                     return;
                 }
 
@@ -1624,7 +1302,7 @@
                     </div>
                     <div class="control-bar">
                         <div class="game-info-bar">
-                            <span class="game-name">${game.name} (${game.type.toUpperCase()})</span>
+                            <span class="game-name"></span>
                         </div>
                         <div class="control-buttons">
                             <button class="btn btn-secondary btn-sm fullscreen-btn" title="fullscreen">
@@ -1636,37 +1314,42 @@
                         </div>
                     </div>
                 `;
+                gameInstance.querySelector('.game-name').textContent = `${game.name} (${game.type.toUpperCase()})`;
 
                 const gameLoaderContainer = gameInstance.querySelector('.game-loader-container');
+                gameLoaderContainer.style.cssText = 'width:100%;height:100%';
                 document.getElementById('game-container').appendChild(gameInstance);
+                const activeGame = { id: game.id, name: game.name, type: game.type, element: gameInstance, loader: null };
+                this.activeGames.push(activeGame);
                 
                 this.switchToGame(game.id);
 
                 try {
                     const gameLoader = await GameLoaders.loadGame(game, gameLoaderContainer);
 
-                    this.activeGames.push({
-                        id: game.id,
-                        name: game.name,
-                        type: game.type,
-                        element: gameInstance,
-                        loader: gameLoader
-                    });
+                    if (!this.activeGames.includes(activeGame)) {
+                        if (gameLoader.cleanup) gameLoader.cleanup();
+                        return;
+                    }
+                    activeGame.loader = gameLoader;
 
                     this.updateStats();
                     this.showNotification(`playing "${game.name}" (${game.type.toUpperCase()})`, 'success');
                 } catch (error) {
                     console.error("Error loading game:", error);
-                    gameInstance.remove();
-                    this.showNotification(`error loading game: ${error.message}`, 'error');
+                    if (this.activeGames.includes(activeGame)) {
+                        this.closeGame(game.id);
+                        this.showNotification(`error loading game: ${error.message}`, 'error');
+                    }
                 }
             }
             
             switchToGame(id) {
+                const newActive = document.querySelector(`.game-instance[data-id="${id}"]`);
+                if (!newActive) return;
                 document.querySelectorAll('.game-instance').forEach(instance => {
                     instance.classList.remove('active');
                 });
-                const newActive = document.querySelector(`.game-instance[data-id="${id}"]`);
                 if (newActive) {
                     newActive.classList.add('active');
                 }
@@ -1709,6 +1392,7 @@
                     this.renderGameList();
                     this.updateStats();
                     this.closeGame(id);
+                    revokeGameUrl(game.url);
                     this.showNotification(`removed "${game.name}"`, 'info');
                 }
             }
@@ -1725,6 +1409,7 @@
                         game.element.remove();
                     });
                     
+                    this.loadedGames.forEach(game => revokeGameUrl(game.url));
                     this.loadedGames = [];
                     this.activeGames = [];
                     this.renderGameList();
@@ -1751,7 +1436,7 @@
                     li.dataset.id = game.id;
                     li.innerHTML = `
                         <div class="game-info">
-                            <span class="name">${game.name} <span style="color: #666; font-size: 0.8em;">[${game.type.toUpperCase()}]</span></span>
+                            <span class="name"></span>
                             <span class="size">${game.size > 0 ? this.formatSize(game.size) : 'web-based'}</span>
                         </div>
                         <div class="game-actions">
@@ -1763,6 +1448,7 @@
                             </button>
                         </div>
                     `;
+                    li.querySelector('.name').textContent = `${game.name} [${game.type.toUpperCase()}]`;
                     gameList.appendChild(li);
                 });
 
@@ -1784,7 +1470,8 @@
             }
 
             updateActiveGameClass() {
-                const activeGameId = this.activeGames.length > 0 ? this.activeGames[this.activeGames.length - 1].id : null;
+                const activeInstance = document.querySelector('.game-instance.active');
+                const activeGameId = activeInstance ? parseFloat(activeInstance.dataset.id) : null;
                 document.querySelectorAll('.game-item').forEach(item => {
                     const id = parseFloat(item.dataset.id);
                     if (id === activeGameId) {
@@ -1797,12 +1484,16 @@
 
             toggleFullscreen(element) {
                 if (!document.fullscreenElement) {
+                    if (!element.requestFullscreen) {
+                        this.showNotification('Fullscreen is not supported by this browser.', 'error');
+                        return;
+                    }
                     element.requestFullscreen().catch(err => {
                         this.showNotification(`error: unable to activate fullscreen mode.`, 'error');
                         console.error("Fullscreen error:", err);
                     });
                 } else {
-                    document.exitFullscreen();
+                    document.exitFullscreen().catch(() => this.showNotification('Unable to exit fullscreen.', 'error'));
                 }
             }
             
@@ -1829,10 +1520,12 @@
 
                 setTimeout(() => {
                     notification.classList.remove('show');
-                    notification.addEventListener('transitionend', () => notification.remove());
+                    notification.addEventListener('transitionend', () => notification.remove(), { once: true });
+                    setTimeout(() => notification.remove(), 500);
                 }, 3000);
             }
             showModal(title, message) {
+                if (this.modalPromise) this.modalPromise.resolve(false);
                 const modalOverlay = document.getElementById('confirmation-modal');
                 const modalTitle = document.getElementById('modal-title');
                 const modalMessage = document.getElementById('modal-message');
@@ -1855,7 +1548,6 @@
             new SwfPlayer();
         });    
         </script>
-    <script src="https://unpkg.com/@ruffle-rs/ruffle"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
 
 </body></html>

@@ -1,6 +1,5 @@
 self.__uv$config = {
   prefix: '/service/',
-  bare: 'https://bare.mercuryworkshop.com/',
   encodeUrl: Ultraviolet.codec.xor.encode,
   decodeUrl: Ultraviolet.codec.xor.decode,
   handler: '/ultrav/uv.handler.js',

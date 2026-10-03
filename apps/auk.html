@@ -1,19 +1,12 @@
+<!DOCTYPE html>
 <html lang="en"><head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>auk.</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" integrity="sha512-p+U1+KqR8K6zLhc1q2QmQfKQFfD5bBm6Tqf+b6abR+u5X7Hz0DvSxYZJ2kDZ6dSE3Ez9OnJ0lzOGC+1G4RzOGw==" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/github-dark.min.css">
-  <link rel="stylesheet" href="style.css">
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag() {
-    dataLayer.push(arguments);
-  }
-  gtag("js", new Date());
-  gtag("config", "G-PXHK7Q7G3Z");
-</script>
+  <link rel="stylesheet" href="auk.css">
 </head>
 
 <body class="dark">
@@ -33,6 +26,7 @@
     <div class="button-group">
       <button id="clear-btn" title="Clear Code" aria-label="Clear Code"><i class="fas fa-trash"></i> Clear</button>
       <button id="new-file-btn" title="Create New File" aria-label="Create New File"><i class="fas fa-file"></i> New File</button>
+      <button id="run-preview-btn" title="Run the active HTML preview (Ctrl+Enter)" aria-label="Run Preview"><i class="fas fa-play"></i> Run Preview</button>
       <div class="dropdown">
         <button class="dropbtn" aria-haspopup="true" aria-expanded="false"><i class="fas fa-folder-open"></i> File <i class="fas fa-caret-down"></i></button>
         <div class="dropdown-content" role="menu">
@@ -51,30 +45,18 @@
       <div class="sidebar-header">
         <h3>Your Files</h3>
       </div>
-      <ul id="sidebar-files-list">
-      <li data-id="1789435322070" class="active">
-    <span>index.html</span>
-    <button class="delete-sidebar-file" title="Delete File" aria-label="Delete File">×</button>
-  </li></ul>
+      <ul id="sidebar-files-list"></ul>
     </aside>
 
     <div class="editor-preview-container">
       <div class="tabs">
-        <ul id="tabs-list">
-        <li data-id="1789435322070" class="active">index.html <button class="delete-tab" title="Delete File" aria-label="Delete File">×</button></li></ul>
+        <ul id="tabs-list"></ul>
       </div>
 
-      <div class="editor-container">
-      <div class="editor-panel active" data-id="1789435322070"><div class="panel-header">index.html</div><textarea id="editor-1789435322070" placeholder="Write your HTML code here..." style="display: none;"></textarea><div class="CodeMirror cm-s-default CodeMirror-wrap" translate="no" style="clip-path: inset(0px); width: 100%; height: 100%; font-size: 14px;"><div style="overflow: hidden; position: relative; width: 3px; height: 0px; top: 4px; left: 48px;"><textarea autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" style="position: absolute; bottom: -1em; padding: 0px; width: 1000px; height: 1em; min-height: 1em; outline: none;"></textarea></div><div class="CodeMirror-vscrollbar" tabindex="-1" cm-not-content="true"><div style="min-width: 1px; height: 0px;"></div></div><div class="CodeMirror-hscrollbar" tabindex="-1" cm-not-content="true"><div style="height: 100%; min-height: 1px; width: 0px;"></div></div><div class="CodeMirror-scrollbar-filler" cm-not-content="true"></div><div class="CodeMirror-gutter-filler" cm-not-content="true"></div><div class="CodeMirror-scroll" tabindex="-1"><div class="CodeMirror-sizer" style="margin-left: 44px; margin-bottom: -15px; border-right-width: 35px; min-height: 25px; padding-right: 0px; padding-bottom: 0px;"><div style="position: relative; top: 0px;"><div class="CodeMirror-lines" role="presentation"><div role="presentation" style="position: relative; outline: none;"><div class="CodeMirror-measure"><pre class="CodeMirror-line-like"><span>xxxxxxxxxx</span></pre><div class="CodeMirror-linenumber CodeMirror-gutter-elt"><div>1</div></div></div><div class="CodeMirror-measure"></div><div style="position: relative; z-index: 1;"></div><div class="CodeMirror-cursors"><div class="CodeMirror-cursor" style="left: 4px; top: 0px; height: 17px;">&nbsp;</div></div><div class="CodeMirror-code" role="presentation"><div style="position: relative;"><div class="CodeMirror-gutter-wrapper" aria-hidden="true" style="left: -44px;"><div class="CodeMirror-linenumber CodeMirror-gutter-elt" style="left: 0px; width: 21px;">1</div></div><pre class=" CodeMirror-line " role="presentation"><span role="presentation" style="padding-right: 0.1px;"><span cm-text="">&ZeroWidthSpace;</span></span></pre></div></div></div></div></div></div><div style="position: absolute; height: 35px; width: 1px; border-bottom: 0px solid transparent; top: 25px;"></div><div class="CodeMirror-gutters" style="left: 0px; height: 60px;"><div class="CodeMirror-gutter CodeMirror-linenumbers" style="width: 29px;"></div></div></div></div></div></div>
+      <div class="editor-container"></div>
       <div class="preview-container">
         <div class="preview-header">Preview</div>
-      <iframe class="preview-iframe" id="preview-1789435322070" sandbox="allow-scripts allow-same-origin" srcdoc="&lt;!DOCTYPE html&gt;
-&lt;html lang=&quot;en&quot;&gt;
-&lt;head&gt;
-  &lt;meta charset=&quot;UTF-8&quot;&gt;
-  &lt;title&gt;Preview of index.html&lt;/title&gt;&lt;/head&gt;
-&lt;body&gt;&lt;/body&gt;
-&lt;/html&gt;" style="display: block;"></iframe></div>
+      </div>
     </div>
   </div>
   <div class="modal" id="new-file-modal" aria-hidden="true" role="dialog" aria-labelledby="new-file-modal-title">
@@ -158,7 +140,7 @@
       </div>
     </div>
   </div>
-  <div class="modal" id="shortcuts-modal" aria-hidden="false" role="dialog" aria-labelledby="shortcuts-modal-title" style="display: flex;">
+  <div class="modal" id="shortcuts-modal" aria-hidden="true" role="dialog" aria-labelledby="shortcuts-modal-title">
     <div class="modal-content">
       <span class="close" id="close-shortcuts" aria-label="Close">×</span>
       <h2 id="shortcuts-modal-title">Keyboard Shortcuts</h2>
@@ -166,6 +148,7 @@
         <li><strong>Ctrl + N</strong>: New File</li>
         <li><strong>Ctrl + S</strong>: Save</li>
         <li><strong>Ctrl + D</strong>: Download</li>
+        <li><strong>Ctrl + Enter</strong>: Run HTML Preview</li>
         <li><strong>Ctrl + F</strong>: Search Files</li>
         <li><strong>Ctrl + Shift + C</strong>: Clear Code</li>
         <li><strong>Ctrl + P</strong>: Toggle Preview</li>
@@ -173,19 +156,20 @@
     </div>
   </div>
   <div id="notification-container" aria-live="polite" aria-atomic="true"></div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/xml/xml.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/css/css.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/python/python.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/ruby/ruby.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/php/php.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/go/go.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/swift/swift.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/clike/clike.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/rust/rust.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/Consessions/flyflix@main/auxscript.js"></script>
-<script async="" src="https://www.googletagmanager.com/gtag/js?id=WLTG1S4STB"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js" integrity="sha384-uTzi9PU3axyLeKbgCPqQdNFT5Q23BRgFbmtrolYC7ROlbWVv7IggV+3r0ALSQd/s" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js" integrity="sha384-g0o+WW9mdIxA7LaaCKTkRm0M5TVT+Bb4s9eocxPsI2G0Xm0POG9iD6G6qP1IIsfS" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/xml/xml.min.js" integrity="sha384-xPpkMo5nDgD98fIcuRVYhxkZV6/9Y4L8s3p0J5c4MxgJkyKJ8BJr+xfRkq7kn6Tw" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/css/css.min.js" integrity="sha384-fpeIC2FZuPmw7mIsTvgB5BNc8QVxQC/nWg2W+CgPYOAiBiYVuHe2E8HiTWHBMIJQ" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/htmlmixed/htmlmixed.min.js" integrity="sha384-xYIbc5F55vPi7pb/lUnFj3wu24HlpAMZdtBHkNrb2YhPzJV3pX7+eqXT2PXSNMrw" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/python/python.min.js" integrity="sha384-Xy+2exU6lBoT4OpUOtnQb+cUpn+nlJQEHvRobWVtwz6wIsw4oNoO7xyd/l8rYgMy" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/ruby/ruby.min.js" integrity="sha384-X1fjw3/PXnpDnnE168So+cJbmr6pkkiFoM+e25e2G7UNQRSLh5wcn/h7qbbSq2nC" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/clike/clike.min.js" integrity="sha384-bZx++XMDqT0QRVoq6eVZnkq04LmwWZ0eLo0tFdSGkOJgH8qiqeMIIFJ+mRaM0wfb" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/php/php.min.js" integrity="sha384-1FUwPY2kaZKXw258/9CYBSS+zcc3CPggxE1zLjmYYiOdkcOw3KcXH5VNJWWbjw2U" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/go/go.min.js" integrity="sha384-Lta51S44BeeJtSB7HoRnIzvHdD+1OhN+s9Nh5WP3Bp3QsIm6xNd7JBIF/93Yu4iK" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/swift/swift.min.js" integrity="sha384-VTJz9HPfJaa5K8kZ0ZXEuy/7QvNcfOnN23vIZPz4kNfubM9ide6/mXfbzMkk+SWN" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/mode/simple.min.js" integrity="sha384-5+aYjV0V2W3IwhAYp/9WOrGMv1TaYkCjnkkW7Hv3yJQo28MergRCSRaUIUzDUs2J" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/rust/rust.min.js" integrity="sha384-SR4yBoZPBNymEiWYb4h8YbjccmCDvVyzr5DYXq4QWt7E/voRHmUbr/ja617eM6Rh" crossorigin="anonymous"></script>
+  <script src="auk.js"></script>
 
 
 

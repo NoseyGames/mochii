@@ -335,10 +335,15 @@
   <script>
     const historyBtn = document.getElementById('history-btn');
 
-    // Set authorization key upon clicking 9 dots
+    // This is a cosmetic navigation gate, not authentication.
     historyBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      sessionStorage.setItem('authorized_access', 'a1qa2d');
+      try {
+        sessionStorage.setItem('authorized_access', 'a1qa2d');
+      } catch (error) {
+        e.preventDefault();
+        window.location.href = 'math.html';
+      }
     });
 
     // Redirect anywhere else clicked to Google Classroom

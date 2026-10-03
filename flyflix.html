@@ -1,109 +1,73 @@
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <!-- Dynamic Ad & Iframe Blocker -->
-    <script>
-      (function() {
-        const observer = new MutationObserver((mutations) => {
-          mutations.forEach((mutation) => {
-            mutation.addedNodes.forEach((node) => {
-              if (node.tagName === 'IFRAME') {
-                const src = node.src || '';
-                const srcdoc = node.getAttribute('srcdoc') || '';
-                if (
-                  src.includes('subduepaler.cyou') || 
-                  src.includes('fy.illamonvascons.com') || 
-                  srcdoc.includes('TURN ON Ad Blocker') ||
-                    srcdoc.includes('Ad Blocker Pro') ||
-                      srcdoc.includes('Ad Blocker)
-                    
-                ) {
-                  node.remove();
-                  console.warn('Blocked unwanted iframe ad injection.');
-                }
-              }
-            });
-          });
-        });
-
-        observer.observe(document.documentElement, {
-          childList: true,
-          subtree: true
-        });
-      })();
-    </script>
-
-    <!-- CSS Fallback Hiding Rules -->
-    <style>
-      iframe[src*="subduepaler.cyou"],
-      iframe[src*="fy.illamonvascons.com"],
-      iframe[srcdoc*="TURN ON Ad Blocker"],
-      iframe[srcdoc*="ad"]{
-        display: none !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
-      }
-    </style>
-
-    <!-- Primary Meta -->
-    <title>Flyflix - Watch Movies, TV Shows, Sports &amp; Play Games</title>
-    <meta name="robots" content="index, follow">
-    <link rel="canonical" href="https://cdn.jsdelivr.net/gh/Consessions/flyflix@main/logo.png">
-
-    <!-- Open Graph -->
-    <meta property="og:type" content="website">
-    <meta property="og:image" content="https://cdn.jsdelivr.net/gh/Consessions/flyflix@main/logo.png">
-    <meta property="og:image:width" content="1200">
-    <meta property="og:image:height" content="630">
-    <meta property="og:locale" content="en_US">
-
-    <!-- Twitter Card -->
-    <meta name="twitter:image" content="https://cdn.jsdelivr.net/gh/Consessions/flyflix@main/logo.png">
-
-    <!-- Geo -->
-    <meta name="geo.region" content="US">
-    <meta name="geo.placename" content="United States">
-    <meta name="language" content="English">
-    <meta name="revisit-after" content="7 days">
-    <meta name="rating" content="general">
-
-    <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="icon" type="image/png" href="/logo.png" sizes="500x500">
-    <link rel="shortcut icon" href="/favicon.ico">
-    <link rel="apple-touch-icon" href="https://cdn.jsdelivr.net/gh/Consessions/flyflix@main/logo.png">
-    <link rel="manifest" href="https://cdn.jsdelivr.net/gh/Consessions/flyflix@main/site.webmanifest">
-
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
-
-    <script type="module" crossorigin="" src="https://cdn.jsdelivr.net/gh/Consessions/flyflix@main/main.js"></script>
-    <link rel="stylesheet" crossorigin="" href="https://cdn.jsdelivr.net/gh/Consessions/flyflix@main/main.css">
-    <style id="_goober"> @keyframes go2264125279{from{transform:scale(0) rotate(45deg);opacity:0;}to{transform:scale(1) rotate(45deg);opacity:1;}}@keyframes go3020080000{from{transform:scale(0);opacity:0;}to{transform:scale(1);opacity:1;}}@keyframes go463499852{from{transform:scale(0) rotate(90deg);opacity:0;}to{transform:scale(1) rotate(90deg);opacity:1;}}@keyframes go1268368563{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}@keyframes go1310225428{from{transform:scale(0) rotate(45deg);opacity:0;}to{transform:scale(1) rotate(45deg);opacity:1;}}@keyframes go651618207{0%{height:0;width:0;opacity:0;}40%{height:0;width:6px;opacity:1;}100%{opacity:1;height:10px;}}@keyframes go901347462{from{transform:scale(0.6);opacity:0.4;}to{transform:scale(1);opacity:1;}}.go4109123758{z-index:9999;}.go4109123758 > *{pointer-events:auto;}</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Flyflix · Monkeh</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;color:#eee;background:#111}
+    *{box-sizing:border-box}html,body{margin:0;height:100%}body{display:flex;flex-direction:column}
+    header{display:flex;align-items:center;gap:16px;padding:12px 18px;border-bottom:1px solid #333;background:#181818}
+    strong{letter-spacing:-.03em;font-size:19px}p{margin:0;flex:1;color:#b4b4bf;font-size:13px;line-height:1.5}
+    a,button{color:#eee;border:1px solid #454550;border-radius:8px;padding:8px 12px;background:#25252d;text-decoration:none;font:inherit;font-size:12px;cursor:pointer}
+    iframe{width:100%;flex:1;min-height:0;border:0;background:#090909}button:hover,a:hover{background:#363641}
+    @media(max-width:600px){header{flex-wrap:wrap}p{flex-basis:70%}}
+  </style>
 </head>
-<body style="overflow: unset;">
-    <div id="root">
-        <div data-rht-toaster="" style="position: fixed; z-index: 9999; inset: 16px; pointer-events: none;"></div>
-        <div>
-            <header class="relative md:sticky w-full top-0 z-50 transition-colors duration-300 bg-gradient-to-b from-black/80 to-transparent">
-                <div class="px-4 sm:px-8 md:px-14 h-16 flex items-center justify-between gap-6">
-                    <div class="flex items-center gap-8 ">
-                        <a class="shrink-0" href="/" data-discover="true"><img alt="Flyflix" class="h-8 w-auto object-contain" src="https://cdn.jsdelivr.net/gh/Consessions/flyflix@main/logo.png"></a>
-                        <nav class="hidden md:flex items-center gap-7">
-                            <a class="text-sm transition-colors flex items-center gap-1.5 text-white font-semibold" href="/" data-discover="true">Home</a>
-                            <a class="text-sm transition-colors flex items-center gap-1.5 text-white/90 hover:text-white" href="/tv" data-discover="true">Shows</a>
-                            <a class="text-sm transition-colors flex items-center gap-1.5 text-white/90 hover:text-white" href="/movies" data-discover="true">Movies</a>
-                            <a class="text-sm transition-colors flex items-center gap-1.5 text-white/90 hover:text-white" href="/bookmarks" data-discover="true">My List</a>
-                            <a class="text-sm transition-colors flex items-center gap-1.5 text-white/90 hover:text-white" href="/discover" data-discover="true">Discover</a>
-                        </nav>
-                    </div>
-                </div>
-            </header>
-        </div>
-    </div>
+<body>
+  <header>
+    <strong>Flyflix</strong>
+    <p id="status" role="status">Opening provider content in an isolated view…</p>
+    <button id="retry" type="button">Reload</button>
+    <a href="https://github.com/Consessions/flyflix" target="_blank" rel="noopener noreferrer">Provider source</a>
+  </header>
+  <iframe id="provider" title="Isolated Flyflix provider" sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock" allow="fullscreen" referrerpolicy="no-referrer"></iframe>
+  <script>
+    const frame = document.getElementById('provider');
+    const status = document.getElementById('status');
+    let timeout;
+    let generation = 0;
+    let providerOrigin = '';
+    function validateProviderOrigin(value) {
+      const origin = new URL(value);
+      if (!['http:', 'https:'].includes(origin.protocol) || origin.username || origin.password || origin.origin !== value || origin.origin === location.origin) {
+        throw new Error('Flyflix requires a separate configured proxy origin.');
+      }
+      return origin.origin;
+    }
+    async function loadProvider() {
+      clearTimeout(timeout);
+      const current = ++generation;
+      status.textContent = 'Opening provider content in an isolated view…';
+      try {
+        const response = await fetch('/api/config', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+        if (!response.ok) throw new Error('The provider configuration could not be loaded.');
+        const raw = await response.text();
+        if (raw.length > 65536) throw new Error('The provider configuration is too large.');
+        const origin = validateProviderOrigin(JSON.parse(raw).proxyOrigin);
+        if (current !== generation) return;
+        providerOrigin = origin;
+        frame.src = `${origin}/flyflix-provider.html?run=${current}`;
+        timeout = setTimeout(() => {
+          status.textContent = 'The provider did not start. Check your connection and use Reload to try again.';
+        }, 20000);
+      } catch (error) {
+        if (current === generation) status.textContent = String(error.message || 'The provider could not start.');
+      }
+    }
+    window.addEventListener('message', event => {
+      if (event.source !== frame.contentWindow || event.origin !== providerOrigin || event.data?.generation !== generation) return;
+      if (event.data.type === 'provider-rendered') {
+        clearTimeout(timeout);
+        status.textContent = 'Provider connected in a separate browser origin.';
+      } else if (event.data.type === 'provider-error') {
+        clearTimeout(timeout);
+        status.textContent = 'The provider encountered an error. Reload to retry; external players may be unavailable.';
+      }
+    });
+    document.getElementById('retry').addEventListener('click', loadProvider);
+    loadProvider();
+  </script>
 </body>
 </html>

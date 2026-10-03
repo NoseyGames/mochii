@@ -582,3 +582,8 @@ input:checked + .slider:before {
   border: none;
   display: block;
 }
+.network-notice { display: flex; align-items: center; gap: 12px; padding: 10px 18px; background: #29223c; border-bottom: 1px solid #57416f; color: #e8dafc; font-size: 13px; }
+.network-notice[hidden] { display: none; }
+.network-notice span { flex: 1; }
+.network-notice button { border: 1px solid #755c91; border-radius: 8px; background: #3b2e52; color: #f6efff; padding: 6px 12px; cursor: pointer; }
+#network-detail { overflow-wrap: anywhere; }
