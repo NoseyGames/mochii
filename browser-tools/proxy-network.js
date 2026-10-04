@@ -125,6 +125,9 @@ export function probeWisp(url, {
  * cooldown for an explicit Retry action.
  * reportFailure() checks the proxy itself: a broken destination page is not
  * sufficient reason to replace a healthy proxy.
+ * switchEndpoint({ failedEndpoint }) explicitly selects a different endpoint
+ * without marking a destination TLS failure as a global proxy outage. It only
+ * changes the transport; the caller decides whether a safe request may retry.
  */
 export function createProxyNetwork({
   endpoints,
@@ -162,6 +165,9 @@ export function createProxyNetwork({
   let disposed = false;
   let online = Boolean(initiallyOnline);
   let pending = null;
+  let switching = null;
+  let switchEpoch = 0;
+  let lifecycleEpoch = 0;
   let controller = null;
   let timer = null;
   let snapshot = Object.freeze({ status: online ? 'idle' : 'offline', activeEndpoint: null, configuredCount: urls.length, healthFailures: 0, retryAt: null, error: null });
@@ -185,7 +191,7 @@ export function createProxyNetwork({
   }
   function scheduleNext() {
     clearScheduled();
-    if (disposed || !online || pending) return;
+    if (disposed || !online || pending || switching) return;
     let delay = monitorIntervalMs;
     if (!active) {
       const earliest = Math.min(...[...failures.values()].map(record => record.until));
@@ -193,7 +199,7 @@ export function createProxyNetwork({
       publish('unavailable', { error: snapshot.error || 'No proxy is currently available.', retryAt: now() + delay });
     }
     // A status subscriber can synchronously retry, go offline, or dispose.
-    if (disposed || !online || pending) return;
+    if (disposed || !online || pending || switching) return;
     timer = setTimer(() => {
       timer = null;
       const work = active ? reportFailure() : connect();
@@ -216,13 +222,14 @@ export function createProxyNetwork({
     pending = task.then(value => { complete(); return value; }, error => { complete(); throw error; });
     return pending;
   }
-  async function chooseEndpoint(signal, force = false) {
+  async function chooseEndpoint(signal, force = false, excluded = new Set()) {
     const startIndex = nextIndex;
     const candidates = [];
     for (let step = 0; step < urls.length; step += 1) {
       assertCurrent(signal);
       const index = (startIndex + step) % urls.length;
       const url = urls[index];
+      if (excluded.has(url)) continue;
       if (!force && failures.get(url).until > now()) continue;
       candidates.push({ index, url });
     }
@@ -234,7 +241,7 @@ export function createProxyNetwork({
     }
     assertCurrent(signal);
     exhaustedCount += 1;
-    const error = new Error('None of the configured proxy servers is available.');
+    const error = new Error(excluded.size ? 'No alternative proxy server is currently available.' : 'None of the configured proxy servers is available.');
     publish('unavailable', { error: error.message });
     throw error;
   }
@@ -307,15 +314,15 @@ export function createProxyNetwork({
     if (controller?.signal.aborted) return pending.catch(() => {}).then(() => next(options));
     return pending;
   }
-  function connect({ force = false } = {}) {
+  function connectCore({ force = false, excluded = new Set() } = {}) {
     if (disposed) return Promise.reject(aborted());
     if (!online) return Promise.reject(new Error('Your device is offline.'));
     // Preserve an explicit retry while a monitor is still checking the active
     // endpoint. Its first failed probe alone must not swallow the Retry action.
     if (force && active && pending && !controller?.signal.aborted) {
-      return pending.catch(() => {}).then(() => connect({ force: true }));
+      return pending.catch(() => {}).then(() => connectCore({ force: true, excluded }));
     }
-    const inFlight = existingOrCancelled({ force }, connect);
+    const inFlight = existingOrCancelled({ force, excluded }, connectCore);
     if (inFlight) return inFlight;
     if (active) {
       if (!force) return Promise.resolve(active);
@@ -324,11 +331,51 @@ export function createProxyNetwork({
       nextIndex = urls.indexOf(active);
       active = null;
     }
-    return run(signal => chooseEndpoint(signal, force));
+    return run(signal => chooseEndpoint(signal, force, excluded));
+  }
+  function connect({ force = false } = {}) {
+    if (!switching) return connectCore({ force });
+    if (disposed) return Promise.reject(aborted());
+    if (!online) return Promise.reject(new Error('Your device is offline.'));
+    // A reconnect after going offline must wait for the canceled switch's
+    // activation to settle, then start a new operation in the new lifecycle.
+    if (switchEpoch !== lifecycleEpoch) return switching.catch(() => {}).then(() => connect({ force }));
+    return switching;
+  }
+  function switchEndpoint({ failedEndpoint = active } = {}) {
+    if (disposed) return Promise.reject(aborted());
+    if (!online) return Promise.reject(new Error('Your device is offline.'));
+    let failedUrl;
+    try {
+      failedUrl = failedEndpoint === null ? null : endpointUrl(failedEndpoint);
+      if (failedUrl !== null && !failures.has(failedUrl)) throw new TypeError('The failed endpoint must be a configured proxy.');
+    } catch (error) { return Promise.reject(error); }
+    if (switching) {
+      if (switchEpoch !== lifecycleEpoch) return switching.catch(() => {}).then(() => switchEndpoint({ failedEndpoint: failedUrl }));
+      return switching;
+    }
+    clearScheduled();
+    const epoch = lifecycleEpoch;
+    switchEpoch = epoch;
+    const work = Promise.resolve().then(async () => {
+      // Health checks and mutations already in progress retain their real
+      // lifetime. Never race a new setTransport against a late old activation.
+      if (pending) await pending.catch(() => {});
+      if (disposed || !online || epoch !== lifecycleEpoch) throw aborted();
+      // The preceding health check may already have selected another server.
+      if (failedUrl !== null && active && active !== failedUrl) return active;
+      const omitted = failedUrl ?? active;
+      const excluded = new Set(omitted === null ? [] : [omitted]);
+      return connectCore({ force: true, excluded });
+    });
+    const complete = () => { switching = null; scheduleNext(); };
+    switching = work.then(value => { complete(); return value; }, error => { complete(); throw error; });
+    return switching;
   }
   function reportFailure() {
     if (disposed) return Promise.reject(aborted());
     if (!online) return Promise.reject(new Error('Your device is offline.'));
+    if (switching) return connect();
     const inFlight = existingOrCancelled(undefined, reportFailure);
     if (inFlight) return inFlight;
     if (!active) return connect();
@@ -359,6 +406,7 @@ export function createProxyNetwork({
     if (next === online) return next ? connect() : Promise.resolve(null);
     online = next;
     if (!online) {
+      lifecycleEpoch += 1;
       clearScheduled();
       controller?.abort();
       active = null;
@@ -371,10 +419,11 @@ export function createProxyNetwork({
   function dispose() {
     if (disposed) return;
     disposed = true;
+    lifecycleEpoch += 1;
     clearScheduled();
     controller?.abort();
     active = null;
     publish('disposed');
   }
-  return Object.freeze({ connect, reportFailure, setOnline, dispose, get activeEndpoint() { return active; }, get state() { return snapshot; } });
+  return Object.freeze({ connect, switchEndpoint, reportFailure, setOnline, dispose, get activeEndpoint() { return active; }, get state() { return snapshot; } });
 }

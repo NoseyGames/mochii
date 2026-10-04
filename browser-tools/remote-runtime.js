@@ -125,7 +125,10 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
     if (pending.size >= 32) return Promise.reject(new Error('Too many pending tool commands. Wait for the page to respond.'));
     const id = ++requestId;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { pending.delete(id); reject(new Error('The page did not respond to this command.')); }, options.requestTimeout ?? 10000);
+      // Switching can wait for a health probe and both public/fallback races.
+      // Its larger budget does not relax timeouts for page scripts or DOM RPCs.
+      const timeout = options.requestTimeout ?? (method === 'switchServer' ? 30000 : 10000);
+      const timer = setTimeout(() => { pending.delete(id); reject(new Error('The page did not respond to this command.')); }, timeout);
       pending.set(id, { resolve, reject, timer, method });
       try { port.postMessage({ id, method, params }); }
       catch (error) { pending.delete(id); clearTimeout(timer); reject(error); }
@@ -257,5 +260,6 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
     stopPicking: () => request('pick', { active: false }),
     reload: () => request('reload'),
     reconnect: () => request('reconnect'),
+    switchServer: async () => await request('switchServer') === true,
   };
 }

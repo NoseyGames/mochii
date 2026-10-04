@@ -614,3 +614,140 @@ test('all simultaneous real handshake timeouts produce one retry timer', async (
   manager.dispose();
   assert.equal(time.count, 0);
 });
+
+test('explicit switch excludes a healthy greeting after a destination fault without globally penalizing that server', async () => {
+  let backupDown = false;
+  const attempted = [];
+  const app = network({ failureThreshold: 1, probe: async url => {
+    attempted.push(url);
+    if (backupDown && url === backup) throw new Error('backup down');
+  } });
+  await app.manager.connect();
+  attempted.length = 0;
+  assert.equal(await app.manager.switchEndpoint(), backup);
+  assert.deepEqual(attempted, [backup], 'the failed destination endpoint cannot immediately win the latency race again');
+  assert.equal(app.manager.state.healthFailures, 0);
+  backupDown = true;
+  assert.equal(await app.manager.reportFailure(), primary, 'a destination-specific fault must not cool down a globally healthy proxy');
+  assert.deepEqual(app.activated, [primary, backup, primary]);
+  app.manager.dispose();
+});
+
+test('switching without an available alternative rejects instead of returning the excluded endpoint', async () => {
+  const app = network({ endpoints: [primary] });
+  await app.manager.connect();
+  await assert.rejects(app.manager.switchEndpoint(), /No alternative proxy/);
+  assert.deepEqual(app.probed, [primary]);
+  assert.deepEqual(app.activated, [primary]);
+  assert.equal(app.manager.activeEndpoint, null);
+  assert.equal(app.time.count, 1, 'normal future recovery remains scheduled without replaying a page');
+  app.manager.dispose();
+});
+
+test('repeated switches, navigation connects and monitors coalesce while alternate activation is pending', async () => {
+  const gate = deferred();
+  const activated = [];
+  const app = network({ activate: async url => { activated.push(url); if (url === backup) await gate.promise; } });
+  await app.manager.connect();
+  const first = app.manager.switchEndpoint();
+  assert.equal(app.manager.switchEndpoint({ failedEndpoint: primary }), first);
+  assert.equal(app.manager.connect(), first);
+  assert.equal(app.manager.reportFailure(), first);
+  await flush();
+  assert.deepEqual(activated, [primary, backup]);
+  assert.equal(app.time.count, 0);
+  gate.resolve();
+  assert.equal(await first, backup);
+  assert.equal(app.time.count, 1);
+  app.manager.dispose();
+});
+
+test('switch waits for an existing health check and then excludes its still-healthy endpoint', async () => {
+  const gate = deferred();
+  let monitor = false;
+  const attempted = [];
+  const app = network({ probe: url => { attempted.push(url); return monitor && url === primary ? gate.promise : Promise.resolve(); } });
+  await app.manager.connect();
+  monitor = true;
+  const health = app.manager.reportFailure();
+  await flush();
+  const change = app.manager.switchEndpoint({ failedEndpoint: primary });
+  await flush();
+  assert.deepEqual(app.activated, [primary]);
+  gate.resolve();
+  await health;
+  assert.equal(await change, backup);
+  assert.deepEqual(attempted, [primary, backup, primary, backup]);
+  assert.equal(app.time.count, 1);
+  app.manager.dispose();
+});
+
+test('a queued switch accepts a different endpoint already chosen by the preceding health failure', async () => {
+  const gate = deferred();
+  let monitor = false;
+  const app = network({ failureThreshold: 1, probe: url => monitor && url === primary ? gate.promise : Promise.resolve() });
+  await app.manager.connect();
+  monitor = true;
+  const health = app.manager.reportFailure();
+  await flush();
+  const change = app.manager.switchEndpoint({ failedEndpoint: primary });
+  gate.reject(new Error('down'));
+  assert.equal(await health, backup);
+  assert.equal(await change, backup);
+  assert.deepEqual(app.activated, [primary, backup], 'the queued switch must not rotate away from a newly recovered endpoint');
+  app.manager.dispose();
+});
+
+test('offline and reconnect during switching wait for the old activation without overlapping mutations', async () => {
+  const gate = deferred();
+  let activations = 0, running = 0;
+  const app = network({ activate: async () => {
+    assert.equal(++running, 1);
+    try { if (++activations === 2) await gate.promise; }
+    finally { running--; }
+  } });
+  await app.manager.connect();
+  const change = app.manager.switchEndpoint();
+  const rejected = assert.rejects(change, { name: 'AbortError' });
+  await flush();
+  await app.manager.setOnline(false);
+  const recovered = app.manager.setOnline(true);
+  await flush();
+  assert.equal(activations, 2);
+  gate.resolve();
+  await rejected;
+  assert.equal(await recovered, primary);
+  assert.equal(activations, 3);
+  assert.equal(app.time.count, 1);
+  app.manager.dispose();
+});
+
+test('disposing a queued switch prevents late alternate selection', async () => {
+  const gate = deferred();
+  let monitor = false;
+  const app = network({ probe: () => monitor ? gate.promise : Promise.resolve() });
+  await app.manager.connect();
+  monitor = true;
+  const health = app.manager.reportFailure();
+  const healthRejected = assert.rejects(health, { name: 'AbortError' });
+  await flush();
+  const changeRejected = assert.rejects(app.manager.switchEndpoint(), { name: 'AbortError' });
+  app.manager.dispose();
+  gate.resolve();
+  await Promise.all([healthRejected, changeRejected]);
+  assert.deepEqual(app.activated, [primary]);
+  assert.equal(app.time.count, 0);
+  assert.equal(app.manager.state.status, 'disposed');
+});
+
+test('switch preserves fallback priority and validates an explicitly captured failed endpoint', async () => {
+  const limited = 'wss://limited.example/wisp/';
+  const app = network({ endpoints: [primary, backup, limited], fallbackEndpoints: [limited] });
+  await app.manager.connect();
+  await assert.rejects(app.manager.switchEndpoint({ failedEndpoint: 'wss://unconfigured.example/' }), /configured/);
+  await assert.rejects(app.manager.switchEndpoint({ failedEndpoint: 'https://wrong.example/' }), /ws\/wss/);
+  assert.equal(app.manager.activeEndpoint, primary);
+  assert.equal(await app.manager.switchEndpoint({ failedEndpoint: primary }), backup);
+  assert.deepEqual(app.probed, [primary, backup, backup], 'limited fallback is not probed while an ordinary alternative works');
+  app.manager.dispose();
+});

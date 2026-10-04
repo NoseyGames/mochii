@@ -10,6 +10,7 @@ let storage;
 try { storage = window.localStorage; } catch { /* The editor still works in memory. */ }
 const store = createUserscriptStore(storage);
 let runtime = null;
+let serverSwitchPending = false;
 let currentDocument = null;
 let currentUrl = '';
 let expectedUrl = '';
@@ -62,6 +63,10 @@ function publicUrl(value) {
   } catch { return ''; }
 }
 
+function updateServerSwitchButton() {
+  $('browser-switch-server').disabled = serverSwitchPending || !runtime?.isRemote || !runtime.hasHandshake;
+}
+
 function setConnection(text, connected = false) {
   $('tools-connection').textContent = text;
   $('tools-connection').dataset.connected = String(connected);
@@ -70,6 +75,7 @@ function setConnection(text, connected = false) {
   $('console-input').disabled = !connected;
   $('inspector-pick').disabled = !connected;
   $('userscript-run').disabled = !connected;
+  updateServerSwitchButton();
   if (!connected) editControls();
 }
 
@@ -382,7 +388,11 @@ async function connectFrame(force = false) {
         setConnection('Loading isolated page');
         if (!$('console-preserve').checked) resetConsoleEntries();
       },
-      onNetwork: state => { if (runtime === target && typeof window.networkStatusChanged === 'function') window.networkStatusChanged(state); },
+      onNetwork: state => {
+        if (runtime !== target) return;
+        updateServerSwitchButton();
+        if (typeof window.networkStatusChanged === 'function') window.networkStatusChanged(state);
+      },
       onError: error => { if (runtime === target) addEntry('warn', [error.message]); },
     });
     runtime = target;
@@ -624,6 +634,24 @@ $('browser-reload').addEventListener('click', async () => {
     // shell retry its original navigation instead of reassigning an inert src.
     else await window.retryViewerNavigation?.();
   } catch (error) { addEntry('warn', [error.message]); }
+});
+$('browser-switch-server').addEventListener('click', async () => {
+  const target = runtime;
+  if (!target?.isRemote || typeof target.switchServer !== 'function') {
+    addEntry('warn', ['Open a proxied page before switching servers.']);
+    return;
+  }
+  const button = $('browser-switch-server');
+  if (button.disabled) return;
+  serverSwitchPending = true;
+  button.disabled = true;
+  try {
+    const switched = await target.switchServer();
+    if (runtime === target) addEntry(switched ? 'info' : 'warn', [switched
+      ? 'Proxy server switched. The current page was kept open; form submissions were not repeated.'
+      : 'No alternative server connected. See the page notice for details.']);
+  } catch (error) { if (runtime === target) addEntry('warn', [error.message]); }
+  finally { serverSwitchPending = false; updateServerSwitchButton(); }
 });
 
 const resize = $('tools-resize');

@@ -23,11 +23,13 @@ optional bufferutil native build so pnpm 11's strict install succeeds.
 - App: https://testingproductionubgdontgo.pages.dev/math.html
 - Isolated proxy host: https://monkeh.1234-imwatchingyouopenthedoor.workers.dev
 
-The same static output goes to both hosts. Shell entry pages on the proxy host
-redirect to the app so settings and saved scripts stay on the app origin.
-The proxy bridge accepts only the configured shell origin. Preview deployments
-redirect shell entries to production; unknown mirrors cannot enable the proxy.
-When moving hosts, edit both origins in `browser-tools/config.js` and deploy both.
+The same static output goes to the shell hosts and the isolated proxy host.
+Shell entry pages on the proxy host redirect to the primary app. Approved
+mirrors retain their own address; settings and saved scripts stay on that
+mirror's origin. The bridge accepts only the exact configured shell origins.
+Known Pages previews redirect to production; unknown mirrors cannot enable the
+proxy. When adding a host, update `shellOrigins` in `browser-tools/config.js`
+and the Worker's `ASSIST_ALLOWED_ORIGINS`, then deploy the app and Worker.
 
 For a local static preview, serve dist on **localhost:4173 and localhost:4174**
 with any static HTTP server. Open http://localhost:4173/math.html. Both ports are
@@ -63,6 +65,19 @@ Pages render and accept input while resources are still loading. A small status
 indicator replaces the full-page loading cover; a slow resource does not blank
 the page or replay navigation. Navigations reuse the existing proxy host when
 permissions allow. Console output stays bounded and avoids hidden DOM updates.
+
+If an upstream connection ends with `tls handshake eof`, the error notice offers
+**Switch server and reopen address**. It excludes that relay and opens the last
+address entered in Monkeh as a fresh GET. The toolbar's **Switch proxy server**
+changes the transport without reloading the page. Neither action automatically
+replays submitted forms or disables certificate checks. A successful Wisp
+handshake does not guarantee that a particular destination will accept TLS;
+switching can recover from relay-specific failures but cannot prevent every
+upstream outage or block.
+
+See [hosting instructions](docs/HOSTING.md) for Cloudflare, Netlify, Vercel,
+Render and other static-host options. Each approved mirror uses the same isolated
+proxy host; additional shell addresses are not independent proxy backends.
 
 ## Browser tools
 

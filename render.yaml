@@ -1,0 +1,52 @@
+# One static shell mirror. This creates no Node service, database or paid disk.
+services:
+  - type: web
+    name: monkeh-shell
+    runtime: static
+    branch: main
+    autoDeployTrigger: checksPass
+    buildCommand: npx --yes pnpm@11.19.0 install --frozen-lockfile && npx --yes pnpm@11.19.0 build
+    staticPublishPath: ./dist
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      - path: /browser-tools/config.js
+        name: Cache-Control
+        value: no-cache
+      - path: /sw.js
+        name: Cache-Control
+        value: no-cache
+      - path: /
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /index.html
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /math
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /math.html
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /history
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /history.html
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /flyflix
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /flyflix.html
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /apps/*
+        name: X-Frame-Options
+        value: SAMEORIGIN

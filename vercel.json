@@ -1,0 +1,28 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npx --yes pnpm@11.19.0 install --frozen-lockfile",
+  "buildCommand": "npx --yes pnpm@11.19.0 build",
+  "outputDirectory": "dist",
+  "cleanUrls": false,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    },
+    { "source": "/browser-tools/config.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+    { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+    { "source": "/", "headers": [{ "key": "X-Frame-Options", "value": "SAMEORIGIN" }] },
+    { "source": "/index.html", "headers": [{ "key": "X-Frame-Options", "value": "SAMEORIGIN" }] },
+    { "source": "/math", "headers": [{ "key": "X-Frame-Options", "value": "SAMEORIGIN" }] },
+    { "source": "/math.html", "headers": [{ "key": "X-Frame-Options", "value": "SAMEORIGIN" }] },
+    { "source": "/history", "headers": [{ "key": "X-Frame-Options", "value": "SAMEORIGIN" }] },
+    { "source": "/history.html", "headers": [{ "key": "X-Frame-Options", "value": "SAMEORIGIN" }] },
+    { "source": "/flyflix", "headers": [{ "key": "X-Frame-Options", "value": "SAMEORIGIN" }] },
+    { "source": "/flyflix.html", "headers": [{ "key": "X-Frame-Options", "value": "SAMEORIGIN" }] },
+    { "source": "/apps/:path*", "headers": [{ "key": "X-Frame-Options", "value": "SAMEORIGIN" }] }
+  ]
+}

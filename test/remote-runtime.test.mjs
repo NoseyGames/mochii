@@ -200,6 +200,16 @@ test('navigation acknowledgement survives inner page changes while old DOM comma
   assert.equal(app.requests.length, 2);
 });
 
+test('manual server switching uses a narrow RPC without a destination or reload', async t => {
+  const app = harness(t);
+  await app.send('ready');
+  const switched = app.runtime.switchServer();
+  await tick();
+  assert.deepEqual(app.requests, [{ id: 1, method: 'switchServer', params: {} }]);
+  await app.response(1, true);
+  assert.equal(await switched, true);
+});
+
 test('unanswered requests time out and dispose rejects pending commands', async t => {
   const app = harness(t, { requestTimeout: 20 });
   await app.send('ready');

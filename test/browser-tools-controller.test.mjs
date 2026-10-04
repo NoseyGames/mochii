@@ -82,6 +82,7 @@ function harness(saved = []) {
       getChildren: item => item.children || [], stopPicking() {}, async startPicking() {},
       async refreshTree() { this.refreshes = (this.refreshes || 0) + 1; this.document.documentElement ||= node(); },
       async reload() { this.reloaded = true; }, async reconnect() { this.reconnected = true; },
+      async switchServer() { this.switched = (this.switched || 0) + 1; return true; },
       async describe(item) { return item.info || { tag: item.localName, selector: item.id || item.localName, attributes: [], styles: [], text: 'Original', rect: { width: 10, height: 20 }, canDelete: true, canUndo: false }; },
       async navigate(url) { this.navigated = url; return true; },
     };
@@ -136,6 +137,34 @@ test('proxy error documents remain inspectable without disclosing automatic user
   assert.equal(app.sessions.length, 1);
   assert.equal(app.sessions[0].evaluated.length, 0);
   assert.match(app.text('console-output'), /Automatic userscripts are paused/);
+});
+
+test('toolbar server switching changes only the transport and leaves the viewed page untouched', async () => {
+  const app = harness();
+  assert.equal(app.get('browser-switch-server').disabled, true);
+  await app.connect('https://example.com/checkout');
+  assert.equal(app.get('browser-switch-server').disabled, false);
+  const source = app.get('viewer-frame').src;
+  await app.get('browser-switch-server').fire('click');
+  assert.equal(app.sessions[0].switched, 1);
+  assert.equal(app.sessions[0].reloaded, undefined);
+  assert.equal(app.sessions[0].navigated, undefined);
+  assert.equal(app.get('viewer-frame').src, source);
+  assert.equal(app.get('browser-switch-server').disabled, false);
+  assert.match(app.text('console-output'), /form submissions were not repeated/);
+});
+
+test('toolbar server switching coalesces clicks while an alternative is connecting', async () => {
+  const app = harness();
+  await app.connect('https://example.com/');
+  let finish;
+  let attempts = 0;
+  app.sessions[0].switchServer = () => { attempts++; return new Promise(resolve => { finish = resolve; }); };
+  const first = app.get('browser-switch-server').fire('click');
+  await app.get('browser-switch-server').fire('click');
+  assert.equal(attempts, 1);
+  finish(true); await first;
+  assert.equal(app.get('browser-switch-server').disabled, false);
 });
 
 test('isolated page metadata never causes automatic disclosure of stored userscripts', async () => {

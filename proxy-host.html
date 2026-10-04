@@ -15,6 +15,10 @@
     #status[hidden]{display:none}
     #status h2{font-size:13px;margin:0 24px 4px 0;font-weight:600}
     #status p{font-size:12px;margin:0;line-height:1.5;color:#c0bacd;overflow-wrap:anywhere}
+    #status #status-retry-note{margin-top:8px;color:#aaa2ba;font-size:11px}
+    #status details{margin-top:8px;pointer-events:auto;font-size:12px;color:#bdb5cd}
+    #status summary{cursor:pointer}
+    #status pre{max-height:140px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.5 ui-monospace,monospace;user-select:text}
     button{font:inherit;padding:6px 12px;margin-top:8px;border:1px solid #62557e;border-radius:8px;background:#30273f;color:#f1e8ff;cursor:pointer;pointer-events:auto}
     #dismiss-status{position:absolute;right:8px;top:4px;border:0;background:none;margin:0;padding:4px 6px;color:#bbb;font-size:18px}
   </style>
@@ -22,6 +26,14 @@
 </head>
 <body>
   <iframe id="page" title="Viewed web page" allowfullscreen referrerpolicy="no-referrer"></iframe>
-  <div id="status" role="status"><h2 id="status-title">Connecting your browser</h2><p id="status-message">Starting the isolated proxy…</p><button id="retry" hidden>Try again</button><button id="dismiss-status" type="button" aria-label="Dismiss page status">×</button></div>
+  <div id="status" role="status">
+    <h2 id="status-title">Connecting your browser</h2>
+    <p id="status-message">Starting the isolated proxy…</p>
+    <p id="status-retry-note" hidden></p>
+    <button id="retry" hidden>Try again</button>
+    <button id="switch-retry" type="button" hidden>Switch server and retry address</button>
+    <details id="status-details" hidden><summary>Technical details</summary><pre id="status-trace"></pre></details>
+    <button id="dismiss-status" type="button" aria-label="Dismiss page status">×</button>
+  </div>
 </body>
 </html>

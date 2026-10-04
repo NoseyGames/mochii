@@ -37,7 +37,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   const root = { nodeType: 1, localName: 'html', id: '', className: '', children: [], ownerDocument: pageDoc };
   pageDoc.documentElement = root;
   pageDoc.querySelector = () => root;
-  const pageWindow = { document: pageDoc, location: { href: proxyOrigin + '/service/' + encodeURIComponent('https://example.com/'), reload() {} } };
+  const pageWindow = { document: pageDoc, location: { href: proxyOrigin + '/service/' + encodeURIComponent('https://example.com/'), reloads: 0, reload() { this.reloads++; } } };
   const frame = get('page');
   const navigations = [];
   Object.defineProperty(frame, 'src', { get() { return navigations.at(-1); }, set(value) { navigations.push(value); } });
@@ -49,9 +49,10 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   let registrations = 0;
   let treeReads = 0;
   let networkOptions;
-  const network = { connects: 0, failures: 0, disposed: 0,
+  const network = { connects: 0, failures: 0, disposed: 0, switches: [], activeEndpoint: 'ws://127.0.0.1:3101/wisp/',
     async connect() { this.connects++; if (this.connects === 1) await networkOptions.activate('ws://127.0.0.1:3101/wisp/'); networkOptions.onStatus({ status: 'connected', activeEndpoint: 'ws://127.0.0.1:3101/wisp/', configuredCount: 1 }); return 'ws://127.0.0.1:3101/wisp/'; },
     async reportFailure() { this.failures++; }, async setOnline() {}, dispose() { this.disposed++; },
+    async switchEndpoint(options) { this.switches.push(options); this.activeEndpoint = 'wss://other.example/wisp/'; return this.activeEndpoint; },
   };
   const sandbox = {
     MonkehUseBackendConfig: true,
@@ -332,6 +333,128 @@ test('endpoint selection starts while the service worker activates, but navigati
   assert.equal(app.navigations.length, 0);
   ready(); await flush();
   assert.equal(app.navigations.length, 1);
+  app.contextWindow.fire('pagehide');
+});
+
+const tlsFailure = 'Error: Hyper client: Connect: Custom { kind: UnexpectedEof, error: "tls handshake eof" }';
+function makeErrorPage(app, trace = tlsFailure) {
+  app.pageDoc.title = 'Error';
+  app.pageDoc.getElementById = id => ({
+    errorTitle: { textContent: 'Error processing your request' },
+    errorTrace: { localName: 'textarea', value: trace },
+    fetchedURL: { textContent: 'https://untrusted-error-text.example/never-open-this' },
+  })[id] || null;
+}
+
+test('TLS diagnostic keeps technical details and never rotates or retries from page-controlled markers', async () => {
+  const app = await harness();
+  const connection = app.init();
+  makeErrorPage(app);
+  const before = [...app.navigations];
+  app.loadPage();
+  assert.equal(app.get('status').hidden, false);
+  assert.equal(app.get('status-title').textContent, 'Secure connection interrupted');
+  assert.match(app.get('status-message').textContent, /Another proxy server/);
+  assert.match(app.get('status-retry-note').textContent, /last address you entered/);
+  assert.match(app.get('status-retry-note').textContent, /Form submissions are not repeated/);
+  assert.equal(app.get('status-trace').textContent, tlsFailure);
+  assert.equal(app.get('status-details').hidden, false);
+  assert.equal(app.get('switch-retry').hidden, false);
+  assert.equal(connection.messages.find(message => message.event === 'page').data.isError, true);
+  assert.equal(app.network.failures, 0, 'error-page DOM is not authority to alter network state');
+  assert.deepEqual(app.network.switches, []);
+  assert.deepEqual(app.navigations, before);
+  app.loadPage();
+  assert.equal(app.get('status').hidden, false, 'late load does not dismiss an actionable error');
+  app.contextWindow.fire('pagehide');
+});
+
+test('ordinary pages with similarly named elements do not trigger the proxy error notice', async () => {
+  const app = await harness();
+  app.pageDoc.getElementById = id => id === 'errorTitle' ? { textContent: 'My site message' } : id === 'errorTrace' ? { localName: 'div', textContent: tlsFailure } : null;
+  const connection = app.init(); app.loadPage();
+  assert.equal(connection.messages.find(message => message.event === 'page').data.isError, false);
+  assert.equal(app.get('status').hidden, true);
+  assert.equal(app.network.failures, 0);
+  app.contextWindow.fire('pagehide');
+});
+
+test('explicit error recovery excludes the failed server and opens only the entered address as a new GET', async () => {
+  const app = await harness();
+  makeErrorPage(app, tlsFailure + '<img src=x onerror=attack()>' + 'x'.repeat(7000));
+  // This could be a form submission or in-page redirect. Recovery must not
+  // reload it or adopt the URL embedded in the untrusted error document.
+  app.pageWindow.location.href = proxyOrigin + '/service/' + encodeURIComponent('https://example.com/payment-submit');
+  app.loadPage();
+  assert.equal(app.get('status-trace').textContent.length, 6000);
+  const initialCount = app.navigations.length;
+  app.get('switch-retry').fire('click', { isTrusted: false }); await flush();
+  assert.equal(app.network.switches.length, 0, 'synthetic clicks cannot authorize retry');
+  app.get('switch-retry').fire('click', { isTrusted: true }); await flush();
+  assert.equal(app.network.switches.length, 1);
+  assert.equal(app.network.switches[0].failedEndpoint, 'ws://127.0.0.1:3101/wisp/');
+  assert.equal(app.navigations.length, initialCount + 1);
+  assert.equal(app.frame.src, '/service/' + encodeURIComponent('https://example.com/'));
+  assert.equal(app.pageWindow.location.reloads, 0);
+  app.contextWindow.fire('pagehide');
+});
+
+test('generic server switching preserves the current document without reloading or submitting a form', async () => {
+  const app = await harness();
+  const connection = app.init(); app.loadPage();
+  const before = [...app.navigations];
+  await connection.request({ id: 1, method: 'switchServer', params: { url: 'https://untrusted.example/', method: 'POST' } });
+  assert.equal(connection.messages.find(message => message.id === 1).result, true);
+  assert.equal(app.network.switches.length, 1);
+  assert.deepEqual(app.navigations, before);
+  assert.equal(app.pageWindow.location.reloads, 0);
+  assert.equal(app.runtimes[0].disposed, false);
+  assert.equal(app.get('status-title').textContent, 'Proxy server switched');
+  app.contextWindow.fire('pagehide');
+});
+
+test('a rejected app-origin destination never replaces the recorded GET recovery address', async () => {
+  const app = await harness();
+  app.location.hash = '#' + encodeURIComponent(shellOrigin + '/math.html');
+  app.contextWindow.fire('hashchange'); await flush();
+  assert.equal(app.navigations.length, 1);
+  assert.match(app.get('status-message').textContent, /App pages/);
+  makeErrorPage(app); app.loadPage();
+  app.get('switch-retry').fire('click', { isTrusted: true }); await flush();
+  assert.equal(app.frame.src, '/service/' + encodeURIComponent('https://example.com/'));
+  assert.equal(app.navigations.length, 2);
+  app.contextWindow.fire('pagehide');
+});
+
+test('failed server switching keeps the error document, original details, and retry action', async () => {
+  const app = await harness();
+  makeErrorPage(app); app.loadPage();
+  const before = [...app.navigations];
+  app.network.switchEndpoint = async () => { throw new Error('No alternative proxy is available'); };
+  app.get('switch-retry').fire('click', { isTrusted: true }); await flush();
+  assert.deepEqual(app.navigations, before);
+  assert.equal(app.get('status-title').textContent, 'No alternative server connected');
+  assert.match(app.get('status-message').textContent, /No alternative proxy/);
+  assert.equal(app.get('status-trace').textContent, tlsFailure);
+  assert.equal(app.get('switch-retry').hidden, false);
+  app.contextWindow.fire('pagehide');
+});
+
+test('a late retry switch cannot replace a newer address and repeated clicks coalesce', async () => {
+  const app = await harness();
+  makeErrorPage(app); app.loadPage();
+  let finish;
+  let switches = 0;
+  app.network.switchEndpoint = () => { switches++; return new Promise(resolve => { finish = resolve; }); };
+  app.get('switch-retry').fire('click', { isTrusted: true });
+  app.get('switch-retry').fire('click', { isTrusted: true });
+  assert.equal(switches, 1);
+  app.location.hash = '#' + encodeURIComponent('https://new.example/');
+  app.contextWindow.fire('hashchange'); await flush();
+  const before = [...app.navigations];
+  finish('wss://other.example/wisp/'); await flush();
+  assert.deepEqual(app.navigations, before);
+  assert.equal(app.frame.src, '/service/' + encodeURIComponent('https://new.example/'));
   app.contextWindow.fire('pagehide');
 });
 

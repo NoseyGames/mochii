@@ -19,6 +19,7 @@ let documentGeneration = 0;
 const activeRequests = new Set();
 let navigationGeneration = 0;
 let requestedUrl = null;
+let lastGetAddress = null;
 let disposed = false;
 let nodes = new Map();
 let ids = new WeakMap();
@@ -26,6 +27,8 @@ let nextNodeId = 0;
 let documentWatchTimer;
 let observedDocument;
 let readyListener;
+let pageFailure = null;
+let switching = null;
 
 function httpUrl(value) {
   if (typeof value !== 'string' || value.length > 4096) throw new Error('Invalid page address.');
@@ -38,7 +41,16 @@ function send(event, data) {
   try { port?.postMessage({ event, data }); } catch { /* A closing shell has no receiver. */ }
 }
 
+function clearDiagnostic() {
+  document.getElementById('switch-retry').hidden = true;
+  document.getElementById('status-retry-note').hidden = true;
+  document.getElementById('status-details').hidden = true;
+  document.getElementById('status-details').open = false;
+  document.getElementById('status-trace').textContent = '';
+}
+
 function showError(error) {
+  clearDiagnostic();
   status.hidden = false;
   document.getElementById('status-title').textContent = 'Unable to open this page';
   document.getElementById('status-message').textContent = error.message || String(error);
@@ -46,10 +58,72 @@ function showError(error) {
 }
 
 function showProgress(message) {
+  clearDiagnostic();
   status.hidden = false;
   document.getElementById('status-title').textContent = 'Opening page';
   document.getElementById('status-message').textContent = message;
   retry.hidden = true;
+}
+
+function pageDiagnostic(doc) {
+  const title = doc.getElementById('errorTitle');
+  const trace = doc.getElementById('errorTrace');
+  if (title?.textContent?.trim() !== 'Error processing your request' || trace?.localName !== 'textarea') return null;
+  const details = String(trace.value || trace.textContent || '').slice(0, 6000);
+  if (!details) return null;
+  // These familiar UV DOM markers are only an untrusted diagnostic hint.
+  // They must never cause network changes or replay a request automatically.
+  return { document: doc, details, tls: /tls|ssl|certificate|handshake/i.test(details),
+    endpoint: network?.activeEndpoint || latestNetwork?.activeEndpoint || null,
+    address: lastGetAddress };
+}
+
+function showDiagnostic(failure, switchError = '') {
+  clearDiagnostic();
+  status.hidden = false;
+  retry.hidden = true;
+  document.getElementById('status-title').textContent = switchError ? 'No alternative server connected' : failure.tls ? 'Secure connection interrupted' : 'The proxy could not open this page';
+  document.getElementById('status-message').textContent = switchError || (failure.tls
+    ? 'The secure connection closed before it was ready. Another proxy server may have a working route to this site. The site may also be temporarily unavailable.'
+    : 'Try another proxy server. If the problem continues, check the address or try the site again later.');
+  const note = document.getElementById('status-retry-note');
+  note.hidden = !failure.address;
+  note.textContent = `Retry opens the last address you entered as a new page request: ${(failure.address || '').slice(0, 180)}. Form submissions are not repeated.`;
+  document.getElementById('switch-retry').hidden = !failure.address;
+  document.getElementById('status-details').hidden = false;
+  document.getElementById('status-trace').textContent = failure.details;
+}
+
+function switchServer(retryFailure = null) {
+  if (switching) return switching;
+  const generation = navigationGeneration;
+  const currentDocument = frame.contentDocument;
+  const failedEndpoint = retryFailure?.endpoint || network?.activeEndpoint || latestNetwork?.activeEndpoint;
+  const isCurrent = () => !disposed && generation === navigationGeneration && currentDocument === frame.contentDocument;
+  switching = (async () => {
+    try {
+      if (!network) throw new Error('Open a proxied page before switching servers.');
+      showProgress('Finding a different working proxy server…');
+      await network.switchEndpoint({ failedEndpoint });
+      if (!isCurrent()) return false;
+      if (retryFailure) {
+        if (pageFailure !== retryFailure || !retryFailure.address) return false;
+        // Assigning a validated host-entered address makes a fresh GET. Never
+        // call location.reload(), use a form action, or trust error-page URLs.
+        return await navigate(retryFailure.address);
+      }
+      showProgress('The server changed. New requests use the new connection. Open an address when you want to try the page again.');
+      document.getElementById('status-title').textContent = 'Proxy server switched';
+      return true;
+    } catch (error) {
+      if (isCurrent()) {
+        if (retryFailure) showDiagnostic(retryFailure, String(error.message || error).slice(0, 1000));
+        else showError(error);
+      }
+      return false;
+    }
+  })().finally(() => { switching = null; });
+  return switching;
 }
 
 function nodeId(node) {
@@ -172,6 +246,7 @@ async function command(method, params) {
       return !disposed;
     }
     case 'reconnect': await network?.connect({ force: true }); return null;
+    case 'switchServer': return await switchServer();
     default: throw new Error('Unsupported browser command.');
   }
 }
@@ -186,7 +261,7 @@ async function receive(event) {
   const replyPort = port;
   const generation = documentGeneration;
   try {
-    const result = await deadline(command(request.method, request.params && typeof request.params === 'object' ? request.params : {}), 'The command timed out. Reload the page if its script is unresponsive.');
+    const result = await deadline(command(request.method, request.params && typeof request.params === 'object' ? request.params : {}), 'The command timed out. Reload the page if its script is unresponsive.', request.method === 'switchServer' ? 25000 : 15000);
     if (!disposed && (request.method === 'navigate' || generation === documentGeneration) && replyPort === port) replyPort?.postMessage({ id, result });
   } catch (error) {
     if (!disposed && (request.method === 'navigate' || generation === documentGeneration) && replyPort === port) replyPort?.postMessage({ id, error: String(error.message || error).slice(0, 2000) });
@@ -239,19 +314,20 @@ function connectDocument() {
         if (generation !== documentGeneration) return;
         documentGeneration++;
         activeRequests.clear();
-        runtime = null; latestPage = null;
+        runtime = null; latestPage = null; pageFailure = null;
         send('pagehide', {});
         showProgress('The page is loading. You can use content as it appears.');
         watchDocument(doc);
       }
     });
-    const isError = Boolean(doc.getElementById('errorTrace') && doc.getElementById('errorTitle'));
+    pageFailure = pageDiagnostic(doc);
+    const isError = Boolean(pageFailure);
     // Build the bounded DOM snapshot only when Inspect requests it. Large
     // pages become usable without waiting for an inspector traversal.
     latestPage = { url: decodedPageUrl(), title: String(doc.title).slice(0, 300), isError };
     status.hidden = true;
     send('page', latestPage);
-    if (isError) network?.reportFailure().catch(() => {});
+    if (pageFailure) showDiagnostic(pageFailure);
     return true;
   } catch (error) {
     runtime?.dispose(); runtime = null;
@@ -290,8 +366,7 @@ frame.addEventListener('load', () => {
   if (disposed) return;
   try { if (frame.contentWindow.location.href === 'about:blank') return; } catch { /* Cross-origin pages remain visible without tools. */ }
   stopDocumentWatch();
-  if (connectDocument()) status.hidden = true;
-  else if (!frame.contentDocument) status.hidden = true;
+  if (!connectDocument() && !frame.contentDocument) status.hidden = true;
 });
 
 function deadline(promise, label, milliseconds = 15000) {
@@ -361,8 +436,11 @@ async function navigate(url = null) {
     requestedUrl = targetUrl;
     await start();
     if (disposed || generation !== navigationGeneration) return false;
+    if (config.shellOrigins.includes(new URL(targetUrl).origin) || new URL(targetUrl).origin === location.origin) throw new Error('App pages cannot be opened as proxy destinations.');
     if (url !== null) window.history?.replaceState(null, '', '#' + encodeURIComponent(targetUrl));
     const previousDocument = frame.contentDocument;
+    pageFailure = null;
+    lastGetAddress = targetUrl;
     frame.src = __uv$config.prefix + __uv$config.encodeUrl(targetUrl);
     showProgress('The page is loading. You can use content as it appears.');
     watchDocument(previousDocument);
@@ -379,6 +457,9 @@ async function navigate(url = null) {
 }
 
 retry.addEventListener('click', () => navigate());
+document.getElementById('switch-retry').addEventListener('click', event => {
+  if (event.isTrusted && pageFailure) void switchServer(pageFailure);
+});
 document.getElementById('dismiss-status').addEventListener('click', () => { status.hidden = true; });
 window.addEventListener('hashchange', () => { requestedUrl = null; void navigate(); });
 window.addEventListener('offline', () => network?.setOnline(false).catch(() => {}));

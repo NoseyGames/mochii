@@ -1,8 +1,14 @@
 // Shared by static pages, modules and the service worker. Edit this list when
 // moving the site or adding an operator-approved public Wisp server.
 (() => {
+  const productionShellOrigins = Object.freeze([
+    'https://testingproductionubgdontgo.pages.dev',
+    'https://monkeh-noseygames.netlify.app',
+    'https://monkeh-browser.robert360254.chatgpt.site',
+  ]);
   const deployment = Object.freeze({
-    shellOrigin: 'https://testingproductionubgdontgo.pages.dev',
+    shellOrigin: productionShellOrigins[0],
+    shellOrigins: productionShellOrigins,
     proxyOrigin: 'https://monkeh.1234-imwatchingyouopenthedoor.workers.dev',
     wispEndpoints: Object.freeze([
       // Supplied by the site owner with production-use permission. Preserve
@@ -44,20 +50,20 @@
   });
 
   function staticConfig(origin = globalThis.location?.origin) {
-    let shellOrigin = deployment.shellOrigin;
+    let shellOrigins = deployment.shellOrigins;
     let proxyOrigin = deployment.proxyOrigin;
     // Two plain static servers suffice for local development; no API is used.
     if (['http://localhost:4173', 'http://localhost:4174'].includes(origin)) {
-      shellOrigin = 'http://localhost:4173';
+      shellOrigins = Object.freeze(['http://localhost:4173']);
       proxyOrigin = 'http://localhost:4174';
     } else if (['http://127.0.0.1:4173', 'http://127.0.0.1:4174'].includes(origin)) {
-      shellOrigin = 'http://127.0.0.1:4173';
+      shellOrigins = Object.freeze(['http://127.0.0.1:4173']);
       proxyOrigin = 'http://127.0.0.1:4174';
-    } else if (![shellOrigin, proxyOrigin].includes(origin)) {
-      throw new Error('This site address is not configured. Open ' + shellOrigin + '/math.html or update the origins in browser-tools/config.js.');
+    } else if (!shellOrigins.includes(origin) && origin !== proxyOrigin) {
+      throw new Error('This site address is not configured. Open ' + deployment.shellOrigin + '/math.html or update the origins in browser-tools/config.js.');
     }
     return Object.freeze({
-      mode: 'static', proxyOrigin, shellOrigins: Object.freeze([shellOrigin]),
+      mode: 'static', proxyOrigin, shellOrigins,
       wispEndpoints: deployment.wispEndpoints, maxWispBackups: 31,
       requiresAuthentication: false, windowsVm: deployment.windowsVm,
     });
@@ -67,12 +73,15 @@
     if (globalThis.MonkehUseBackendConfig === true || !globalThis.location) return false;
     const location = globalThis.location;
     let shellOrigin;
-    try { shellOrigin = staticConfig().shellOrigins[0]; } catch {
+    try {
+      const config = staticConfig();
+      if (config.shellOrigins.includes(location.origin)) return false;
+      shellOrigin = config.shellOrigins[0];
+    } catch {
       // Preview copies link to the canonical shell; they do not gain bridge access.
       if (location.hostname?.endsWith('.testingproductionubgdontgo.pages.dev')) shellOrigin = deployment.shellOrigin;
       else return false;
     }
-    if (location.origin === shellOrigin) return false;
     location.replace(shellOrigin + location.pathname + location.search + location.hash);
     return true;
   }

@@ -1,0 +1,11 @@
+[build]
+  command = "pnpm build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "24"
+  PNPM_FLAGS = "--frozen-lockfile"
+
+# Netlify reads pnpm@11.19.0 from package.json before installing dependencies.
+# Security/cache headers are provided by dist/_headers, copied by pnpm build.
+# Keep real 404 responses; this app does not need a /* -> /index.html rewrite.
