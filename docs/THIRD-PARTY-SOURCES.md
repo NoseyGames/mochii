@@ -33,3 +33,29 @@ license file. Ultraviolet was supplied with the original Monkeh repository.
 Required third-party license files are retained separately from ordinary code
 comments. Dependency packages and their installed metadata are not altered by
 the comment cleanup.
+
+## Expanded game catalog and settings
+
+The public [Tung Tung reference site](https://photos.tram-gallery.ru/) was reviewed
+on October 4, 2026. Its six populated manifests list 2,709 game entries: GN-Math
+(809), Seraph (468), Hydra (872), 3kh0 (370), Truffled (107), and TGLSC (83).
+Monkeh keeps source-hosted launch and image links in a validated local snapshot,
+alongside its original catalog. No game payloads, reference executable code,
+advertising, chat, private APIs, or account-sync backend are copied into Monkeh.
+The chat/comments entry is excluded, leaving 2,708 reference games plus 835
+original entries. Exact duplicate URLs within a source are collapsed; source
+variants remain.
+The catalog does not grant ownership of the linked games. Their hosts control
+availability and access conditions.
+
+Settings and library controls are independently implemented. Cat and Doubleu
+backgrounds are original CSS/SVG interpretations. Google Fonts loads only when
+a non-default font is selected. Preferences, favorites, and recent games stay
+in the browser.
+
+The reference browser's public engine defaults to its same-origin Wisp route,
+`wss://photos.tram-gallery.ru/wisp/`, with a `gl_wisp` local-storage override.
+That relay has not been added to Monkeh's public rotation.
+
+Use `node scripts/update-game-catalog.mjs` to refresh the bundled catalog links.
+Review the resulting source diff before publishing the refreshed snapshot.

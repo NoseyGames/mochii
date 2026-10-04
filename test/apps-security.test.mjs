@@ -176,62 +176,68 @@ test('external app code has integrity checks or executes only in an isolated pro
   assert.match(vox, /ruffle@0\.6\.0\/ruffle\.js" integrity="sha384-/);
   assert.match(vox, /connect-src https:\/\/unpkg.com\/@ruffle-rs\/ruffle@0\.6\.0\//);
   assert.match(vox, /allowScriptAccess:false/);
-  assert.match(flyflix, /id="provider"[^>]+sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock"/);
-  assert.doesNotMatch(flyflix, /flyflix@main|main\.js|srcdoc\s*=/);
-  assert.match(flyflixProvider, /flyflix@89bd78c99e75504faa5f1f8d928e3370574f9eab\/main\.js/);
+  assert.match(flyflix, /id="provider"[^>]+sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-presentation"/);
+  assert.doesNotMatch(flyflix + flyflixProvider, /flyflix@|main\.js|srcdoc\s*=/);
 });
 
-test('Flyflix refuses shell-origin execution and ignores forged provider status messages', async () => {
-  const script = inlineScript(flyflix);
-  const listeners = new Map();
-  const page = contextFor(script, {
-    location: new URL('https://monkeh.test/flyflix.html'), AbortSignal,
-    addEventListener: (name, listener) => listeners.set(name, listener),
-    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test' }); }
+test('Flyflix opens the live website through the isolated proxy and rejects insecure or shell origins', async () => {
+  const page = contextFor(inlineScript(flyflix), {
+    location: new URL('https://monkeh.test/flyflix.html'),
+    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }); }
   });
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(vm.runInContext('frame.src', page), 'https://proxy.test/flyflix-provider.html?run=1');
-  for (const origin of ['https://monkeh.test', 'javascript:alert(1)', 'https://user:password@proxy.test', 'https://proxy.test/path']) {
+  assert.equal(vm.runInContext('frame.src', page), 'https://proxy.test/proxy-host.html#https%3A%2F%2Fflyflix.net%2F');
+  for (const origin of ['https://monkeh.test', 'javascript:alert(1)', 'https://user:password@proxy.test', 'https://proxy.test/path', 'http://proxy.test', 'http://localhost:4174']) {
     assert.throws(() => page.validateProviderOrigin(origin), /separate configured proxy origin/);
   }
-  const target = vm.runInContext('frame.contentWindow = {}; frame.contentWindow', page);
-  const message = { type: 'provider-rendered', generation: 1 };
-  listeners.get('message')({ source: target, origin: 'https://evil.test', data: message });
-  listeners.get('message')({ source: {}, origin: 'https://proxy.test', data: message });
-  assert.match(vm.runInContext('status.textContent', page), /Opening provider/);
-  listeners.get('message')({ source: target, origin: 'https://proxy.test', data: message });
-  assert.match(vm.runInContext('status.textContent', page), /Provider connected/);
-  vm.runInContext('clearTimeout(timeout)', page);
 });
 
-test('Flyflix provider checks its isolated origin before loading the pinned third-party module', async () => {
-  const script = inlineScript(flyflixProvider);
-  let loads = 0;
-  const badPage = contextFor(script, {
-    location: new URL('https://monkeh.test/flyflix-provider.html?run=1'), AbortSignal,
-    parent: { postMessage() {} },
-    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }); },
+test('Flyflix accepts only the real proxy frame handshake and closes its status channel on reload', async () => {
+  const listeners = new Map();
+  const channels = [];
+  const page = contextFor(inlineScript(flyflix), {
+    location: new URL('https://monkeh.test/flyflix.html'),
+    addEventListener: (name, listener) => listeners.set(name, listener),
+    MessageChannel: class {
+      constructor() { this.port1 = { starts: 0, closes: 0, start() { this.starts++; }, close() { this.closes++; } }; this.port2 = {}; channels.push(this); }
+    },
+    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }); }
   });
-  badPage.document.head = { appendChild() { loads++; } };
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(loads, 0);
-  assert.equal(vm.runInContext('shellOrigins.length', badPage), 0);
-
-  let moduleUrl;
-  let route;
-  const goodPage = contextFor(script, {
-    location: new URL('https://proxy.test/flyflix-provider.html?run=1'), AbortSignal,
-    parent: { postMessage() {} }, history: { replaceState(_state, _title, path) { route = path; } },
-    MutationObserver: class { observe() {} },
-    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }); },
-  });
-  goodPage.document.head = { appendChild(script) { moduleUrl = script.src; } };
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(route, '/');
-  assert.match(moduleUrl, /89bd78c99e75504faa5f1f8d928e3370574f9eab\/main\.js$/);
+  const target = vm.runInContext('frame.contentWindow = { postMessage() {} }; frame.contentWindow', page);
+  const handshake = { isTrusted: true, source: target, origin: 'https://proxy.test', data: { type: 'monkeh-proxy:ready' } };
+  for (const change of [{ isTrusted: false }, { source: {} }, { origin: 'https://evil.test' }, { data: { type: 'provider-rendered' } }]) listeners.get('message')({ ...handshake, ...change });
+  assert.equal(channels.length, 0);
+  listeners.get('message')(handshake);
+  assert.equal(channels[0].port1.starts, 1);
+  channels[0].port1.onmessage({ data: { event: 'page', data: { isError: false } } });
+  assert.match(vm.runInContext('status.textContent', page), /Connected through Monkeh/);
+  await page.loadProvider();
+  assert.equal(channels[0].port1.closes, 1);
+  channels[0].port1.onmessage({ data: { event: 'page', data: { isError: false } } });
+  assert.match(vm.runInContext('status.textContent', page), /Opening flyflix/);
 });
 
-test('Flyflix reports a missing backend for an HTML fallback and Reload recovers after routing is fixed', async () => {
+test('Flyflix refuses an unconfigured shell and ignores configuration completion after the page closes', async () => {
+  const listeners = new Map();
+  let resolve;
+  const page = contextFor(inlineScript(flyflix), {
+    location: new URL('https://monkeh.test/flyflix.html'),
+    addEventListener: (name, listener) => listeners.set(name, listener),
+    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://other.test'] }); }
+  });
+  await new Promise(done => setImmediate(done));
+  assert.equal(vm.runInContext('frame.src', page), undefined);
+  assert.match(vm.runInContext('status.textContent', page), /origin is not configured/);
+  page.MonkehConfig = { fetchConfig: () => new Promise(done => { resolve = done; }) };
+  const loading = page.loadProvider();
+  listeners.get('pagehide')();
+  resolve({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] });
+  await loading;
+  assert.equal(vm.runInContext('frame.src', page), undefined);
+});
+
+test('Flyflix reports HTML configuration clearly and Reload recovers', async () => {
   const page = contextFor(inlineScript(flyflix), {
     location: new URL('https://monkeh.test/flyflix.html'),
     async fetch() { return new Response('<!DOCTYPE html><title>Monkeh</title>', { headers: { 'Content-Type': 'text/html' } }); }
@@ -240,33 +246,19 @@ test('Flyflix reports a missing backend for an HTML fallback and Reload recovers
   assert.match(vm.runInContext('status.textContent', page), /backend is not connected.*\/api\/config/);
   assert.doesNotMatch(vm.runInContext('status.textContent', page), /Unexpected token/);
   assert.equal(vm.runInContext('frame.src', page), undefined);
-  page.fetch = async () => Response.json({ proxyOrigin: 'https://proxy.test' });
+  page.fetch = async () => Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] });
   await page.loadProvider();
-  assert.equal(vm.runInContext('frame.src', page), 'https://proxy.test/flyflix-provider.html?run=2');
-  vm.runInContext('clearTimeout(timeout)', page);
+  assert.equal(vm.runInContext('frame.src', page), 'https://proxy.test/proxy-host.html#https%3A%2F%2Fflyflix.net%2F');
 });
 
-test('Flyflix provider rejects HTML configuration before loading third-party code and can retry', async () => {
-  let loads = 0;
-  const notice = { hidden: true, textContent: '' };
-  const root = { childElementCount: 0 };
-  const page = contextFor(inlineScript(flyflixProvider), {
-    location: new URL('https://proxy.test/flyflix-provider.html?run=1'),
-    parent: { postMessage() {} },
-    history: { replaceState() {} },
-    MutationObserver: class { observe() {} },
-    document: {
-      getElementById: id => id === 'provider-error' ? notice : root,
-      createElement: () => ({ addEventListener() {} }),
-      head: { appendChild() { loads++; } }
-    },
-    async fetch() { return new Response('<!DOCTYPE html><title>Monkeh</title>', { headers: { 'Content-Type': 'text/html' } }); }
-  });
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(notice.hidden, false);
-  assert.match(notice.textContent, /backend is not connected.*\/api\/config/);
-  assert.equal(loads, 0);
-  page.fetch = async () => Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] });
-  await page.startProvider();
-  assert.equal(loads, 1);
+test('old Flyflix provider links redirect only from the configured proxy origin', async () => {
+  for (const origin of ['https://monkeh.test', 'https://proxy.test']) {
+    let redirected;
+    const page = contextFor(inlineScript(flyflixProvider), {
+      location: { origin, href: origin + '/flyflix-provider.html', replace(value) { redirected = value; } },
+      async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }); }
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(redirected, origin === 'https://proxy.test' ? '/proxy-host.html#https%3A%2F%2Fflyflix.net%2F' : undefined);
+  }
 });

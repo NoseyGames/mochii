@@ -8,65 +8,71 @@
   <style>
     :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;color:#eee;background:#111}
     *{box-sizing:border-box}html,body{margin:0;height:100%}body{display:flex;flex-direction:column}
-    header{display:flex;align-items:center;gap:16px;padding:12px 18px;border-bottom:1px solid #333;background:#181818}
-    strong{letter-spacing:-.03em;font-size:19px}p{margin:0;flex:1;color:#b4b4bf;font-size:13px;line-height:1.5}
-    a,button{color:#eee;border:1px solid #454550;border-radius:8px;padding:8px 12px;background:#25252d;text-decoration:none;font:inherit;font-size:12px;cursor:pointer}
-    iframe{width:100%;flex:1;min-height:0;border:0;background:#090909}button:hover,a:hover{background:#363641}
-    @media(max-width:600px){header{flex-wrap:wrap}p{flex-basis:70%}}
+    header{display:flex;align-items:center;gap:12px;padding:6px 12px;border-bottom:1px solid #333;background:#181818}
+    strong{letter-spacing:-.03em;font-size:16px}p{margin:0;flex:1;color:#b4b4bf;font-size:12px;line-height:1.5}
+    button{color:#eee;border:1px solid #454550;border-radius:6px;padding:5px 10px;background:#25252d;font:inherit;font-size:12px;cursor:pointer}
+    iframe{width:100%;flex:1;min-height:0;border:0;background:#090909}button:hover{background:#363641}
   </style>
+<script type="module" src="/browser-tools/preferences.js"></script>
 </head>
 <body>
   <header>
     <strong>Flyflix</strong>
-    <p id="status" role="status">Opening provider content in an isolated view…</p>
+    <p id="status" role="status">Opening flyflix.net through the proxy…</p>
     <button id="retry" type="button">Reload</button>
-    <a href="https://github.com/Consessions/flyflix" target="_blank" rel="noopener noreferrer">Provider source</a>
   </header>
-  <iframe id="provider" title="Isolated Flyflix provider" sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock" allow="fullscreen" referrerpolicy="no-referrer"></iframe>
+  <iframe id="provider" title="Flyflix through Monkeh" sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-presentation" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="no-referrer"></iframe>
   <script src="/browser-tools/config.js"></script>
   <script src="/browser-tools/shell-entry.js"></script>
   <script>
     const frame = document.getElementById('provider');
     const status = document.getElementById('status');
-    let timeout;
     let generation = 0;
+    let request;
+    let channel;
     let providerOrigin = '';
     function validateProviderOrigin(value) {
       const origin = new URL(value);
-      if (!['http:', 'https:'].includes(origin.protocol) || origin.username || origin.password || origin.origin !== value || origin.origin === location.origin) {
+      const local = location.protocol === 'http:' && origin.protocol === 'http:' && origin.hostname === location.hostname && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname);
+      if (origin.protocol !== 'https:' && !local || origin.username || origin.password || origin.origin !== value || origin.origin === location.origin) {
         throw new Error('Flyflix requires a separate configured proxy origin.');
       }
       return origin.origin;
     }
     async function loadProvider() {
-      clearTimeout(timeout);
       const current = ++generation;
-      status.textContent = 'Opening provider content in an isolated view…';
+      request?.abort();
+      channel?.port1.close();
+      channel = null;
+      const pending = request = new AbortController();
+      status.textContent = 'Opening flyflix.net through the proxy…';
       try {
-        const config = await globalThis.MonkehConfig.fetchConfig();
+        const config = await globalThis.MonkehConfig.fetchConfig({ signal: AbortSignal.any([pending.signal, AbortSignal.timeout(10000)]) });
         const origin = validateProviderOrigin(config.proxyOrigin);
-        if (current !== generation) return;
+        if (!Array.isArray(config.shellOrigins) || !config.shellOrigins.includes(location.origin)) throw new Error('This Flyflix app origin is not configured.');
+        if (current !== generation || pending.signal.aborted) return;
         providerOrigin = origin;
-        frame.src = `${origin}/flyflix-provider.html?run=${current}`;
-        timeout = setTimeout(() => {
-          status.textContent = 'The provider did not start. Check your connection and use Reload to try again.';
-        }, 20000);
+        frame.src = `${origin}/proxy-host.html#${encodeURIComponent('https://flyflix.net/')}`;
       } catch (error) {
-        if (current === generation) status.textContent = String(error.message || 'The provider could not start.');
+        if (current === generation && !pending.signal.aborted) status.textContent = String(error.message || 'Flyflix could not start.');
       }
     }
     window.addEventListener('message', event => {
-      if (event.source !== frame.contentWindow || event.origin !== providerOrigin || event.data?.generation !== generation) return;
-      if (event.data.type === 'provider-rendered') {
-        clearTimeout(timeout);
-        status.textContent = 'Provider connected in a separate browser origin.';
-      } else if (event.data.type === 'provider-error') {
-        clearTimeout(timeout);
-        status.textContent = 'The provider encountered an error. Reload to retry; external players may be unavailable.';
-      }
+      if (!event.isTrusted || event.source !== frame.contentWindow || event.origin !== providerOrigin || event.data?.type !== 'monkeh-proxy:ready') return;
+      channel?.port1.close();
+      const current = generation;
+      const connection = channel = new MessageChannel();
+      connection.port1.onmessage = ({ data }) => {
+        if (current !== generation || channel !== connection) return;
+        if (data?.event === 'page') status.textContent = data.data?.isError ? 'Flyflix could not load. Use the proxy retry controls below.' : 'flyflix.net · Connected through Monkeh';
+        else if (data?.event === 'pagehide') status.textContent = 'Loading the next page…';
+      };
+      connection.port1.start();
+      frame.contentWindow.postMessage({ type: 'monkeh-proxy:init' }, providerOrigin, [connection.port2]);
     });
     document.getElementById('retry').addEventListener('click', loadProvider);
-    loadProvider();
+    window.addEventListener('pagehide', () => { generation++; request?.abort(); channel?.port1.close(); });
+    void loadProvider();
   </script>
 </body>
 </html>

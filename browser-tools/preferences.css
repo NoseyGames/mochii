@@ -1,0 +1,29 @@
+:root { --user-accent: #a6abb1; --user-font: Inter, system-ui, sans-serif; }
+html[data-mode] { font-family: var(--user-font); }
+html[data-mode="light"] { color-scheme: light; --bg-main: #f3f4f5; --bg-card: #fff; --bg-card-hover: #e9edf0; --border-color: #d3d7dc; --border-hover: #939da6; --text-main: #20262b; --text-muted: #56616c; --text-dim: #616c78; }
+html[data-mode] .app-viewport { isolation: isolate; }
+html[data-mode] .app-viewport::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: -1; opacity: .19; background: var(--user-background) center / cover; }
+html[data-background="grid"] .app-viewport::before { background: linear-gradient(var(--user-accent) 1px, transparent 1px), linear-gradient(90deg, var(--user-accent) 1px, transparent 1px); background-size: 42px 42px; }
+html[data-background="hive"] .app-viewport::before { background: linear-gradient(30deg, var(--user-accent) 12%, transparent 12.5%, transparent 87%, var(--user-accent) 87.5%), linear-gradient(150deg, var(--user-accent) 12%, transparent 12.5%, transparent 87%, var(--user-accent) 87.5%), linear-gradient(30deg, var(--user-accent) 12%, transparent 12.5%, transparent 87%, var(--user-accent) 87.5%); background-size: 70px 122px; background-position: 0 0, 0 0, 35px 61px; }
+html[data-background="synthwave"] .app-viewport::before { background: radial-gradient(ellipse at 50% 72%, var(--user-accent), transparent 60%), repeating-linear-gradient(0deg, transparent 0 35px, var(--user-accent) 36px 37px); mask-image: linear-gradient(transparent 35%, #000); }
+html[data-background="cat"] .app-viewport::before { background-color: var(--user-accent); mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cpath d='M40 90 35 35 75 65Q100 52 125 65L165 35 160 95C180 180 20 180 40 90Z' fill='black'/%3E%3C/svg%3E") center / min(60vw, 480px) no-repeat; opacity: .09; }
+html[data-background="doubleu"] .app-viewport::before { background: repeating-radial-gradient(ellipse at 50% -15%, transparent 0 34px, var(--user-accent) 35px 37px, transparent 38px 72px); }
+html[data-background="custom"] .app-viewport::before { opacity: .4; }
+html[data-mode] .floating-nav, html[data-mode] .modal-card, html[data-mode] .setting-item, html[data-mode] .game-item, html[data-mode] .search-input, html[data-mode] .modal-search-box, html[data-mode] .modal-sort-select, html[data-mode] .settings-body select, html[data-mode] .settings-body input:not([type="checkbox"]):not([type="color"]) { background-color: var(--bg-card); border-color: var(--border-color); color: var(--text-main); }
+html[data-mode] .nav-icon:hover, html[data-mode] .game-item:hover, html[data-mode] .close-btn:hover { background-color: var(--bg-card-hover); border-color: var(--user-accent); }
+html[data-mode] :is(.app-viewport, .overlay-backdrop) :is(input, select, button):focus-visible { outline-color: var(--user-accent); }
+html[data-mode] .settings-body input[type="checkbox"] { accent-color: var(--user-accent); }
+html[data-skip-loading="true"] :is(.app-viewport, .overlay-backdrop), html[data-skip-loading="true"] :is(.app-viewport, .overlay-backdrop) * { animation: none !important; transition: none !important; }
+.preferences-section { border: 1px solid var(--border-color); border-radius: 9px; }
+.preferences-section > summary { padding: 15px; cursor: pointer; font-size: 13px; font-weight: 600; }
+.preferences-section[open] > summary { border-bottom: 1px solid var(--border-color); }
+.preferences-fields { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.preferences-fields .setting-item { padding: 12px; }
+.preferences-fields input[type="color"] { width: 42px; height: 32px; border: 1px solid var(--border-color); border-radius: 6px; padding: 2px; background: transparent; }
+.preferences-fields .setting-item > input[type="url"] { width: min(52%, 260px); }
+.preference-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.preference-button { min-height: 34px; padding: 7px 10px; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main); background: var(--bg-card); font: inherit; font-size: 12px; cursor: pointer; }
+.preference-button:hover { border-color: var(--user-accent); background: var(--bg-card-hover); }
+.preference-search { width: 100%; min-height: 34px; padding: 7px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); color: var(--text-main); font-size: 12px; }
+#general-preferences { display: flex; flex-direction: column; gap: 12px; }
+@media (max-width: 600px) { .preferences-fields .setting-item > input[type="url"] { width: 100%; } }

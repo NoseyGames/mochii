@@ -20,7 +20,7 @@ function node() {
 function port() {
   return { messages: [], starts: 0, closes: 0, postMessage(message) { this.messages.push(message); }, start() { this.starts++; }, close() { this.closes++; }, async request(message) { await this.onmessage?.({ data: message }); await flush(); } };
 }
-async function harness({ config: extraConfig = {}, evaluate = async code => `result: ${code}`, startup, fetchConfig, workerReady = Promise.resolve() } = {}) {
+async function harness({ config: extraConfig = {}, evaluate = async code => `result: ${code}`, startup, fetchConfig, workerReady = Promise.resolve(), workerRegistration, workerController = {} } = {}) {
   const allNodes = new Map();
   const get = id => {
     if (!allNodes.has(id)) allNodes.set(id, node());
@@ -33,7 +33,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   contextWindow.SharedWorker = class {};
   contextWindow.parent = { sent: [], postMessage(data, origin) { this.sent.push({ data, origin }); } };
   const location = { origin: proxyOrigin, href: proxyOrigin + '/proxy-host.html#' + encodeURIComponent('https://example.com/'), hash: '#' + encodeURIComponent('https://example.com/') };
-  const pageDoc = { ...node(), title: 'Example', readyState: 'complete', getElementById: () => null };
+  const pageDoc = { ...node(), title: 'Example', readyState: 'complete', body: { childElementCount: 1, textContent: 'Example' }, getElementById: () => null };
   const root = { nodeType: 1, localName: 'html', id: '', className: '', children: [], ownerDocument: pageDoc };
   pageDoc.documentElement = root;
   pageDoc.querySelector = () => root;
@@ -45,10 +45,12 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   frame.contentDocument = pageDoc;
   const evaluated = [];
   const runtimes = [];
+  const observers = [];
   let activated = 0;
   let registrations = 0;
   let treeReads = 0;
   let networkOptions;
+  const serviceWorker = { ...node(), async register() { registrations++; return workerRegistration; }, ready: workerReady, controller: workerController };
   const network = { connects: 0, failures: 0, disposed: 0, switches: [], activeEndpoint: 'ws://127.0.0.1:3101/wisp/',
     async connect() { this.connects++; if (this.connects === 1) await networkOptions.activate('ws://127.0.0.1:3101/wisp/'); networkOptions.onStatus({ status: 'connected', activeEndpoint: 'ws://127.0.0.1:3101/wisp/', configuredCount: 1 }); return 'ws://127.0.0.1:3101/wisp/'; },
     async reportFailure() { this.failures++; }, async setOnline() {}, dispose() { this.disposed++; },
@@ -57,8 +59,13 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   const sandbox = {
     MonkehUseBackendConfig: true,
     window: contextWindow, document: doc, location, isSecureContext: true,
-    navigator: { onLine: true, serviceWorker: { async register() { registrations++; }, ready: workerReady, controller: {}, addEventListener() {}, removeEventListener() {} } },
+    navigator: { onLine: true, serviceWorker },
     URL, AbortSignal, AbortController, TextEncoder, TextDecoder, Map, WeakMap, Set, decodeURIComponent, encodeURIComponent,
+    MutationObserver: class {
+      constructor(callback) { this.callback = callback; observers.push(this); }
+      observe(target) { this.target = target; }
+      disconnect() { this.disconnected = true; }
+    },
     fetch: fetchConfig || (async () => new Response(JSON.stringify({ shellOrigins: [shellOrigin], proxyOrigin, wispEndpoints: [{ name: 'Primary', url: '/wisp/' }], ...extraConfig }), { headers: { 'Content-Type': 'application/json' } })),
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn, ms }); return id; }, clearTimeout(id) { timers.delete(id); },
     BareMux: { BareMuxConnection: class { async setTransport() { activated++; if (startup) await startup; } } },
@@ -88,7 +95,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   }
   function loadPage() { frame.fire('load'); }
   function replaceDocument(readyState = 'complete') {
-    const next = { ...node(), title: 'Next', readyState, getElementById: () => null };
+    const next = { ...node(), title: 'Next', readyState, body: { childElementCount: 1, textContent: 'Next' }, getElementById: () => null };
     next.documentElement = { nodeType: 1, localName: 'html', id: '', className: '', children: [], ownerDocument: next };
     next.querySelector = () => next.documentElement;
     frame.contentDocument = pageWindow.document = next;
@@ -108,7 +115,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
     timers.delete(id); timer.fn();
     return true;
   }
-  return { contextWindow, doc, get, frame, pageWindow, pageDoc, root, network, timers, evaluated, runtimes, init, loadPage, replaceDocument, tickWatch, expireReadiness, location, navigations, get networkOptions() { return networkOptions; }, get treeReads() { return treeReads; }, get activated() { return activated; }, get registrations() { return registrations; } };
+  return { contextWindow, doc, get, frame, pageWindow, pageDoc, root, network, timers, evaluated, runtimes, observers, serviceWorker, init, loadPage, replaceDocument, tickWatch, expireReadiness, location, navigations, get networkOptions() { return networkOptions; }, get treeReads() { return treeReads; }, get activated() { return activated; }, get registrations() { return registrations; } };
 }
 
 test('proxy host accepts bridge transfer only from the allowed shell window and origin', async () => {
@@ -332,6 +339,76 @@ test('a blank slow page requires a trusted click before switching and retrying t
   app.contextWindow.fire('pagehide');
 });
 
+test('an empty completed UV document cannot cancel the deadline or hide server recovery', async () => {
+  const app = await harness();
+  const blank = app.replaceDocument('complete');
+  blank.title = '';
+  blank.body = { childElementCount: 0, textContent: '' };
+  app.loadPage();
+  assert.equal(app.runtimes.length, 0);
+  assert.equal(app.get('status').hidden, false);
+  assert.equal(app.observers.length, 1);
+  app.loadPage();
+  assert.equal(app.observers.length, 1, 'repeated empty load events reuse one observer');
+  assert.equal(app.expireReadiness(), true);
+  assert.equal(app.get('status').hidden, false);
+  assert.equal(app.get('switch-retry').hidden, false);
+  assert.match(app.get('status-trace').textContent, /45 seconds/);
+  assert.equal(app.navigations.length, 1);
+  assert.deepEqual(app.network.switches, []);
+  blank.body.childElementCount = 1;
+  app.observers[0].callback();
+  assert.equal(app.runtimes.length, 1, 'late rendering remains usable without replaying the request');
+  assert.equal(app.get('status').hidden, true);
+  assert.equal(app.get('switch-retry').hidden, true);
+  assert.equal(app.observers[0].disconnected, true);
+  assert.equal(app.timers.size, 0);
+  app.contextWindow.fire('pagehide');
+});
+
+test('DOMContentLoaded with an empty body waits for content and supports late text-only rendering', async () => {
+  const app = await harness();
+  const blank = app.replaceDocument('loading');
+  blank.body = { childElementCount: 0, textContent: ' \n ' };
+  app.tickWatch();
+  blank.readyState = 'interactive';
+  blank.fire('DOMContentLoaded');
+  assert.equal(app.runtimes.length, 0);
+  assert.equal(app.expireReadiness(), true);
+  assert.equal(app.get('switch-retry').hidden, false);
+  blank.body.textContent = 'Connection error from the remote site';
+  app.observers[0].callback();
+  assert.equal(app.runtimes.length, 1);
+  assert.equal(app.get('status').hidden, true);
+  assert.equal(app.navigations.length, 1);
+  app.contextWindow.fire('pagehide');
+});
+
+test('stale blank-document observers cannot hide a newer navigation or revive a closed host', async () => {
+  for (const close of [false, true]) {
+    const app = await harness();
+    const blank = app.replaceDocument('complete');
+    blank.body = { childElementCount: 0, textContent: '' };
+    app.loadPage();
+    const observer = app.observers[0];
+    if (close) app.contextWindow.fire('pagehide');
+    else {
+      app.location.hash = '#' + encodeURIComponent('https://next.example/');
+      app.contextWindow.fire('hashchange');
+      await flush();
+    }
+    assert.equal(observer.disconnected, true);
+    blank.body.childElementCount = 1;
+    observer.callback();
+    assert.equal(app.runtimes.length, 0);
+    if (!close) {
+      assert.equal(app.expireReadiness(), true);
+      assert.match(app.get('status-retry-note').textContent, /https:\/\/next.example\//);
+      app.contextWindow.fire('pagehide');
+    }
+  }
+});
+
 test('pending DOM readiness times out but its late content can still clear the diagnostic', async () => {
   const app = await harness();
   const next = app.replaceDocument('loading');
@@ -456,6 +533,66 @@ test('endpoint selection starts while the service worker activates, but navigati
   ready(); await flush();
   assert.equal(app.navigations.length, 1);
   app.contextWindow.fire('pagehide');
+});
+
+test('an existing old controller cannot navigate until an installing proxy update activates and takes control', async () => {
+  const updating = { ...node(), state: 'installing' };
+  const app = await harness({ workerRegistration: { installing: updating } });
+  assert.equal(app.network.connects, 1, 'Wisp connects in parallel with the worker update');
+  assert.equal(app.navigations.length, 0);
+  assert.equal(updating.listeners.get('statechange').size, 1);
+  updating.state = 'activated'; updating.fire('statechange'); await flush();
+  assert.equal(updating.listeners.get('statechange').size, 0);
+  assert.equal(app.navigations.length, 0, 'an activated update must claim this host before its first page');
+  assert.equal(app.serviceWorker.listeners.get('controllerchange').size, 1);
+  app.serviceWorker.fire('controllerchange'); await flush();
+  assert.equal(app.navigations.length, 0, 'unrelated controller events do not release navigation');
+  app.serviceWorker.controller = updating;
+  app.serviceWorker.fire('controllerchange'); await flush();
+  assert.equal(app.navigations.length, 1);
+  assert.equal(app.serviceWorker.listeners.get('controllerchange').size, 0);
+  assert.equal(app.registrations, 1);
+  assert.equal(app.network.connects, 1);
+  app.contextWindow.fire('pagehide');
+});
+
+test('a waiting proxy update that already claims the host finishes without another navigation or listener', async () => {
+  const updating = { ...node(), state: 'installed' };
+  const app = await harness({ workerRegistration: { waiting: updating } });
+  assert.equal(app.navigations.length, 0);
+  app.serviceWorker.controller = updating;
+  updating.state = 'activated'; updating.fire('statechange'); await flush();
+  assert.equal(app.navigations.length, 1);
+  assert.equal(updating.listeners.get('statechange').size, 0);
+  assert.equal(app.serviceWorker.listeners.get('controllerchange'), undefined);
+  app.contextWindow.fire('pagehide');
+});
+
+test('failed and stalled proxy updates clean up and cannot reuse the old worker on retry', async () => {
+  for (const timeout of [false, true]) {
+    const updating = { ...node(), state: 'installing' };
+    const registration = { installing: updating };
+    const app = await harness({ workerRegistration: registration });
+    if (timeout) {
+      const entry = [...app.timers].find(([, timer]) => timer.ms === 15000);
+      assert.ok(entry);
+      app.timers.delete(entry[0]); entry[1].fn();
+    } else { updating.state = 'redundant'; updating.fire('statechange'); }
+    await flush();
+    assert.equal(app.navigations.length, 0);
+    assert.match(app.get('status-message').textContent, timeout ? /update timed out/ : /update failed/);
+    assert.equal(updating.listeners.get('statechange').size, 0);
+    const replacement = { ...node(), state: 'installing' };
+    registration.installing = replacement;
+    app.get('retry').fire('click'); await flush();
+    assert.equal(app.registrations, 2, 'retry registers again instead of using the cached old controller');
+    assert.equal(app.navigations.length, 0);
+    app.serviceWorker.controller = replacement;
+    replacement.state = 'activated'; replacement.fire('statechange'); await flush();
+    assert.equal(app.navigations.length, 1);
+    assert.equal(replacement.listeners.get('statechange').size, 0);
+    app.contextWindow.fire('pagehide');
+  }
 });
 
 const tlsFailure = 'Error: Hyper client: Connect: Custom { kind: UnexpectedEof, error: "tls handshake eof" }';

@@ -162,7 +162,7 @@ test('preparing a new proxy page leaves the current local app interactive until 
   assert.equal(element('viewer-progress').hidden, true);
 });
 
-test('a failed or timed-out catalog request preserves the current page and offers a retry', async () => {
+test('a failed proxy setup for an external catalog entry preserves the current page and offers a retry', async () => {
   const { page, element } = createPage();
   const prepared = [];
   page.MonkehTools = { prepareNavigation: url => prepared.push(url), expectDocument() {} };
@@ -283,7 +283,7 @@ test('HTML from a missing API route shows a deployment error, blocks browsing, a
   assert.equal(element('viewer-frame').srcdoc, '');
 });
 
-test('closing and reopening the viewer prevents an old remote load from replacing a local app', async () => {
+test('closing and reopening the viewer ignores stale proxy setup without aborting shared configuration', async () => {
   const { page, element } = createPage();
   const pendingResponse = deferred();
   let signal;
@@ -294,14 +294,33 @@ test('closing and reopening the viewer prevents an old remote load from replacin
   };
   const oldNavigation = page.openViewer('Old game', '', 'https://example.com/old.html');
   page.closeViewer();
-  assert.equal(signal.aborted, true);
+  assert.equal(signal.aborted, false, 'proxy configuration is shared across browser navigation');
   await page.openViewer('Auk', '', '/apps/auk.html');
-  pendingResponse.resolve({ ok: true, text: async () => '<h1>Old content</h1>' });
+  pendingResponse.resolve(configResponse({ proxyOrigin: 'http://localhost:3001', wispEndpoints: [{ url: '/wisp/' }] }));
   await oldNavigation;
 
   assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/auk.html');
   assert.equal(element('viewer-frame').srcdoc, '');
+  assert.equal(element('viewer-title').textContent, 'Auk');
+  assert.equal(page.MonkehProxyOrigin, 'http://localhost:3001', 'the shared setup still completes for later navigation');
+  await page.retryViewerNavigation();
+  assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/auk.html', 'the stale completion does not restore its retry target');
   assert.equal(element('zone-viewer').classList.contains('active'), true);
+});
+
+test('concurrent external catalog navigation shares configuration and only the latest destination opens', async () => {
+  const { page, element } = createPage();
+  const response = deferred();
+  let requests = 0;
+  page.fetch = () => { requests++; return response.promise; };
+  const first = page.openViewer('First', '', 'https://first.example/game.html', false);
+  const latest = page.openViewer('Latest', '', 'https://latest.example/game.html', false);
+  response.resolve(configResponse({ proxyOrigin: 'http://localhost:3001', wispEndpoints: [{ url: '/wisp/' }] }));
+  await Promise.all([first, latest]);
+  assert.equal(requests, 1);
+  assert.equal(element('viewer-frame').src, 'http://localhost:3001/proxy-host.html#https%3A%2F%2Flatest.example%2Fgame.html');
+  assert.equal(element('viewer-frame').srcdoc, '');
+  assert.equal(element('viewer-title').textContent, 'Latest');
 });
 
 test('local viewer keeps the app URL so its relative assets resolve correctly', async () => {
@@ -394,46 +413,64 @@ test('Mochii Cloud is available offline from the app catalog and opens as a loca
   await nextTurn();
 });
 
-test('external catalog HTML runs in an opaque sandbox and a local app clears that sandbox', async () => {
-  const { page, element } = createPage();
-  page.fetch = async () => ({ ok: true, url: 'https://cdn.example/game.html', text: async () => '<script>parent.attack()</script>' });
-  page.DOMParser = class {
-    parseFromString(source) {
-      return { querySelector: () => null, createElement: () => ({ getAttribute: () => null }),
-        head: { prepend() {} }, documentElement: { outerHTML: source } };
-    }
-  };
-  await page.openViewer('Game', '', 'https://cdn.example/game.html');
-  const frame = element('viewer-frame');
-  assert.match(frame.sandbox, /allow-scripts/);
-  assert.doesNotMatch(frame.sandbox, /allow-same-origin|allow-top-navigation/);
-  await page.openViewer('Auk', '', '/apps/auk.html');
-  assert.equal(frame.sandbox, '');
-});
-
-test('retry reloads a catalog srcdoc from its original URL and retains its isolation', async () => {
+test('external catalog entries always use the isolated proxy even with isProxied false', async () => {
   const { page, element } = createPage();
   const requests = [];
-  page.fetch = async url => {
-    requests.push(url);
-    return { ok: true, url, text: async () => `<h1>Game load ${requests.length}</h1>` };
-  };
-  page.DOMParser = class {
-    parseFromString(source) {
-      return { querySelector: () => null, createElement: () => ({ getAttribute: () => null }),
-        head: { prepend() {} }, documentElement: { outerHTML: source } };
-    }
-  };
+  const configFetch = page.fetch;
+  page.fetch = (...args) => { requests.push(args[0]); return configFetch(...args); };
+  page.MonkehPrivacy = { get: () => ({ httpsOnly: false }), sandbox: () => 'allow-scripts allow-same-origin allow-forms allow-pointer-lock' };
+  const frame = element('viewer-frame');
+  for (const url of ['https://cdn.example/game.html', 'http://legacy.example/game.html']) {
+    await page.openViewer('Game', '', url, false);
+    assert.equal(frame.src, 'http://localhost:3001/proxy-host.html#' + encodeURIComponent(url));
+    assert.equal(frame.srcdoc, '');
+    assert.match(frame.sandbox, /allow-scripts/);
+    assert.match(frame.sandbox, /allow-same-origin/);
+    assert.doesNotMatch(frame.sandbox, /allow-top-navigation|allow-popups/);
+  }
+  assert.deepEqual(requests, ['/api/config'], 'catalog HTML is never downloaded into a shell srcdoc');
+  for (const app of ['/apps/auk.html', '/apps/mochii-cloud.html']) {
+    await page.openViewer('Local app', '', app);
+    assert.equal(frame.src, 'http://localhost:3000' + app);
+    assert.equal(frame.srcdoc, '');
+    assert.equal(frame.sandbox, '');
+  }
+});
+
+test('retry reopens the external catalog address through the proxy and closing clears the target', async () => {
+  const { page, element } = createPage();
+  const requests = [];
+  const configFetch = page.fetch;
+  page.fetch = (...args) => { requests.push(args[0]); return configFetch(...args); };
+  const destinations = [];
+  const frame = element('viewer-frame');
+  Object.defineProperty(frame, 'src', { get: () => destinations.at(-1) || 'about:blank', set: value => destinations.push(value) });
   await page.openViewer('Game', 'Author', 'https://cdn.example/game.html');
-  assert.match(element('viewer-frame').srcdoc, /Game load 1/);
   await page.retryViewerNavigation();
-  assert.deepEqual(requests, ['https://cdn.example/game.html', 'https://cdn.example/game.html']);
-  assert.match(element('viewer-frame').srcdoc, /Game load 2/);
-  assert.doesNotMatch(element('viewer-frame').sandbox, /allow-same-origin|allow-top-navigation/);
+  const expected = 'http://localhost:3001/proxy-host.html#https%3A%2F%2Fcdn.example%2Fgame.html';
+  assert.deepEqual(destinations, [expected, expected]);
+  assert.deepEqual(requests, ['/api/config']);
+  assert.equal(frame.srcdoc, '');
+  assert.match(frame.sandbox, /allow-same-origin/);
+  assert.doesNotMatch(frame.sandbox, /allow-top-navigation/);
   assert.equal(element('viewer-title').textContent, 'Game');
   assert.equal(element('viewer-author').textContent, 'by Author');
   page.closeViewer();
+  const closedCount = destinations.length;
   await page.retryViewerNavigation();
-  assert.equal(requests.length, 2, 'closing clears the saved retry target');
+  assert.equal(destinations.length, closedCount, 'closing clears the saved retry target');
+  assert.equal(frame.src, 'about:blank');
   assert.equal(element('zone-viewer').classList.contains('active'), false);
+});
+
+test('Flyflix catalog launches the live website through the same proxy viewer', async () => {
+  const { page, element } = createPage();
+  const configFetch = page.fetch;
+  page.fetch = (url, ...args) => url === '/api/config' ? configFetch(url, ...args) : Promise.resolve({ ok: true, text: async () => '[]' });
+  page.openAppsPopover();
+  const app = page.rawApps.find(entry => entry.name === 'Flyflix');
+  assert.equal(app.url, 'https://flyflix.net/');
+  await page.openViewer(app.name, app.author, app.url);
+  assert.equal(element('viewer-frame').src, 'http://localhost:3001/proxy-host.html#https%3A%2F%2Fflyflix.net%2F');
+  assert.equal(element('viewer-frame').srcdoc, '');
 });

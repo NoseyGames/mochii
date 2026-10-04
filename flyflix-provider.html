@@ -4,53 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>Flyflix provider</title>
-  <link rel="stylesheet" crossorigin="anonymous" href="https://cdn.jsdelivr.net/gh/Consessions/flyflix@89bd78c99e75504faa5f1f8d928e3370574f9eab/main.css">
-  <style>html,body{margin:0;background:#090909;color:#eee;font-family:system-ui}#provider-error{padding:24px;line-height:1.5}</style>
+  <title>Flyflix · Monkeh</title>
+  <style>body{margin:0;padding:24px;background:#111;color:#eee;font:14px/1.5 system-ui}</style>
 </head>
 <body>
-  <div id="root"></div>
-  <p id="provider-error" hidden></p>
+  <p id="status" role="status">Opening flyflix.net through the proxy…</p>
   <script src="/browser-tools/config.js"></script>
   <script>
-                                                                               
-                                                                                
-    const generation = Number(new URL(location.href).searchParams.get('run'));
-    let shellOrigins = [];
-    function report(type) {
-      for (const origin of shellOrigins) parent.postMessage({ type, generation }, origin);
-    }
-    function fail(message) {
-      const notice = document.getElementById('provider-error');
-      notice.textContent = message;
-      notice.hidden = false;
-      report('provider-error');
-    }
     async function startProvider() {
       try {
-        const config = await globalThis.MonkehConfig.fetchConfig();
+        const config = await globalThis.MonkehConfig.fetchConfig({ signal: AbortSignal.timeout(10000) });
         if (config.proxyOrigin !== location.origin || !Array.isArray(config.shellOrigins) || config.shellOrigins.includes(location.origin)) {
-          throw new Error('This provider must run on the separate proxy origin.');
+          throw new Error('Flyflix must open on the separate proxy origin.');
         }
-        shellOrigins = config.shellOrigins.slice(0, 20).filter(value => {
-          try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && url.origin === value; } catch { return false; }
-        });
-                                                                            
-                                                                                 
-        history.replaceState(null, '', '/');
-        addEventListener('error', () => report('provider-error'));
-        addEventListener('unhandledrejection', () => report('provider-error'));
-        const observer = new MutationObserver(() => {
-          if (document.getElementById('root').childElementCount) { report('provider-rendered'); observer.disconnect(); }
-        });
-        observer.observe(document.getElementById('root'), { childList: true });
-        const script = document.createElement('script');
-        script.type = 'module';
-        script.crossOrigin = 'anonymous';
-        script.src = 'https://cdn.jsdelivr.net/gh/Consessions/flyflix@89bd78c99e75504faa5f1f8d928e3370574f9eab/main.js';
-        script.addEventListener('error', () => fail('Flyflix could not download its app. Reload to try again.'), { once: true });
-        document.head.appendChild(script);
-      } catch (error) { fail(String(error.message || 'Flyflix could not start.')); }
+        location.replace('/proxy-host.html#' + encodeURIComponent('https://flyflix.net/'));
+      } catch (error) {
+        document.getElementById('status').textContent = String(error.message || 'Flyflix could not start. Reload to try again.');
+      }
     }
     void startProvider();
   </script>

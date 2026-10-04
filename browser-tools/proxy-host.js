@@ -13,6 +13,7 @@ let runtime;
 let network;
 let transport;
 let starting;
+let workerConfigured = false;
 let latestNetwork;
 let latestPage;
 let documentGeneration = 0;
@@ -29,6 +30,8 @@ let documentDeadlineTimer;
 let documentWatchGeneration = 0;
 let observedDocument;
 let readyListener;
+let contentObserver;
+let blankDocument;
 let pageFailure = null;
 let switching = null;
 
@@ -297,6 +300,24 @@ function stopDocumentWatch() {
   documentDeadlineTimer = undefined;
   observedDocument?.removeEventListener('DOMContentLoaded', readyListener);
   observedDocument = readyListener = undefined;
+  contentObserver?.disconnect();
+  contentObserver = blankDocument = undefined;
+}
+
+function hasPageContent(doc) {
+  if (!doc.body) return doc.documentElement?.localName !== 'html';
+  return doc.body.childElementCount > 0 || /\S/.test(doc.body.textContent || '');
+}
+
+function watchBlankContent(doc) {
+  if (blankDocument === doc || typeof MutationObserver !== 'function') return;
+  contentObserver?.disconnect();
+  blankDocument = doc;
+  const generation = documentWatchGeneration;
+  contentObserver = new MutationObserver(() => {
+    if (!disposed && generation === documentWatchGeneration && frame.contentDocument === doc && hasPageContent(doc)) connectDocument();
+  });
+  contentObserver.observe(doc.documentElement, { childList: true, subtree: true, characterData: true });
 }
 
 function connectDocument() {
@@ -306,6 +327,7 @@ function connectDocument() {
     doc = frame.contentDocument;
     if (!doc?.documentElement || frame.contentWindow.location.href === 'about:blank') return false;
     if (runtime?.document === doc) return true;
+    if (!hasPageContent(doc)) { watchBlankContent(doc); return false; }
     stopDocumentWatch();
     const generation = ++documentGeneration;
     activeRequests.clear();
@@ -357,7 +379,7 @@ function watchDocument(previousDocument) {
     try {
       const doc = frame.contentDocument;
       if (doc && doc !== previousDocument && doc.documentElement && frame.contentWindow.location.href !== 'about:blank') {
-        if (doc.readyState !== 'loading') { connectDocument(); return true; }
+        if (doc.readyState !== 'loading') return connectDocument();
         if (observedDocument !== doc) {
           observedDocument?.removeEventListener('DOMContentLoaded', readyListener);
           observedDocument = doc;
@@ -393,8 +415,7 @@ function watchDocument(previousDocument) {
 frame.addEventListener('load', () => {
   if (disposed) return;
   try { if (frame.contentWindow.location.href === 'about:blank') return; } catch {                                                        }
-  stopDocumentWatch();
-  if (!connectDocument() && !frame.contentDocument) status.hidden = true;
+  connectDocument();
 });
 
 function deadline(promise, label, milliseconds = 15000) {
@@ -403,12 +424,25 @@ function deadline(promise, label, milliseconds = 15000) {
 }
 
 async function controlledWorker() {
-  await deadline(navigator.serviceWorker.register('/sw.js', { scope: '/' }), 'Service worker registration timed out.');
+  const registration = await deadline(navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }), 'Service worker registration timed out.');
+  const updating = registration?.installing || registration?.waiting;
+  if (updating) {
+    let listener;
+    await deadline(new Promise((resolve, reject) => {
+      listener = () => {
+        if (updating.state === 'activated') resolve();
+        else if (updating.state === 'redundant') reject(new Error('The proxy worker update failed. Reload this page to try again.'));
+      };
+      updating.addEventListener('statechange', listener);
+      listener();
+    }), 'The proxy worker update timed out. Reload this page.').finally(() => updating.removeEventListener('statechange', listener));
+  }
   await deadline(navigator.serviceWorker.ready, 'Service worker activation timed out.');
-  if (navigator.serviceWorker.controller) return;
+  const controlled = () => navigator.serviceWorker.controller && (!updating || navigator.serviceWorker.controller === updating);
+  if (controlled()) return;
   let listener;
   await deadline(new Promise(resolve => {
-    listener = () => { if (navigator.serviceWorker.controller) resolve(); };
+    listener = () => { if (controlled()) resolve(); };
     navigator.serviceWorker.addEventListener('controllerchange', listener);
     listener();
   }), 'The proxy worker could not take control. Reload this page.').finally(() => navigator.serviceWorker.removeEventListener('controllerchange', listener));
@@ -418,7 +452,7 @@ async function start() {
   if (starting) return starting;
   starting = (async () => {
     if (!isSecureContext || !navigator.serviceWorker || !window.SharedWorker) throw new Error('Proxy browsing requires HTTPS or localhost and a browser with SharedWorker support.');
-    if (network && navigator.serviceWorker.controller) {
+    if (network && workerConfigured && navigator.serviceWorker.controller) {
       await network.connect();
       return;
     }
@@ -450,7 +484,7 @@ async function start() {
       if (navigator.onLine === false) await network.setOnline(false);
     }
                                                                          
-    await Promise.all([controlledWorker(), network.connect()]);
+    await Promise.all([controlledWorker().then(() => { workerConfigured = true; }), network.connect()]);
   })().finally(() => { starting = null; });
   return starting;
 }

@@ -2,7 +2,10 @@ const KEY = 'monkeh.privacy.v1';
 export const defaults = Object.freeze({
   httpsOnly: true, allowPopups: false, allowDownloads: true,
   clearConsoleOnClose: true, showCovers: true, aiEnabled: true,
-  searchEngine: 'duckduckgo'
+  searchEngine: 'duckduckgo', mode: 'dark', font: 'default', accent: '#a6abb1',
+  background: 'none', backgroundUrl: '', cloak: 'monkeh', autoCloak: false,
+  blobCloak: false, panicKey: '', panicUrl: 'https://www.google.com/',
+  closeProtection: false, skipLoading: true, nativeDevtoolsGuard: true, detectDocked: false
 });
 export const searchEngines = Object.freeze({
   duckduckgo: 'https://duckduckgo.com/?q=',
@@ -16,6 +19,20 @@ export function normalizePrivacy(value) {
     if (typeof defaults[key] === 'boolean' && typeof value[key] === 'boolean') result[key] = value[key];
   }
   if (Object.hasOwn(searchEngines, value.searchEngine)) result.searchEngine = value.searchEngine;
+  for (const [key, allowed] of Object.entries({ mode: ['dark', 'light'], font: ['default', 'outfit', 'space-mono', 'obscured', 'codystar', 'silkscreen'], background: ['none', 'hive', 'grid', 'synthwave', 'cat', 'doubleu', 'custom'], cloak: ['monkeh', 'google', 'classroom', 'clever', 'desmos', 'wikipedia', 'gmail', 'drive', 'newtab', 'bing'] })) {
+    if (allowed.includes(value[key])) result[key] = value[key];
+  }
+  if (/^#[0-9a-f]{6}$/i.test(value.accent)) result.accent = value.accent.toLowerCase();
+  for (const key of ['backgroundUrl', 'panicUrl']) {
+    try {
+      const url = new URL(value[key]);
+      if (url.protocol === 'https:' && !url.username && !url.password && url.href.length <= 2048) result[key] = url.href;
+    } catch {}
+  }
+  if (typeof value.panicKey === 'string' && /^(?:(?:Ctrl|Alt|Shift|Meta)\+)*(?:[a-z0-9]|Escape|F[1-9]|F1[0-2])$/.test(value.panicKey)) {
+    const parts = value.panicKey.split('+'); const key = parts.pop();
+    result.panicKey = [...['Ctrl', 'Alt', 'Shift', 'Meta'].filter(modifier => parts.includes(modifier)), key].join('+');
+  }
   return result;
 }
 export function frameSandbox(settings, proxied) {
@@ -30,25 +47,30 @@ if (typeof window !== 'undefined') {
   let settings;
   try { settings = normalizePrivacy(JSON.parse(localStorage.getItem(KEY))); }
   catch { settings = { ...defaults }; }
+  function update(patch, { persist = true, replace = false } = {}) {
+    settings = normalizePrivacy(replace ? patch : { ...settings, ...patch });
+    let saved = true;
+    if (persist) { try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch { saved = false; } }
+    const status = document.getElementById('privacy-status');
+    if (status) status.textContent = !persist ? 'Preferences updated from another tab.' : saved ? 'Saved in this browser.' : 'Applied for this visit. Your browser blocked saving preferences.';
+    window.dispatchEvent(new CustomEvent('monkeh:privacy', { detail: { ...settings } }));
+    return { ...settings };
+  }
   window.MonkehPrivacy = Object.freeze({
     get: () => ({ ...settings }),
+    update,
+    sync: value => update(value, { persist: false, replace: true }),
     sandbox: proxied => frameSandbox(settings, proxied),
     search: query => searchEngines[settings.searchEngine] + encodeURIComponent(query)
   });
   function bind() {
-    const status = document.getElementById('privacy-status');
     for (const input of document.querySelectorAll('[data-privacy]')) {
       const key = input.dataset.privacy;
       if (!Object.hasOwn(defaults, key)) continue;
       if (input.type === 'checkbox') input.checked = settings[key];
       else input.value = settings[key];
       input.addEventListener('change', () => {
-        settings = normalizePrivacy({ ...settings, [key]: input.type === 'checkbox' ? input.checked : input.value });
-        try {
-          localStorage.setItem(KEY, JSON.stringify(settings));
-          status.textContent = 'Saved. Popup and download changes apply when you next open or reload a page.';
-        } catch { status.textContent = 'Applied for this visit. Your browser blocked saving preferences.'; }
-        window.dispatchEvent(new CustomEvent('monkeh:privacy', { detail: { ...settings } }));
+        update({ [key]: input.type === 'checkbox' ? input.checked : input.value });
         window.renderGames?.();
         window.renderApps?.();
       });

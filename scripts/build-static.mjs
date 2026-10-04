@@ -7,7 +7,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
                                                                                     
                                                                                
 export const staticFiles = Object.freeze([
-  'index.html', 'math.html', 'history.html', 'flyflix.html',
+  'index.html', 'math.html', 'history.html', 'flyflix.html', 'oops.html',
   'flyflix-provider.html', 'proxy-host.html', 'style.css', 'sw.js', '_headers',
   'apps/auk.html', 'apps/auk.js', 'apps/auk.css', 'apps/vox.html',
   'apps/desktop.html', 'apps/desktop.js', 'apps/desktop.css',
@@ -17,6 +17,8 @@ export const staticFiles = Object.freeze([
   'browser-tools/runtime.js', 'browser-tools/remote-runtime.js',
   'browser-tools/proxy-network.js', 'browser-tools/proxy-host.js',
   'browser-tools/userscripts.js', 'browser-tools/privacy.js', 'browser-tools/ai-help.js',
+  'browser-tools/devtools-guard.js', 'browser-tools/preferences.js', 'browser-tools/preferences.css',
+  'browser-tools/game-catalog.js', 'browser-tools/game-catalog.json', 'browser-tools/game-catalog.css',
   'ultrav/uv.bundle.js', 'ultrav/uv.client.js', 'ultrav/uv.handler.js',
   'ultrav/uv.sw.js', 'ultrav/uv.config.js',
 ]);

@@ -10,7 +10,7 @@ import { createWispGateway } from './server-wisp.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicFiles = new Set([
-  'index.html', 'math.html', 'history.html', 'flyflix.html', 'style.css', 'sw.js',
+  'index.html', 'math.html', 'history.html', 'flyflix.html', 'oops.html', 'style.css', 'sw.js',
 ]);
 const proxyFiles = new Set([
   '/proxy-host.html', '/flyflix-provider.html', '/browser-tools/proxy-host.js',

@@ -189,3 +189,27 @@ Ultraviolet came with this repository. The build uses unmodified pinned npm
 BareMux/Epoxy distributions. `apps/auk.js` is adapted from the previously loaded
 Consessions/flyflix controller. Sources: https://github.com/MercuryWorkshop/anura,
 https://copy.sh/v86/ and https://guacamole.apache.org/.
+
+## Library and appearance
+
+Games combines the original catalog with six reference libraries. Use source
+filters, Favorites, Recently played, Random game, and paged results. The bundled
+manifest keeps the catalog available when a source is down; cover images and
+game launches still require their hosts. Refresh links with
+`node scripts/update-game-catalog.mjs` before a normal build/deploy.
+
+Settings includes dark/light modes, six fonts, accent colors, backgrounds, tab
+cloaking, a cloaked window, a panic shortcut, close protection, and animation
+preferences. Settings and game lists stay in this browser. No ads, chat, or
+cloud account synchronization is included.
+
+External game and app URLs use the isolated proxy automatically, including
+Flyflix at `https://flyflix.net/`. A service-worker compatibility fallback also
+routes escaped HTTP(S) requests from identified UV documents through UV. It
+does not proxy WebRTC or guarantee compatibility with every site.
+
+Native DevTools shortcuts redirect to `oops.html` by default. The optional
+docked-panel heuristic can mistake browser side panels for DevTools and is off
+by default. Undocked/menu-open DevTools and cross-origin iframe keyboard focus
+cannot reliably be detected. This is a UI deterrent, not source-code protection;
+Monkeh's own browser inspector remains available.

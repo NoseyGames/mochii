@@ -30,7 +30,10 @@
   </style>
   <script src="/browser-tools/config.js"></script>
   <script src="/browser-tools/shell-entry.js"></script>
-  <script type="module" src="/browser-tools/privacy.js"></script>
+  <script type="module" src="/browser-tools/preferences.js"></script>
+  <script type="module" src="/browser-tools/game-catalog.js"></script>
+  <link rel="stylesheet" href="/browser-tools/preferences.css">
+  <link rel="stylesheet" href="/browser-tools/game-catalog.css">
   <script type="module" src="/browser-tools/tools.js"></script>
   <script type="module" src="/browser-tools/ai-help.js"></script>
 
@@ -92,7 +95,7 @@
           oninput="window.renderGames && window.renderGames()"
         />
         <select class="modal-sort-select" id="popover-sort-select" onchange="window.renderGames && window.renderGames()">
-          <option value="pop">Popularity</option>
+          <option value="pop">Featured</option>
           <option value="az">Name (A-Z)</option>
           <option value="za">Name (Z-A)</option>
         </select>
@@ -142,6 +145,7 @@
         </button>
       </div>
       <div class="settings-body">
+        <div id="general-preferences"></div>
         <div class="setting-item">
           <div class="setting-info">
             <span class="setting-title">Proxy network</span>
@@ -506,85 +510,8 @@
       const popover = document.getElementById('games-popover');
       if (popover) popover.classList.add('active');
 
-      if (!window.gamesLoaded && !window.gamesLoading) {
-        window.gamesLoading = true;
-        window.blocked = ['[!] SUGGEST GAMES .gg/D4c9VFYWyU'];
-        
-        window.renderGames = function () {
-          const searchInput = document.getElementById('popover-search-input');
-          const sortSelect = document.getElementById('popover-sort-select');
-          const q = searchInput ? searchInput.value.toLowerCase().trim() : '';
-          const s = sortSelect ? sortSelect.value : 'pop';
-
-          const f = window.rawGames.filter(g =>
-            (g.name || g.title || '').toLowerCase().includes(q) ||
-            (g.author || '').toLowerCase().includes(q)
-          );
-
-          if (s === 'pop') {
-            f.sort((a, b) => {
-              const idA = getGameId(a);
-              const idB = getGameId(b);
-              const popA = idA !== null && window.popularityData[idA] !== undefined ? window.popularityData[idA] : (a.popularity || 0);
-              const popB = idB !== null && window.popularityData[idB] !== undefined ? window.popularityData[idB] : (b.popularity || 0);
-              return popB - popA;
-            });
-          } else if (s === 'az') {
-            f.sort((a, b) => (a.name || a.title || '').localeCompare(b.name || b.title || ''));
-          } else if (s === 'za') {
-            f.sort((a, b) => (b.name || b.title || '').localeCompare(a.name || a.title || ''));
-          }
-
-          const c = document.getElementById('game-list');
-          if (!c) return;
-
-          if (!f.length) {
-            c.innerHTML = '<div class="loading-text">No games found.</div>';
-            return;
-          }
-
-          const fg = document.createDocumentFragment();
-          f.forEach(g => {
-            const t = g.name || g.title || 'Untitled';
-            const a = g.author || '';
-            let u = (g.url || g.file || g.path || '').replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/securlycdn/html@main');
-            const v = (g.cover || g.image || '').replace('{COVER_URL}', 'https://cdn.jsdelivr.net/gh/securlycdn/covers@main');
-
-            if (u && !u.startsWith('http')) {
-              u = 'https://cdn.jsdelivr.net/gh/securlycdn/html@main/' + u;
-            }
-
-            const d = document.createElement('div');
-            d.className = 'game-item';
-            d.onclick = () => openViewer(t, a, u, false);
-            d.innerHTML = `
-              ${v && window.MonkehPrivacy?.get().showCovers !== false ? `<img class="game-cover" src="${escapeHtml(v)}" alt="${escapeHtml(t)}" loading="lazy" onerror="this.style.display='none'">` : ''}
-              <div class="game-info">
-                <span class="game-title">${escapeHtml(t)}</span>
-                ${a ? `<span class="game-author">${escapeHtml(a)}</span>` : ''}
-              </div>
-            `;
-            fg.appendChild(d);
-          });
-          c.innerHTML = '';
-          c.appendChild(fg);
-        };
-
-        fetchCatalog('https://cdn.jsdelivr.net/gh/securlycdn/assets/zones.json').then(g => {
-          const l = catalogEntries(g);
-          const b = window.blocked.map(n => n.trim().toLowerCase());
-          window.rawGames = l.filter(x => !b.includes((x.name || x.title || '').trim().toLowerCase()));
-          window.renderGames();
-          window.gamesLoaded = true;
-        }).catch(() => {
-          document.getElementById('game-list').innerHTML = '<div class="loading-text">Failed to load games list.</div>';
-        }).finally(() => {
-          window.gamesLoading = false;
-        });
-        fetchPopularity().then(() => {
-          if (window.gamesLoaded) window.renderGames();
-        });
-      }
+      if (window.MonkehGames) window.MonkehGames.open();
+      else document.getElementById('game-list').textContent = 'The catalog is starting. Reopen Games in a moment.';
     }
 
     function closeGamesPopover() {
@@ -643,7 +570,8 @@
               u = 'https://cdn.jsdelivr.net/gh/securlycdn/html@main/' + u;
             }
 
-            const d = document.createElement('div');
+            const d = document.createElement('button');
+            d.type = 'button';
             d.className = 'game-item';
             d.onclick = () => openViewer(t, a, u, false);
             d.innerHTML = `
@@ -661,7 +589,7 @@
 
         const defaultAppList = [
           { name: 'Mochii Cloud', author: 'Cloud gaming library', url: '/apps/mochii-cloud.html', cover: '' },
-          { name: 'Flyflix', author: 'Flyflix', url: '/flyflix.html', cover: '' },
+          { name: 'Flyflix', author: 'Flyflix', url: 'https://flyflix.net/', cover: '' },
           { name: 'Voxiles', author: 'bog', url: '/apps/vox.html', cover: '' },
           { name: 'Auk', author: '', url: '/apps/auk.html', cover: '' },
           { name: 'Desktops', author: 'Browser desktops', url: '/apps/desktop.html', cover: '' }
@@ -721,6 +649,7 @@
     }
 
     async function openViewer(title, author, url, isProxied = false) {
+      try { const target = new URL(url, window.location.href); if (/^https?:$/.test(target.protocol) && target.origin !== window.location.origin) isProxied = true; } catch {}
       const previousIsProxied = viewerIsProxied;
       const canReuseProxy = isProxied && viewerIsProxied;
       viewerTarget = { title, author, url, isProxied };
@@ -779,23 +708,7 @@
           frame.removeAttribute('sandbox');
           frame.src = target.href;
         } else {
-                                                                                   
-                                                                                 
-          viewerRequest = new AbortController();
-          const response = await fetch(target.href, { signal: AbortSignal.any([viewerRequest.signal, AbortSignal.timeout(20000)]) });
-          if (!response.ok) throw new Error(`The page returned HTTP ${response.status}.`);
-          const htmlContent = await readResponseText(response, 10 * 1024 * 1024);
-          if (navigation !== viewerNavigation) return;
-          const doc = new DOMParser().parseFromString(htmlContent, 'text/html');
-          const base = doc.querySelector('base') || doc.createElement('base');
-          const sourceUrl = response.url || target.href;
-          base.href = new URL(base.getAttribute('href') || sourceUrl, sourceUrl).href;
-          doc.head.prepend(base);
-          window.MonkehTools?.prepareNavigation(url, false);
-          window.MonkehTools?.expectDocument(sourceUrl, false);
-          frame.setAttribute('sandbox', window.MonkehPrivacy?.sandbox(false) || 'allow-scripts allow-forms allow-pointer-lock');
-          frame.setAttribute('referrerpolicy', 'no-referrer');
-          frame.srcdoc = '<!doctype html>' + doc.documentElement.outerHTML;
+          throw new Error('External pages must open through the proxy.');
         }
         viewerHasContent = true;
         showViewerProgress('');
