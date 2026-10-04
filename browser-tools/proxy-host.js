@@ -25,6 +25,8 @@ let nodes = new Map();
 let ids = new WeakMap();
 let nextNodeId = 0;
 let documentWatchTimer;
+let documentDeadlineTimer;
+let documentWatchGeneration = 0;
 let observedDocument;
 let readyListener;
 let pageFailure = null;
@@ -82,8 +84,10 @@ function showDiagnostic(failure, switchError = '') {
   clearDiagnostic();
   status.hidden = false;
   retry.hidden = true;
-  document.getElementById('status-title').textContent = switchError ? 'No alternative server connected' : failure.tls ? 'Secure connection interrupted' : 'The proxy could not open this page';
-  document.getElementById('status-message').textContent = switchError || (failure.tls
+  document.getElementById('status-title').textContent = switchError ? 'No alternative server connected' : failure.slow ? 'This page is taking longer than expected' : failure.tls ? 'Secure connection interrupted' : 'The proxy could not open this page';
+  document.getElementById('status-message').textContent = switchError || (failure.slow
+    ? 'The page may still load. You can keep waiting or switch proxy servers and reopen the entered address.'
+    : failure.tls
     ? 'The secure connection closed before it was ready. Another proxy server may have a working route to this site. The site may also be temporarily unavailable.'
     : 'Try another proxy server. If the problem continues, check the address or try the site again later.');
   const note = document.getElementById('status-retry-note');
@@ -286,8 +290,11 @@ function decodedPageUrl() {
 }
 
 function stopDocumentWatch() {
+  documentWatchGeneration++;
   clearTimeout(documentWatchTimer);
+  clearTimeout(documentDeadlineTimer);
   documentWatchTimer = undefined;
+  documentDeadlineTimer = undefined;
   observedDocument?.removeEventListener('DOMContentLoaded', readyListener);
   observedDocument = readyListener = undefined;
 }
@@ -325,6 +332,7 @@ function connectDocument() {
                                                                           
                                                                       
     latestPage = { url: decodedPageUrl(), title: String(doc.title).slice(0, 300), isError };
+    clearDiagnostic();
     status.hidden = true;
     send('page', latestPage);
     if (pageFailure) showDiagnostic(pageFailure);
@@ -341,25 +349,45 @@ function connectDocument() {
 
 function watchDocument(previousDocument) {
   stopDocumentWatch();
+  const watchGeneration = documentWatchGeneration;
+  const navigation = navigationGeneration;
+  const isCurrent = () => !disposed && watchGeneration === documentWatchGeneration && navigation === navigationGeneration;
   let attempts = 0;
-  function check() {
-    documentWatchTimer = undefined;
-    if (disposed) return;
+  function ready() {
     try {
       const doc = frame.contentDocument;
       if (doc && doc !== previousDocument && doc.documentElement && frame.contentWindow.location.href !== 'about:blank') {
-        if (doc.readyState !== 'loading') { connectDocument(); return; }
-        observedDocument = doc;
-        readyListener = () => { if (frame.contentDocument === doc && !disposed) connectDocument(); };
-        doc.addEventListener('DOMContentLoaded', readyListener, { once: true });
-        return;
+        if (doc.readyState !== 'loading') { connectDocument(); return true; }
+        if (observedDocument !== doc) {
+          observedDocument?.removeEventListener('DOMContentLoaded', readyListener);
+          observedDocument = doc;
+          readyListener = () => { if (isCurrent() && frame.contentDocument === doc) connectDocument(); };
+          doc.addEventListener('DOMContentLoaded', readyListener, { once: true });
+        }
       }
     } catch {                                                                   }
+    return false;
+  }
+  function check() {
+    if (!isCurrent()) return;
+    documentWatchTimer = undefined;
+    if (ready() || observedDocument) return;
                                                                           
                                                                              
     if (++attempts <= 120) documentWatchTimer = setTimeout(check, attempts < 20 ? 100 : 500);
   }
   documentWatchTimer = setTimeout(check, 100);
+  documentDeadlineTimer = setTimeout(() => {
+    if (!isCurrent()) return;
+    documentDeadlineTimer = undefined;
+    if (ready()) return;
+    clearTimeout(documentWatchTimer);
+    documentWatchTimer = undefined;
+    pageFailure = { document: frame.contentDocument, slow: true, tls: false,
+      details: 'The page did not become ready within 45 seconds. Its current request has been left running.',
+      endpoint: network?.activeEndpoint || latestNetwork?.activeEndpoint || null, address: lastGetAddress };
+    showDiagnostic(pageFailure);
+  }, 45000);
 }
 
 frame.addEventListener('load', () => {
@@ -429,6 +457,7 @@ async function start() {
 
 async function navigate(url = null) {
   const generation = ++navigationGeneration;
+  stopDocumentWatch();
   try {
     if (disposed) return false;
     showProgress('Connecting to the fastest available proxy…');

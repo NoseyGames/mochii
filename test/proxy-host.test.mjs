@@ -101,7 +101,14 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
     timers.delete(id); timer.fn();
     return true;
   }
-  return { contextWindow, doc, get, frame, pageWindow, pageDoc, root, network, timers, evaluated, runtimes, init, loadPage, replaceDocument, tickWatch, location, navigations, get networkOptions() { return networkOptions; }, get treeReads() { return treeReads; }, get activated() { return activated; }, get registrations() { return registrations; } };
+  function expireReadiness() {
+    const match = [...timers].find(([, timer]) => timer.ms === 45000);
+    if (!match) return false;
+    const [id, timer] = match;
+    timers.delete(id); timer.fn();
+    return true;
+  }
+  return { contextWindow, doc, get, frame, pageWindow, pageDoc, root, network, timers, evaluated, runtimes, init, loadPage, replaceDocument, tickWatch, expireReadiness, location, navigations, get networkOptions() { return networkOptions; }, get treeReads() { return treeReads; }, get activated() { return activated; }, get registrations() { return registrations; } };
 }
 
 test('proxy host accepts bridge transfer only from the allowed shell window and origin', async () => {
@@ -279,17 +286,132 @@ test('DOM readiness connects tools before slow subresources load and full load p
   app.contextWindow.fire('pagehide');
 });
 
-test('readiness watch expiry never replaces or stops a slow page', async () => {
+test('readiness expiry offers recovery without replacing, stopping, or retrying the slow page', async () => {
   const app = await harness();
   const source = app.frame.src;
   let ticks = 0;
   while (app.tickWatch()) { ticks++; assert(ticks < 150, 'document discovery must be bounded'); }
   assert(ticks > 100);
+  assert.equal(app.expireReadiness(), true);
   assert.deepEqual(app.navigations, [source]);
   assert.equal(app.frame.srcdoc, undefined);
-  assert.equal(app.get('retry').hidden, true, 'slow content is not treated as an error');
+  assert.equal(app.get('retry').hidden, true);
+  assert.equal(app.get('status').hidden, false);
+  assert.equal(app.get('status-title').textContent, 'This page is taking longer than expected');
+  assert.match(app.get('status-message').textContent, /may still load/);
+  assert.match(app.get('status-trace').textContent, /45 seconds/);
+  assert.equal(app.get('switch-retry').hidden, false);
+  assert.match(app.get('status-retry-note').textContent, /https:\/\/example.com\//);
+  assert.deepEqual(app.network.switches, []);
+  assert.equal(app.pageWindow.location.reloads, 0);
   app.replaceDocument(); app.loadPage();
   assert.equal(app.runtimes.length, 1, 'native load remains a fallback after discovery expires');
+  assert.equal(app.get('status').hidden, true);
+  assert.equal(app.get('switch-retry').hidden, true);
+  assert.equal(app.get('status-trace').textContent, '');
+  assert.equal(app.timers.size, 0);
+  app.contextWindow.fire('pagehide');
+});
+
+test('a blank slow page requires a trusted click before switching and retrying the entered address', async () => {
+  const app = await harness();
+  app.pageWindow.location.href = 'about:blank';
+  assert.equal(app.expireReadiness(), true);
+  const before = [...app.navigations];
+  assert.equal(app.get('switch-retry').hidden, false);
+  app.get('switch-retry').fire('click', { isTrusted: false }); await flush();
+  assert.deepEqual(app.network.switches, []);
+  assert.deepEqual(app.navigations, before);
+  app.get('switch-retry').fire('click', { isTrusted: true }); await flush();
+  assert.equal(app.network.switches.length, 1);
+  assert.equal(app.network.switches[0].failedEndpoint, 'ws://127.0.0.1:3101/wisp/');
+  assert.equal(app.navigations.length, before.length + 1);
+  assert.equal(app.frame.src, '/service/' + encodeURIComponent('https://example.com/'));
+  assert.equal(app.pageWindow.location.reloads, 0);
+  assert.match(app.get('status-message').textContent, /loading/);
+  app.contextWindow.fire('pagehide');
+});
+
+test('pending DOM readiness times out but its late content can still clear the diagnostic', async () => {
+  const app = await harness();
+  const next = app.replaceDocument('loading');
+  app.tickWatch();
+  assert.equal(next.listeners.get('DOMContentLoaded').size, 1);
+  assert.equal(app.expireReadiness(), true);
+  assert.equal(app.get('switch-retry').hidden, false);
+  assert.equal(app.runtimes.length, 0);
+  assert.equal(next.listeners.get('DOMContentLoaded').size, 1);
+  assert.equal(app.timers.size, 0);
+  next.readyState = 'interactive'; next.fire('DOMContentLoaded');
+  assert.equal(app.runtimes.length, 1);
+  assert.equal(app.get('status').hidden, true);
+  assert.equal(next.listeners.get('DOMContentLoaded').size, 0);
+  assert.equal(app.get('switch-retry').hidden, true);
+  assert.equal(app.get('status-trace').textContent, '');
+  assert.deepEqual(app.network.switches, []);
+  app.contextWindow.fire('pagehide');
+});
+
+test('the readiness deadline follows a redirected loading document and drops the old readiness listener', async () => {
+  const app = await harness();
+  const first = app.replaceDocument('loading'); app.tickWatch();
+  const redirected = app.replaceDocument('loading');
+  app.expireReadiness();
+  assert.equal(first.listeners.get('DOMContentLoaded').size, 0);
+  assert.equal(redirected.listeners.get('DOMContentLoaded').size, 1);
+  first.readyState = 'interactive'; first.fire('DOMContentLoaded');
+  assert.equal(app.runtimes.length, 0);
+  redirected.readyState = 'interactive'; redirected.fire('DOMContentLoaded');
+  assert.equal(app.runtimes.length, 1);
+  assert.equal(app.get('status').hidden, true);
+  app.contextWindow.fire('pagehide');
+});
+
+test('stale readiness timers cannot replace a newer navigation diagnostic or clear its deadline', async () => {
+  const app = await harness();
+  const oldDeadline = [...app.timers.values()].find(timer => timer.ms === 45000).fn;
+  const oldPoll = [...app.timers.values()].find(timer => timer.ms <= 500).fn;
+  app.location.hash = '#' + encodeURIComponent('https://new.example/');
+  app.contextWindow.fire('hashchange'); await flush();
+  const timers = [...app.timers.keys()];
+  oldDeadline(); oldPoll();
+  assert.deepEqual([...app.timers.keys()], timers);
+  assert.equal(app.get('switch-retry').hidden, true);
+  assert.equal(app.expireReadiness(), true);
+  assert.match(app.get('status-retry-note').textContent, /https:\/\/new.example\//);
+  assert.doesNotMatch(app.get('status-retry-note').textContent, /https:\/\/example.com\//);
+  app.contextWindow.fire('pagehide');
+});
+
+test('ready or disposed hosts clear deadlines and ignore callbacks already queued before cleanup', async () => {
+  for (const disposed of [false, true]) {
+    const app = await harness();
+    const callbacks = [...app.timers.values()].map(timer => timer.fn);
+    if (disposed) app.contextWindow.fire('pagehide');
+    else { app.replaceDocument(); app.loadPage(); }
+    const before = app.get('status-title').textContent;
+    assert.equal(app.timers.size, 0);
+    callbacks.forEach(callback => callback());
+    assert.equal(app.timers.size, 0);
+    assert.equal(app.get('status-title').textContent, before);
+    assert.equal(app.get('switch-retry').hidden, true);
+    assert.deepEqual(app.network.switches, []);
+    if (!disposed) app.contextWindow.fire('pagehide');
+  }
+});
+
+test('a late usable page cancels slow-page retry navigation while a requested server switch is pending', async () => {
+  const app = await harness();
+  app.expireReadiness();
+  let finish;
+  app.network.switchEndpoint = () => new Promise(resolve => { finish = resolve; });
+  app.get('switch-retry').fire('click', { isTrusted: true });
+  app.replaceDocument(); app.loadPage();
+  const before = [...app.navigations];
+  finish('wss://other.example/wisp/'); await flush();
+  assert.deepEqual(app.navigations, before);
+  assert.equal(app.get('status').hidden, true);
+  assert.equal(app.runtimes.length, 1);
   app.contextWindow.fire('pagehide');
 });
 

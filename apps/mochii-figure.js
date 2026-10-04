@@ -100,3 +100,17 @@ export function getFigureLaunchUrl(gameId) {
   const key = figureGames.get(gameId);
   return key ? 'https://figure-cloud.figure-softwares.workers.dev/?game=' + encodeURIComponent(key) : null;
 }
+
+export function getFigureProxyUrl(gameId, config, shellOrigin) {
+  const target = getFigureLaunchUrl(gameId);
+  if (!target || !config || !Array.isArray(config.shellOrigins) || !config.shellOrigins.includes(shellOrigin)) return null;
+  try {
+    const proxy = new URL(config.proxyOrigin);
+    const shell = new URL(shellOrigin);
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(proxy.hostname) && proxy.hostname === shell.hostname && shell.protocol === 'http:';
+    if (proxy.protocol !== 'https:' && !(proxy.protocol === 'http:' && local)) return null;
+    if (proxy.username || proxy.password || proxy.pathname !== '/' || proxy.search || proxy.hash) return null;
+    if (proxy.origin === shellOrigin || config.shellOrigins.includes(proxy.origin)) return null;
+    return proxy.origin + '/proxy-host.html#' + encodeURIComponent(target);
+  } catch { return null; }
+}

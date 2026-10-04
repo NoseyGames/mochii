@@ -130,16 +130,16 @@ cannot be eliminated by static hosting.
 **Apps → Mochii Cloud** opens the redesigned cloud-gaming catalog. Its 106
 entries retain the upstream game metadata, search, details, themes, controller
 navigation and launch options. Recent sessions and settings are stored locally
-on each mirror. Games and provider sign-in run on their external hosts; Monkeh
-does not create accounts or verify a provider session. Embedded playback has a
-direct-tab fallback for browser or provider restrictions. Source provenance is
-recorded in [third-party sources](docs/THIRD-PARTY-SOURCES.md).
+on each mirror. Monkeh does not create game accounts or verify a provider session.
+Source provenance is recorded in [third-party sources](docs/THIRD-PARTY-SOURCES.md).
 
-A temporary Figure link adapter matches 94 catalog games to Figure's hosted
-launcher. **Play with Figure** opens its own tab, where Figure handles account
-setup and queues; Monkeh receives no Figure credentials and cannot verify that
-a game is ready. Original-provider links and embedded playback remain available
-as fallbacks, including for games without a Figure match.
+A temporary Figure adapter matches 94 catalog games to Figure's hosted launcher.
+**Play with Figure** opens inside Mochii through Monkeh's isolated proxy host;
+Figure manages account setup, notices, and queues in the player. The Mochii
+catalog does not store Figure credentials or claim that a game is ready. Games
+without a Figure match remain visible with playback unavailable. Streaming
+protocols, proxy compatibility, and external service availability can prevent
+playback; there is no direct-provider or new-tab fallback.
 
 Setup includes a free temporary inbox using Maildrop's documented API. A random
 address is generated locally for each new tab session and retained across reloads

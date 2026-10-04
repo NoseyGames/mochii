@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GAMES } from '../apps/mochii-cloud.data.js';
-import { getFigureLaunchUrl } from '../apps/mochii-figure.js';
-import { STORAGE_KEY, PLAYER_SANDBOX, validateLaunchUrl, normalizeState, createStore, createSessionTracker, buildEmbedCode, mountMochii } from '../apps/mochii-cloud.js';
+import { getFigureLaunchUrl, getFigureProxyUrl } from '../apps/mochii-figure.js';
+import { STORAGE_KEY, PLAYER_SANDBOX, normalizeState, createStore, createSessionTracker, mountMochii } from '../apps/mochii-cloud.js';
 
 function memoryStorage(initial = null) {
   const entries = new Map(initial === null ? [] : [[STORAGE_KEY, initial]]);
@@ -14,10 +14,21 @@ function memoryStorage(initial = null) {
   };
 }
 
-function harness({ search = '', popupBlocked = false, storage = memoryStorage() } = {}) {
+const proxyConfig = { proxyOrigin: 'https://proxy.example', shellOrigins: ['https://monkeh.example'] };
+
+function deferred() {
+  let resolve; let reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+async function settle() { for (let i = 0; i < 8; i++) await Promise.resolve(); }
+
+function harness({ search = '', storage = memoryStorage(), configFetch = async () => proxyConfig } = {}) {
   const nodes = new Map();
   const frames = [];
   const popups = [];
+  const configRequests = [];
   const timers = new Map();
   const intervals = new Map();
   const winListeners = new Map();
@@ -58,7 +69,8 @@ function harness({ search = '', popupBlocked = false, storage = memoryStorage() 
   };
   const win = {
     localStorage: storage, location: new URL(`https://monkeh.example/apps/mochii-cloud.html${search}`),
-    navigator: { getGamepads: () => [] }, URL,
+    navigator: { getGamepads: () => [] }, URL, AbortController,
+    MonkehConfig: { fetchConfig(options = {}) { configRequests.push(options); return configFetch(options); } },
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     history: { replaceState() {} }, scrollTo() {},
     setTimeout(fn) { const id = ++sequence; timers.set(id, fn); return id; }, clearTimeout(id) { timers.delete(id); },
@@ -66,14 +78,13 @@ function harness({ search = '', popupBlocked = false, storage = memoryStorage() 
     requestAnimationFrame() { return ++sequence; }, cancelAnimationFrame() {},
     addEventListener(type, listener) { winListeners.set(type, listener); },
     open(url, target) {
-      if (popupBlocked) return null;
       const popup = { initialUrl: url, target, closed: false, opener: win, location: { replace(value) { popup.url = value; } }, close() { this.closed = true; }, focus() { this.focused = true; } };
       popups.push(popup); return popup;
     }
   };
   get('sort-filter').value = 'catalog';
   const mounted = mountMochii(doc, win);
-  return { get, doc, win, mounted, nodes, frames, popups, timers, intervals, winListeners, docListeners };
+  return { get, doc, win, mounted, nodes, frames, popups, configRequests, timers, intervals, winListeners, docListeners };
 }
 
 test('Mochii preserves all 106 distinct catalog games with usable details', () => {
@@ -90,7 +101,7 @@ test('Mochii preserves all 106 distinct catalog games with usable details', () =
   }
 });
 
-test('catalog navigation remains on the original HTTPS game providers without credentials', () => {
+test('retained catalog metadata and artwork use HTTPS without embedded credentials', () => {
   const origins = new Map();
   for (const game of GAMES) {
     const url = new URL(game.url);
@@ -106,25 +117,6 @@ test('catalog navigation remains on the original HTTPS game providers without cr
   }
   assert.equal(origins.get('https://www.raccoongame.com'), 105);
   assert.equal(origins.get('https://yee.pages.dev'), 1);
-});
-
-test('launch validation rejects scheme, credentials, origin confusion, and shell-origin providers', () => {
-  for (const game of GAMES) assert.equal(validateLaunchUrl(game.url, 'https://monkeh.example'), new URL(game.url).href);
-  for (const input of [null, '', '/game', '//www.raccoongame.com/', 'javascript:alert(1)', 'data:text/html,hello', 'http://www.raccoongame.com/', 'https://www.raccoongame.com.evil.example/', 'https://evil.example/?https://www.raccoongame.com', 'https://user:pass@www.raccoongame.com/', 'https://www.raccoongame.com:8443/', 'https://raccoongame.com/', 'https://yee.pages.dev.evil.example/', 'https://monkeh.example/']) {
-    assert.equal(validateLaunchUrl(input, 'https://monkeh.example'), null, String(input));
-  }
-  assert.equal(validateLaunchUrl(GAMES[0].url, 'https://www.raccoongame.com'), null);
-});
-
-test('embed output escapes attribute data and isolates allowed external navigation', () => {
-  const code = buildEmbedCode({ url: GAMES[0].url, n: '\"><script>alert(1)</script>' }, 'https://monkeh.example');
-  assert.match(code, /^<iframe\s/);
-  assert.match(code, /&quot;&gt;&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
-  assert.match(code, /referrerpolicy="no-referrer"/);
-  assert.doesNotMatch(code, /<script|eval\(|javascript:|allow-top-navigation|allow-popups/);
-  assert.match(code, new RegExp(`sandbox="${PLAYER_SANDBOX}"`));
-  assert.equal(buildEmbedCode({ url: 'https://evil.example/', n: 'Bad' }), '');
-  assert.equal(buildEmbedCode(GAMES[0], 'https://www.raccoongame.com'), '');
 });
 
 test('stored state drops unknown IDs, invalid numbers, forged setup state, and unrecognized settings', () => {
@@ -217,144 +209,167 @@ test('initialization and game deep links render details without launching or pre
   }
 });
 
-test('blocked popup leaves the selected game open and records no phantom session', async () => {
-  const app = harness({ popupBlocked: true });
-  app.mounted.openDetails(GAMES[0].id);
-  await app.get('launch-tab').click();
-  assert.equal(app.get('details-dialog').open, true);
-  assert.equal(app.mounted.tracker.active, null);
-  assert.deepEqual(app.mounted.store.value.records, {});
-  assert.match(app.get('toast').textContent, /blocked/i);
-});
-
-test('new-tab launch removes the opener and stays attached to its own game when another detail is selected', async () => {
-  const app = harness();
-  app.mounted.openDetails(GAMES[0].id);
-  await app.get('launch-tab').click();
-  assert.equal(app.popups[0].opener, null);
-  assert.equal(app.popups[0].url, GAMES[0].url);
-  app.mounted.openDetails(GAMES[1].id);
-  assert.equal(app.get('detail-title').textContent, GAMES[1].n);
-  assert.equal(app.mounted.tracker.active.id, GAMES[0].id);
-  await app.get('session-return').click();
-  assert.equal(app.popups[0].focused, true);
-  app.popups[0].closed = true;
-  for (const pulse of [...app.intervals.values()]) pulse();
-  assert.equal(app.mounted.tracker.active, null);
-  assert.equal(app.intervals.size, 0);
-});
-
-test('Figure handoff uses the mapped game and removes its opener without claiming game readiness', async () => {
-  const app = harness();
-  const game = GAMES.find(game => game.id === '117');
+test('Figure play opens the local modal immediately and waits for proxy configuration without external navigation', async () => {
+  const pending = deferred();
+  const app = harness({ configFetch: () => pending.promise });
+  const game = GAMES.find(item => item.id === '117');
   app.mounted.openDetails(game.id);
-  assert.equal(app.get('launch-figure').hidden, false);
   assert.equal(app.get('launch-figure').disabled, false);
-  assert.match(app.get('detail-provider').textContent, /Figure.*setup and queues/);
-  assert.equal(app.popups.length, 0);
-  await app.get('launch-figure').click();
-  assert.equal(app.popups[0].url, getFigureLaunchUrl(game.id));
-  assert.equal(app.popups[0].opener, null);
+  const launch = app.mounted.launchFigure(game);
+  assert.equal(app.get('player-dialog').open, true);
+  assert.equal(app.get('details-dialog').open, false);
+  assert.match(app.get('player-hint').textContent, /connecting|proxy/i);
   assert.equal(app.frames.length, 0);
-  assert.equal(app.mounted.store.value.setupConfirmed, false);
-  assert.match(app.get('toast').textContent, /including loading and queues/);
-  app.mounted.openDetails(GAMES.find(other => other.id !== game.id).id);
-  await app.get('session-return').click();
-  assert.equal(app.popups[0].focused, true);
-  assert.equal(app.mounted.tracker.active.id, game.id);
-});
-
-test('Figure popup blocking preserves details, an active original tab, and existing activity', async () => {
-  const app = harness();
-  const game = GAMES.find(game => game.id === '117');
-  app.mounted.openGameTab(game);
-  const before = JSON.stringify(app.mounted.store.value.records);
-  app.win.open = () => null;
-  app.mounted.openDetails('209');
-  await app.get('launch-figure').click();
-  assert.equal(app.get('details-dialog').open, true);
-  assert.equal(app.mounted.tracker.active.id, game.id);
-  assert.equal(JSON.stringify(app.mounted.store.value.records), before);
-  assert.match(app.get('toast').textContent, /blocked/i);
-});
-
-test('unmapped games retain original launch actions and never open a guessed Figure link', async () => {
-  const app = harness();
-  const game = GAMES.find(game => game.id === 'MC120');
-  app.mounted.openDetails('117');
-  app.mounted.openDetails(game.id);
-  assert.equal(app.get('launch-figure').hidden, true);
-  assert.equal(app.get('launch-figure').disabled, true);
-  assert.equal(app.get('launch-tab').className, 'button primary');
-  app.mounted.openFigureTab(game);
-  assert.equal(app.popups.length, 0);
-  await app.get('launch-tab').click();
-  assert.equal(app.popups[0].url, game.url);
-});
-
-test('Figure navigation ignores supplied URL metadata and rejects unknown game identities', () => {
-  const app = harness();
-  for (const game of [null, {}, { id: 'unknown' }, { id: 117 }, { id: '__proto__' }]) app.mounted.openFigureTab(game);
-  assert.equal(app.popups.length, 0);
-  app.mounted.openFigureTab({ id: '117', url: 'https://evil.example/', n: 'wrong game' });
-  assert.equal(app.popups[0].url, getFigureLaunchUrl('117'));
-  assert.equal(app.get('session-name').textContent, 'Cyberpunk 2077');
-});
-
-test('failed Figure navigation closes only its empty popup and does not start tracking', () => {
-  const app = harness();
-  let closed = false;
-  app.win.open = () => ({ opener: app.win, location: { replace() { throw new Error('Navigation failed'); } }, close() { closed = true; } });
-  app.mounted.openDetails('117');
-  app.mounted.openFigureTab(GAMES.find(game => game.id === '117'));
-  assert.equal(closed, true);
   assert.equal(app.mounted.tracker.active, null);
-  assert.equal(app.get('details-dialog').open, true);
+  pending.resolve(proxyConfig);
+  await launch;
+  const frame = app.get('player-container').children[0];
+  assert.equal(frame.src, getFigureProxyUrl(game.id, proxyConfig, app.win.location.origin));
+  assert.equal(new URL(frame.src).origin, proxyConfig.proxyOrigin);
+  assert.equal(decodeURIComponent(new URL(frame.src).hash.slice(1)), getFigureLaunchUrl(game.id));
+  assert.equal(frame.getAttribute('sandbox'), PLAYER_SANDBOX);
+  assert.doesNotMatch(frame.getAttribute('sandbox'), /allow-top-navigation|allow-popups/);
+  assert.match(frame.getAttribute('sandbox'), /allow-same-origin/);
+  assert.match(frame.getAttribute('allow'), /fullscreen/);
+  assert.match(frame.getAttribute('allow'), /gamepad/);
+  assert.match(frame.getAttribute('allow'), /autoplay/);
+  assert.equal(frame.referrerPolicy, 'no-referrer');
+  assert.equal(app.mounted.tracker.active.id, game.id);
+  assert.equal(app.mounted.tracker.active.mode, 'embed');
+  assert.equal(app.mounted.store.value.setupConfirmed, false);
+  assert.equal(app.popups.length, 0);
+});
+
+test('the Figure button starts only an embedded proxy session', async () => {
+  const app = harness();
+  app.mounted.openDetails('117');
+  await app.get('launch-figure').click();
+  await settle();
+  assert.equal(app.get('player-container').children.length, 1);
+  assert.equal(app.mounted.tracker.active.id, '117');
+  assert.equal(app.popups.length, 0);
+});
+
+test('unmapped and invalid games cannot launch a guessed provider or open any external tab', async () => {
+  const app = harness();
+  const unmatched = GAMES.find(game => game.id === 'MC120');
+  app.mounted.openDetails('117');
+  app.mounted.openDetails(unmatched.id);
+  assert.equal(app.get('launch-figure').disabled, true);
+  for (const game of [unmatched, null, {}, { id: 'unknown' }, { id: 117 }, { id: '__proto__' }]) await app.mounted.launchFigure(game);
+  assert.equal(app.frames.length, 0);
+  assert.equal(app.configRequests.length, 0);
+  assert.equal(app.popups.length, 0);
+  assert.equal(app.mounted.tracker.active, null);
+});
+
+test('Figure launch ignores untrusted URL and title metadata and uses the verified catalog identity', async () => {
+  const app = harness();
+  await app.mounted.launchFigure({ id: '117', url: 'https://evil.example/', n: 'forged title' });
+  assert.equal(app.get('player-container').children[0].src, getFigureProxyUrl('117', proxyConfig, app.win.location.origin));
+  assert.equal(app.get('player-title').textContent, 'Cyberpunk 2077');
+  assert.equal(app.get('session-name').textContent, 'Cyberpunk 2077');
+  assert.equal(app.popups.length, 0);
+});
+
+test('configuration failures leave a retryable modal without frames or phantom session time', async () => {
+  for (const configFetch of [async () => { throw new Error('Configuration unavailable'); },
+    async () => ({ proxyOrigin: 'https://monkeh.example', shellOrigins: ['https://monkeh.example'] }),
+    async () => ({ proxyOrigin: 'https://proxy.example', shellOrigins: ['https://another-shell.example'] })]) {
+    const app = harness({ configFetch });
+    await app.mounted.launchFigure(GAMES[0]);
+    assert.equal(app.get('player-dialog').open, true);
+    assert.equal(app.get('player-retry').hidden, false);
+    assert.equal(app.frames.length, 0);
+    assert.equal(app.mounted.tracker.active, null);
+    assert.deepEqual(app.mounted.store.value.records, {});
+    assert.equal(app.popups.length, 0);
+    assert.match(app.get('player-hint').textContent, /proxy|configuration|unavailable|cannot|unable|failed|could/i);
+  }
+});
+
+test('retry keeps the failed player game and succeeds without a new tab', async () => {
+  let fail = true;
+  const app = harness({ configFetch: async () => { if (fail) throw new Error('Proxy temporarily unavailable'); return proxyConfig; } });
+  await app.mounted.launchFigure(GAMES[0]);
+  fail = false;
+  await app.get('player-retry').click();
+  await settle();
+  assert.equal(app.get('player-container').children[0].src, getFigureProxyUrl(GAMES[0].id, proxyConfig, app.win.location.origin));
+  assert.equal(app.mounted.tracker.active.id, GAMES[0].id);
+  assert.equal(app.get('player-retry').hidden, true);
+  assert.equal(app.popups.length, 0);
+});
+
+test('closing while configuration is pending aborts and prevents late frame resurrection', async () => {
+  const pending = deferred();
+  const app = harness({ configFetch: () => pending.promise });
+  const launch = app.mounted.launchFigure(GAMES[0]);
+  assert.equal(app.configRequests.length, 1);
+  const signal = app.configRequests[0].signal;
+  assert.equal(signal.aborted, false);
+  await app.get('player-close').click();
+  assert.equal(signal.aborted, true);
+  pending.resolve(proxyConfig);
+  await launch;
+  assert.equal(app.get('player-dialog').open, false);
+  assert.equal(app.get('player-container').children.length, 0);
+  assert.equal(app.frames.length, 0);
+  assert.equal(app.mounted.tracker.active, null);
   assert.deepEqual(app.mounted.store.value.records, {});
 });
 
-test('closing an embedded player before load removes its frame and prevents delayed resurrection', async () => {
+test('a later launch wins when configuration responses resolve in reverse order', async () => {
+  const pending = [deferred(), deferred()];
+  let count = 0;
+  const app = harness({ configFetch: () => pending[count++].promise });
+  const first = app.mounted.launchFigure(GAMES[0]);
+  const second = app.mounted.launchFigure(GAMES[1]);
+  assert.equal(app.configRequests[0].signal.aborted, true);
+  pending[1].resolve(proxyConfig);
+  await second;
+  pending[0].resolve(proxyConfig);
+  await first;
+  assert.equal(app.get('player-container').children.length, 1);
+  assert.equal(app.frames.length, 1);
+  assert.equal(app.get('player-container').children[0].src, getFigureProxyUrl(GAMES[1].id, proxyConfig, app.win.location.origin));
+  assert.equal(app.mounted.tracker.active.id, GAMES[1].id);
+  assert.equal(app.mounted.store.value.records[GAMES[0].id], undefined);
+});
+
+test('late iframe loads and queued old close events cannot revive or end the wrong player', async () => {
   const app = harness();
-  app.mounted.openDetails(GAMES[0].id);
-  await app.get('launch-embed').click();
-  const frame = app.get('player-container').children[0];
-  assert.equal(frame.src, GAMES[0].url);
-  assert.equal(frame.getAttribute('sandbox'), PLAYER_SANDBOX);
-  assert.equal(frame.referrerPolicy, 'no-referrer');
-  assert.equal(app.mounted.tracker.active.id, GAMES[0].id);
+  await app.mounted.launchFigure(GAMES[0]);
+  const oldFrame = app.get('player-container').children[0];
+  await app.mounted.launchFigure(GAMES[1]);
+  await app.get('player-dialog').fire('close');
+  await oldFrame.fire('load');
+  assert.equal(app.get('player-dialog').open, true);
+  assert.equal(app.mounted.tracker.active.id, GAMES[1].id);
+  assert.equal(app.get('player-container').children[0].src, getFigureProxyUrl(GAMES[1].id, proxyConfig, app.win.location.origin));
   await app.get('player-close').click();
-  await frame.fire('load');
-  for (const callback of [...app.timers.values()]) callback();
-  assert.equal(app.get('player-container').children.length, 0);
+  await oldFrame.fire('load');
   assert.equal(app.get('player-dialog').open, false);
+  assert.equal(app.get('player-container').children.length, 0);
   assert.equal(app.mounted.tracker.active, null);
   assert.equal(app.intervals.size, 0);
 });
 
-test('a queued close from an old player does not terminate its replacement or open the selected wrong game', async () => {
-  const app = harness();
-  app.mounted.openDetails(GAMES[0].id);
-  app.mounted.launchEmbedded(GAMES[0]);
-  app.mounted.launchEmbedded(GAMES[1]);
-  await app.get('player-dialog').fire('close');
-  assert.equal(app.mounted.tracker.active.id, GAMES[1].id);
-  assert.equal(app.get('player-container').children[0].src, GAMES[1].url);
-  await app.get('player-newtab').click();
-  assert.equal(app.popups[0].url, GAMES[1].url);
-  assert.equal(app.mounted.tracker.active.id, GAMES[1].id);
-  assert.equal(app.mounted.tracker.active.mode, 'tab');
-  assert.equal(app.get('player-container').children.length, 0);
-});
-
-test('page exit tears down player and tracking without closing an external user tab', () => {
-  const embedded = harness();
-  embedded.mounted.launchEmbedded(GAMES[0]);
-  embedded.winListeners.get('pagehide')();
-  assert.equal(embedded.get('player-container').children.length, 0);
-  assert.equal(embedded.mounted.tracker.active, null);
-  const external = harness();
-  external.mounted.openGameTab(GAMES[0]);
-  external.winListeners.get('pagehide')();
-  assert.equal(external.mounted.tracker.active, null);
-  assert.equal(external.popups[0].closed, false);
+test('page exit tears down both pending and active embedded sessions', async () => {
+  const active = harness();
+  await active.mounted.launchFigure(GAMES[0]);
+  active.winListeners.get('pagehide')();
+  assert.equal(active.get('player-container').children.length, 0);
+  assert.equal(active.mounted.tracker.active, null);
+  assert.equal(active.popups.length, 0);
+  const pending = deferred();
+  const waiting = harness({ configFetch: () => pending.promise });
+  const launch = waiting.mounted.launchFigure(GAMES[1]);
+  waiting.winListeners.get('pagehide')();
+  assert.equal(waiting.configRequests[0].signal.aborted, true);
+  pending.resolve(proxyConfig);
+  await launch;
+  assert.equal(waiting.frames.length, 0);
+  assert.equal(waiting.get('player-dialog').open, false);
+  assert.equal(waiting.mounted.tracker.active, null);
 });

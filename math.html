@@ -187,7 +187,7 @@
     </div>
     <div id="network-notice" class="network-notice" role="status" hidden><span id="network-notice-text"></span><button type="button" onclick="document.getElementById('browser-reload').click()">Reload page</button><button type="button" aria-label="Dismiss network notice" onclick="this.parentElement.hidden = true">×</button></div>
     <div class="viewer-body">
-      <iframe class="viewer-frame" id="viewer-frame" title="Game or app viewer" referrerpolicy="no-referrer" src="about:blank" allowfullscreen></iframe>
+      <iframe class="viewer-frame" id="viewer-frame" title="Game or app viewer" referrerpolicy="no-referrer" src="about:blank" allow="autoplay; fullscreen; gamepad" allowfullscreen></iframe>
       <div id="viewer-progress" class="viewer-progress" role="status" hidden><span id="viewer-progress-text"></span><button id="viewer-progress-retry" class="viewer-btn" type="button" onclick="retryViewerNavigation()" hidden>Retry</button><button class="viewer-btn" type="button" aria-label="Dismiss page status" onclick="this.parentElement.hidden = true">×</button></div>
     </div>
       <aside id="browser-tools" class="browser-tools" aria-label="Browser developer tools" hidden>

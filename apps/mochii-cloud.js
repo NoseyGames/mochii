@@ -1,5 +1,5 @@
 import { GAMES } from './mochii-cloud.data.js';
-import { getFigureLaunchUrl } from './mochii-figure.js';
+import { getFigureLaunchUrl, getFigureProxyUrl } from './mochii-figure.js';
 import { mountInbox } from './mochii-inbox.js';
 
 export const STORAGE_KEY = 'mochii.cloud.v1';
@@ -26,18 +26,6 @@ const gameIds = new Set(GAMES.map(game => game.id));
 const byId = new Map(GAMES.map(game => [game.id, game]));
 const boundedNumber = (value, max) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(0, value)) : 0;
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-
-export function validateLaunchUrl(value, shellOrigin = '') {
-  if (typeof value !== 'string') return null;
-  try {
-    const url = new URL(value);
-    if (url.protocol !== 'https:' || url.username || url.password || url.port || url.origin === shellOrigin) return null;
-    if (!['https://www.raccoongame.com', 'https://yee.pages.dev'].includes(url.origin)) return null;
-    return url.href;
-  } catch {
-    return null;
-  }
-}
 
 export function normalizeState(input) {
   const source = isRecord(input) ? input : {};
@@ -144,13 +132,6 @@ export function formatDuration(seconds) {
   return hours < 24 ? `${hours}h ${minutes % 60}m` : `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
-export function buildEmbedCode(game, shellOrigin = '') {
-  const url = validateLaunchUrl(game?.url, shellOrigin);
-  if (!url) return '';
-  const escape = value => String(value).replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-  return `<iframe\n  src="${escape(url)}"\n  title="${escape(game.n)} · Mochii Cloud"\n  width="1280" height="720"\n  sandbox="${PLAYER_SANDBOX}"\n  allow="fullscreen; gamepad; autoplay"\n  referrerpolicy="no-referrer"\n  allowfullscreen>\n</iframe>`;
-}
-
 export function mountMochii(doc = document, win = window) {
   const $ = id => doc.getElementById(id);
   let storage;
@@ -159,6 +140,9 @@ export function mountMochii(doc = document, win = window) {
   let state = store.value;
   let view = 'discover';
   let selected = null;
+  let playerGame = null;
+  let launchGeneration = 0;
+  let launchRequest = null;
   let heroIndex = 0;
   let toastTimer;
   let sessionTimer;
@@ -356,14 +340,11 @@ export function mountMochii(doc = document, win = window) {
     $('detail-last').textContent = record?.last ? new Date(record.last).toLocaleDateString() : 'Not yet';
     $('detail-achievements').textContent = String(game.ach);
     const figureUrl = getFigureLaunchUrl(game.id);
-    $('launch-figure').hidden = !figureUrl;
     $('launch-figure').disabled = !figureUrl;
-    $('launch-tab').className = figureUrl ? 'button' : 'button primary';
-    $('launch-tab').textContent = figureUrl ? 'Original provider ↗' : 'Play in new tab ↗';
-    $('launch-embed').textContent = figureUrl ? 'Play original here' : 'Play here';
+    $('launch-figure').textContent = figureUrl ? 'Play with Figure' : 'Unavailable on Figure';
     $('detail-provider').textContent = figureUrl
-      ? 'Figure opens this game in a new tab and handles session setup and queues. Its availability and terms apply. The original provider is also available below.'
-      : game.url.includes('raccoongame.com') ? 'Opens with Raccoon. Its account requirements, availability, and pricing apply.' : 'Opens with the original browser-game provider.';
+      ? 'Launches with Figure through Monkeh in this page. Figure handles session setup and queues; its availability and terms apply.'
+      : 'This game has no verified Figure match yet. Choose another game from the collection.';
     const specs = [];
     for (const [title, requirement] of [['Minimum', game.rm], ['Recommended', game.rr]]) {
       const group = element('div');
@@ -375,10 +356,6 @@ export function mountMochii(doc = document, win = window) {
     $('detail-specs').replaceChildren(...specs);
     $('detail-link').href = gameLink(game);
     $('detail-link').textContent = `Link to ${game.n}`;
-    $('embed-code').value = buildEmbedCode(game, win.location.origin);
-    const launchValid = Boolean(validateLaunchUrl(game.url, win.location.origin));
-    $('launch-tab').disabled = !launchValid;
-    $('launch-embed').disabled = !launchValid;
     updateSaveButton();
     details.querySelectorAll('details').forEach(node => { node.open = false; });
     if (!details.open) details.showModal();
@@ -413,55 +390,49 @@ export function mountMochii(doc = document, win = window) {
     return true;
   }
 
-  function openGameTab(game) {
-    const url = validateLaunchUrl(game?.url, win.location.origin);
-    if (!url) return toast('This game has an unsupported provider address.');
-    return openProviderTab(game, url);
-  }
-
-  function openFigureTab(game) {
+  async function launchFigure(game) {
     const knownGame = byId.get(game?.id);
     const url = getFigureLaunchUrl(knownGame?.id);
-    if (!url) return toast('This game has no verified Figure link. Use the original provider instead.');
-    return openProviderTab(knownGame, url, 'Figure');
-  }
-
-  function openProviderTab(game, url, provider = 'the provider') {
-    let popup;
-    try {
-      popup = win.open('about:blank', '_blank');
-      if (!popup) return toast('Your browser blocked the new tab. Allow popups for this site, then try again.');
-      popup.opener = null;
-      popup.location.replace(url);
-    } catch {
-      try { popup?.close(); } catch {}
-      return toast('The game tab could not open. Try again or choose the original provider.');
-    }
+    if (!url) return toast('This game has no verified Figure match yet. Choose another game.');
     closePlayer();
+    const generation = launchGeneration;
+    const request = new AbortController();
+    launchRequest = request;
+    playerGame = knownGame;
     if (details.open) details.close();
-    startSession(game, 'tab', popup);
-    toast(`Opened with ${provider}. Session time estimates how long its tab stays open, including loading and queues.`);
-  }
-
-  function launchEmbedded(game) {
-    const url = validateLaunchUrl(game?.url, win.location.origin);
-    if (!url) return toast('This game has an unsupported provider address.');
-    closePlayer();
-    if (details.open) details.close();
-    const frame = element('iframe');
-    frame.title = `${game.n} · provider player`;
-    frame.setAttribute('sandbox', PLAYER_SANDBOX);
-    frame.setAttribute('allow', 'fullscreen; gamepad; autoplay');
-    frame.referrerPolicy = 'no-referrer';
-    frame.allowFullscreen = true;
-    frame.src = url;
-    $('player-container').replaceChildren(frame);
-    $('player-title').textContent = game.n;
+    $('player-title').textContent = knownGame.n;
+    $('player-hint').textContent = 'Connecting to Monkeh’s proxy…';
+    $('player-retry').hidden = true;
     player.showModal();
-    startSession(game, 'embed');
+    try {
+      const config = await win.MonkehConfig.fetchConfig({ signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]) });
+      if (request.signal.aborted || generation !== launchGeneration || !player.open) return;
+      const proxyUrl = getFigureProxyUrl(knownGame.id, config, win.location.origin);
+      if (!proxyUrl) throw new Error('The isolated proxy is not configured for this site.');
+      const frame = element('iframe');
+      frame.title = `${knownGame.n} · Figure through Monkeh`;
+      frame.setAttribute('sandbox', PLAYER_SANDBOX);
+      frame.setAttribute('allow', 'fullscreen; gamepad; autoplay');
+      frame.referrerPolicy = 'no-referrer';
+      frame.allowFullscreen = true;
+      frame.src = proxyUrl;
+      $('player-container').replaceChildren(frame);
+      $('player-hint').textContent = 'Figure handles session setup and its queue inside this player. Session time includes loading. Close the player to return to your library.';
+      startSession(knownGame, 'embed');
+    } catch (error) {
+      if (request.signal.aborted || generation !== launchGeneration || !player.open) return;
+      $('player-hint').textContent = `Unable to start the player: ${error.message || 'Check your connection and retry.'}`;
+      $('player-retry').hidden = false;
+    } finally {
+      if (launchRequest === request) launchRequest = null;
+    }
   }
 
   function closePlayer() {
+    launchGeneration++;
+    launchRequest?.abort();
+    launchRequest = null;
+    playerGame = null;
     if (tracker.active?.mode === 'embed') tracker.end();
     if (doc.pointerLockElement) doc.exitPointerLock?.();
     if (doc.fullscreenElement === player) doc.exitFullscreen?.().catch(() => {});
@@ -476,7 +447,7 @@ export function mountMochii(doc = document, win = window) {
       toast('Copied to clipboard.');
     } catch {
       if (area) { area.focus(); area.select(); }
-      toast(area ? 'Clipboard permission is unavailable. The code is selected; copy it manually.' : 'Clipboard permission is unavailable. Open Share & embed and copy the game link.');
+      toast(area ? 'Clipboard permission is unavailable. The code is selected; copy it manually.' : 'Clipboard permission is unavailable. Open Share and copy the game link.');
     }
   }
 
@@ -660,20 +631,17 @@ export function mountMochii(doc = document, win = window) {
     updateSaveButton();
     refreshCards();
   });
-  $('launch-tab').addEventListener('click', () => { if (selected) openGameTab(selected); });
-  $('launch-figure').addEventListener('click', () => { if (selected) openFigureTab(selected); });
-  $('launch-embed').addEventListener('click', () => { if (selected) launchEmbedded(selected); });
+  $('launch-figure').addEventListener('click', () => { if (selected) return launchFigure(selected); });
   $('copy-link').addEventListener('click', () => { if (selected) copy(gameLink(selected)); });
-  $('copy-embed').addEventListener('click', () => copy($('embed-code').value, $('embed-code')));
   $('player-close').addEventListener('click', closePlayer);
   player.addEventListener('cancel', event => { event.preventDefault(); closePlayer(); });
-  $('player-newtab').addEventListener('click', () => { const active = tracker.active; if (active) openGameTab(byId.get(active.id)); });
+  $('player-retry').addEventListener('click', () => { if (playerGame) return launchFigure(playerGame); });
   $('player-fullscreen').addEventListener('click', async () => {
     try {
       if (doc.fullscreenElement === player) await doc.exitFullscreen();
       else if (player.requestFullscreen) await player.requestFullscreen();
       else throw new Error('Unavailable');
-    } catch { toast('Fullscreen is unavailable here. Try opening the game in a new tab.'); }
+    } catch { toast('Fullscreen is unavailable in this browser. The player can still run in this page.'); }
   });
   doc.addEventListener('fullscreenchange', () => { $('player-fullscreen').textContent = doc.fullscreenElement === player ? 'Exit fullscreen' : 'Fullscreen'; });
   $('player-pointer').addEventListener('click', async () => {
@@ -683,7 +651,7 @@ export function mountMochii(doc = document, win = window) {
       if (!frame?.requestPointerLock) throw new Error('Unavailable');
       frame.focus();
       await frame.requestPointerLock();
-    } catch { toast('Pointer capture is unavailable here. Use the provider’s control or a new tab.'); }
+    } catch { toast('Pointer capture is unavailable here. Try the game’s own control.'); }
   });
   doc.addEventListener('pointerlockchange', () => { $('player-pointer').textContent = doc.pointerLockElement ? 'Release pointer' : 'Capture pointer'; });
   doc.addEventListener('pointerlockerror', () => toast('Pointer capture was declined by your browser.'));
@@ -752,7 +720,7 @@ export function mountMochii(doc = document, win = window) {
     if (byId.has(deepLink)) openDetails(deepLink);
     else toast('That game is not in this collection.');
   }
-  return { store, tracker, showView, openDetails, openGameTab, openFigureTab, launchEmbedded, closePlayer };
+  return { store, tracker, showView, openDetails, launchFigure, closePlayer };
 }
 
 if (typeof document !== 'undefined' && document.getElementById('view-discover')) {
