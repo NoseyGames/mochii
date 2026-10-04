@@ -15,6 +15,8 @@ function description(value) {
     attributes: pairs(value.attributes), styles: pairs(value.styles),
     rect: { width: dimension(value.rect?.width), height: dimension(value.rect?.height) },
     text: text(value.text), html: text(value.html),
+    textTruncated: value.textTruncated === true,
+    canDelete: value.canDelete === true, canUndo: value.canUndo === true,
   };
 }
 
@@ -56,9 +58,11 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
     dispose();
   }, options.handshakeTimeout ?? 15000);
 
-  function rejectPending(message) {
-    for (const { reject, timer } of pending.values()) { clearTimeout(timer); reject(new Error(message)); }
-    pending.clear();
+  function rejectPending(message, keepNavigation = false) {
+    for (const [id, { reject, timer, method }] of pending) {
+      if (keepNavigation && method === 'navigate') continue;
+      clearTimeout(timer); reject(new Error(message)); pending.delete(id);
+    }
   }
 
   function setTree(tree) {
@@ -68,10 +72,10 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
     for (const record of tree.nodes.slice(0, MAX_NODES)) {
       if (!record || !validId(record.id) || incoming.has(keyFor(record.id))) continue;
       const key = keyFor(record.id);
-      incoming.set(key, {
-        remoteId: record.id, localName: text(record.localName, 100) || 'element',
-        id: text(record.elementId, 200), className: text(record.className, 500), children: [],
-      });
+      const node = nodes.get(key) || { remoteId: record.id };
+      Object.assign(node, { localName: text(record.localName, 100) || 'element',
+        id: text(record.elementId, 200), className: text(record.className, 500), children: [] });
+      incoming.set(key, node);
       childIds.set(key, Array.isArray(record.children) ? record.children.slice(0, 250).filter(validId) : []);
     }
     const root = incoming.get(keyFor(tree.rootId));
@@ -106,13 +110,23 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
     return nodes.get(key);
   }
 
+  function acceptSelection(value) {
+    if (!value || typeof value !== 'object') throw new Error('Invalid selected element');
+    const info = description(value.info);
+    if (value.tree) setTree(value.tree);
+    const node = getNode(value.id, info);
+    descriptions.set(keyFor(value.id), info);
+    callbacks.onSelect?.(node);
+    return node;
+  }
+
   function request(method, params = {}) {
     if (disposed) return Promise.reject(new Error('The page connection is closed.'));
     if (pending.size >= 32) return Promise.reject(new Error('Too many pending tool commands. Wait for the page to respond.'));
     const id = ++requestId;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { pending.delete(id); reject(new Error('The page did not respond to this command.')); }, options.requestTimeout ?? 10000);
-      pending.set(id, { resolve, reject, timer });
+      pending.set(id, { resolve, reject, timer, method });
       try { port.postMessage({ id, method, params }); }
       catch (error) { pending.delete(id); clearTimeout(timer); reject(error); }
     });
@@ -147,7 +161,7 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
         case 'page': {
           const url = targetUrl(event.url);
           if (!url) return;
-          rejectPending('The page changed while the command was running.');
+          rejectPending('The page changed while the command was running.', true);
           descriptions = new Map();
           if (event.tree) setTree(event.tree);
           else { nodes = new Map(); document.documentElement = null; }
@@ -164,20 +178,17 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
           break;
         }
         case 'select': {
-          const info = description(event.info);
-          const node = getNode(event.id, info);
-          descriptions.set(keyFor(event.id), info);
-          callbacks.onSelect?.(node);
+          acceptSelection(event);
           break;
         }
         case 'pickEnd': callbacks.onPickEnd?.(); break;
         case 'pagehide':
-          rejectPending('The page is navigating.');
+          rejectPending('The page is navigating.', true);
           callbacks.onNavigate?.();
           break;
         case 'network':
           callbacks.onNetwork?.({ status: text(event.status, 40), activeEndpoint: text(event.activeEndpoint, 8192),
-            configuredCount: Number.isSafeInteger(event.configuredCount) ? Math.max(0, Math.min(11, event.configuredCount)) : 0,
+            configuredCount: Number.isSafeInteger(event.configuredCount) ? Math.max(0, Math.min(15, event.configuredCount)) : 0,
             error: text(event.error, 1000) });
           break;
         // Unknown events are inert. No page message can navigate the shell,
@@ -209,7 +220,10 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
       if (typeof code !== 'string' || code.length > 110000) throw new Error('Commands must be at most 110,000 characters.');
       return text(await request('evaluate', { code }), 12000);
     },
-    async refreshTree() { setTree(await request('tree')); },
+    async refreshTree(selected = null) {
+      setTree(await request('tree', selected ? { id: selected.remoteId } : {}));
+      descriptions = new Map();
+    },
     getChildren(node = document.documentElement) { return node?.children || []; },
     async describe(node) {
       const key = keyFor(node.remoteId);
@@ -226,6 +240,18 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
       const info = description(await request('style', { id: node.remoteId, property, value }));
       descriptions.set(keyFor(node.remoteId), info);
       return info;
+    },
+    async editNode(node, { kind, name, value } = {}) {
+      if (!['text', 'attribute', 'removeAttribute', 'delete'].includes(kind)) throw new Error('Unsupported element edit.');
+      if (name !== undefined && (typeof name !== 'string' || name.length > 128)) throw new Error('Attribute names must be at most 128 characters.');
+      if (value !== undefined && (typeof value !== 'string' || value.length > 10000)) throw new Error('Edit values must be at most 10,000 characters.');
+      return acceptSelection(await request('edit', { id: node.remoteId, kind, name, value }));
+    },
+    async undo() { return acceptSelection(await request('undo')); },
+    async navigate(url) {
+      const destination = targetUrl(url);
+      if (!destination || destination.length > 4096) throw new Error('Use an HTTP(S) address of at most 4,096 characters without embedded login details.');
+      return await request('navigate', { url: destination }) === true;
     },
     startPicking: () => request('pick', { active: true }),
     stopPicking: () => request('pick', { active: false }),

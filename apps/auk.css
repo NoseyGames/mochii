@@ -1,6 +1,6 @@
 :root { color-scheme: dark; font: 14px/1.5 system-ui, sans-serif; }
 * { box-sizing: border-box; }
-body { margin: 0; height: 100dvh; display: flex; flex-direction: column; background: #111318; color: #e7e9f0; --panel: #1b1e26; --border: #343947; --accent: #a9bbff; }
+body { margin: 0; height: 100dvh; display: flex; flex-direction: column; background: #101214; color: #e7eaee; --panel: #1c2024; --border: #383f47; --accent: #c9d2dc; }
 body.light { color-scheme: light; background: #f6f7fa; color: #202432; --panel: #fff; --border: #d4d9e4; --accent: #284eaf; }
 body.solarized { background: #002b36; --panel: #073642; --border: #426169; --accent: #2aa198; }
 body.dracula { background: #282a36; --panel: #343746; --border: #575a70; --accent: #bd93f9; }

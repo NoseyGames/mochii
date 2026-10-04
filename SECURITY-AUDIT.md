@@ -46,7 +46,7 @@ is currently included; support for ten backups is not ten deployed servers.
 - The browser test `console.log.constructor('return window.top.document.title')()`
   from the viewed page produced `SecurityError` rather than the shell's title.
 - v86's official Windows 2000 demo booted without an account both directly and
-  through Apps → Desktop Lab → Launch Windows 2000 on the isolated Monkeh proxy.
+  through Apps → Desktops → Launch Windows 2000 on the isolated Monkeh proxy.
 - Vox opened and rejected an executable game URL. Auk loaded its editor and
   preserved saved code; Run Preview generated the expected sandboxed document.
   In the hidden in-app test browser its preview appeared blank despite containing
@@ -62,11 +62,11 @@ Re-run `pnpm check` and `pnpm test` after changes.
    them from the app shell; it is not a complete browser-grade boundary between
    unrelated remote sites. Treat page-reported URLs/titles as untrusted. Avoid
    using this proxy for sensitive accounts or storing secrets on its origin.
-2. **Ten live public backups were not verified.** Eleven configured servers are
-   supported and rotation is tested, but the default contains only the local
-   primary. The [Mercury demo operator](https://wisp.mercurywork.shop/) asks that
-   its service not be used for public-facing sites. Do not mistake example URLs
-   or a public list for working, authorized, independent backup capacity.
+2. **Fifteen independent public servers were not verified.** The pool now supports
+   fifteen entries. Anura is the verified public primary; an owned Cloudflare
+   Worker provides a restricted backup. Its native Wisp adapter passed local
+   runtime HTTP/HTTPS and destination-denial checks. See docs/WISP-HOSTING.md
+   for current endpoint results, deployment status, and Cloudflare limitations.
 3. Health probes validate protocol availability. They do not guarantee that a
    server can reach every destination or that a website will load successfully.
    Switching transport can break existing streams; manual reload avoids silently
@@ -89,3 +89,29 @@ Re-run `pnpm check` and `pnpm test` after changes.
    provider accounts have not been provisioned.
 8. Third-party catalogs, fonts, providers, emulator assets and CDNs remain
    external dependencies. No claim is made that every remote game/site is usable.
+
+
+## Browser and Worker follow-up — 2026-10-03
+
+- Inspector selection now carries a bounded ancestor tree without reordering DOM
+  siblings. Text/attribute/deletion RPCs validate size, destination document and
+  session generation. Undo retains at most twenty bounded edits inside the page.
+- Repeated address navigation reuses only an existing authenticated-by-origin
+  bridge to the exact configured proxy host. Changed sandbox permissions force a
+  fresh outer frame; stale navigation replies cannot replace a newer page.
+- Coding help accepts only explicit JSON question/code fields, caps request and
+  response sizes, times out body reading/inference, rate-limits before reading,
+  requires the exact shell origin, and returns no provider diagnostics. Model
+  output renders as text and never executes. Browser sends a snapshot of the
+  fields at Ask click, never implicit page/session context.
+- Workers Free supplies the hard daily AI allowance. Rate limits are local to a
+  Cloudflare location and are not a global billing cap. Changing the account to
+  Paid can incur charges unless coding help is disabled first.
+- Native Worker Wisp pins validated public DNS answers, restricts ports to 80/443,
+  bounds frames/streams/queues/transfer/lifetime and handshake rates, and fails
+  closed without required configuration. Origin restrictions do not authenticate
+  non-browser clients. Cloudflare's TCP egress blocks Cloudflare destinations;
+  this endpoint is a limited backup, not universal browsing infrastructure.
+
+This is a source, automated-test and targeted runtime review, not a claim that
+all possible issues or third-party failures have been eliminated.

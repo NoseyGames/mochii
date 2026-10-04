@@ -169,7 +169,7 @@ test('Wisp probe handles pre-aborted signals, unavailable API, and constructor e
 });
 
 test('network validates admin endpoint configuration and deduplicates URLs', async () => {
-  for (const endpoints of [[], Array(12).fill(primary), ['https://wrong.example/'], ['wss://user:secret@example.com/'], ['wss://example.com/#fragment'], ['wss://example.com/\n']]) {
+  for (const endpoints of [[], Array(16).fill(primary), ['https://wrong.example/'], ['wss://user:secret@example.com/'], ['wss://example.com/#fragment'], ['wss://example.com/\n']]) {
     assert.throws(() => network({ endpoints }), TypeError);
   }
   const { manager } = network({ endpoints: [primary, primary] });
@@ -178,13 +178,13 @@ test('network validates admin endpoint configuration and deduplicates URLs', asy
   manager.dispose();
 });
 
-test('network exhaustively tries primary plus ten backups and activates only a proven endpoint', async () => {
-  const endpoints = Array.from({ length: 11 }, (_, index) => `wss://proxy-${index}.example/wisp/`);
+test('network exhaustively tries primary plus fourteen backups and activates only a proven endpoint', async () => {
+  const endpoints = Array.from({ length: 15 }, (_, index) => `wss://proxy-${index}.example/wisp/`);
   const attempted = [];
-  const app = network({ endpoints, probe: async url => { attempted.push(url); if (url !== endpoints[10]) throw new Error('failed'); } });
-  assert.equal(await app.manager.connect(), endpoints[10]);
+  const app = network({ endpoints, probe: async url => { attempted.push(url); if (url !== endpoints[14]) throw new Error('failed'); } });
+  assert.equal(await app.manager.connect(), endpoints[14]);
   assert.deepEqual(attempted, endpoints);
-  assert.deepEqual(app.activated, [endpoints[10]]);
+  assert.deepEqual(app.activated, [endpoints[14]]);
   assert.equal(app.manager.state.status, 'connected');
   assert.equal(app.time.count, 1);
   app.manager.dispose();

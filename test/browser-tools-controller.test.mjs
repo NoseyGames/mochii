@@ -19,7 +19,7 @@ function harness(saved = []) {
     const result = {
       children: [], dataset: {}, hidden: false, value: '', checked: false, textContent: '',
       className: '', localName: 'html', scrollHeight: 0, scrollTop: 0, clientHeight: 0,
-      style: { setProperty() {} },
+      style: { values: new Map(), setProperty(name, value) { this.values.set(name, value); } },
       classList: { contains: name => classes.has(name), toggle(name, enabled) { enabled ? classes.add(name) : classes.delete(name); } },
       addEventListener(type, listener) { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(listener); },
       removeEventListener(type, listener) { listeners.get(type)?.delete(listener); },
@@ -29,11 +29,14 @@ function harness(saved = []) {
         await flush();
       },
       setAttribute(name, value) { attrs.set(name, value); },
+      removeAttribute(name) { attrs.delete(name); },
       getAttribute: name => attrs.get(name) ?? null,
       hasAttribute: name => attrs.has(name),
       append(...children) { this.children.push(...children); },
       replaceChildren(...children) { this.children = children; },
-      getBoundingClientRect: () => ({ height: 370 }),
+      getBoundingClientRect() { return { height: 370, width: parseFloat(this.style.values.get('--tools-width')) || 420 }; },
+      scrollIntoView(options) { this.scrolled = options; },
+      setPointerCapture() {},
       focus() {},
     };
     allNodes.push(result);
@@ -64,14 +67,16 @@ function harness(saved = []) {
       document: { documentElement: node() }, callbacks, evaluated: [], disposed: false, isRemote: true, hasHandshake: false,
       evaluate(code) { this.evaluated.push(code); return this.result; },
       dispose() { this.disposed = true; },
-      getChildren: () => [], stopPicking() {}, async startPicking() {}, async refreshTree() {}, async reload() { this.reloaded = true; }, async reconnect() { this.reconnected = true; },
+      getChildren: item => item.children || [], stopPicking() {}, async startPicking() {}, async refreshTree() {}, async reload() { this.reloaded = true; }, async reconnect() { this.reconnected = true; },
+      async describe(item) { return item.info || { tag: item.localName, selector: item.id || item.localName, attributes: [], styles: [], text: 'Original', rect: { width: 10, height: 20 }, canDelete: true, canUndo: false }; },
+      async navigate(url) { this.navigated = url; return true; },
     };
     sessions.push(session);
     return session;
   }
   get('console-level').value = 'all';
   vm.runInNewContext(source, {
-    document, window, location, innerHeight: 900, URL, Date, Event,
+    document, window, location, innerWidth: 1280, innerHeight: 900, URL, Date, Event,
     createRemoteRuntime, formatValue, createUserscriptStore, matchesUrl,
     confirm(message) { confirmations.push(message); return confirmResult; },
   }, { filename: 'browser-tools/tools.js' });
@@ -92,7 +97,7 @@ function harness(saved = []) {
   }
   function text(item) { return item.textContent + item.children.map(text).join(' '); }
   return {
-    window, get, connect, sessions, storage, confirmations,
+    window, get, connect, sessions, storage, confirmations, node,
     text: id => text(get(id)),
     blockWrites() { failWrites = true; },
     rejectDiscard() { confirmResult = false; },
@@ -241,6 +246,57 @@ test('reload delegates srcdoc games and error placeholders to the shell retry na
   assert.doesNotMatch(app.text('console-output'), /Reassigning src/);
 });
 
+test('warm navigation reuses a connected proxy host and falls back when no valid bridge exists', async () => {
+  const app = harness();
+  assert.equal(await app.window.MonkehTools.navigateRemote('https://next.example/'), false);
+  await app.connect('https://example.com/');
+  const originalSource = app.get('viewer-frame').src;
+  assert.equal(await app.window.MonkehTools.navigateRemote('https://next.example/path'), true);
+  assert.equal(app.sessions[0].navigated, 'https://next.example/path');
+  assert.equal(app.sessions.length, 1);
+  assert.equal(app.sessions[0].disposed, false);
+  assert.equal(app.get('viewer-frame').src, originalSource);
+  assert.equal(app.get('browser-url').value, 'https://next.example/path');
+  assert.equal(await app.window.MonkehTools.navigateRemote('https://monkeh.test/math.html'), false);
+  assert.equal(await app.window.MonkehTools.navigateRemote('https://proxy.monkeh.test/math.html'), false);
+  assert.equal(await app.window.MonkehTools.navigateRemote('javascript:bad()'), false);
+  app.window.MonkehTools.closeViewer();
+  assert.equal(await app.window.MonkehTools.navigateRemote('https://later.example/'), false);
+});
+
+test('a late warm navigation response cannot overwrite a newer destination or closed viewer', async () => {
+  const app = harness();
+  await app.connect('https://example.com/');
+  let finish;
+  app.sessions[0].navigate = () => new Promise(resolve => { finish = resolve; });
+  const first = app.window.MonkehTools.navigateRemote('https://first.example/');
+  app.sessions[0].navigate = async () => true;
+  assert.equal(await app.window.MonkehTools.navigateRemote('https://latest.example/'), true);
+  finish(true);
+  assert.equal(await first, false);
+  assert.equal(app.get('browser-url').value, 'https://latest.example/');
+  app.sessions[0].navigate = () => new Promise(resolve => { finish = resolve; });
+  const pending = app.window.MonkehTools.navigateRemote('https://closed.example/');
+  app.window.MonkehTools.closeViewer(); finish(true);
+  assert.equal(await pending, false);
+});
+
+test('reload recreates the host when popup or download permissions changed', async () => {
+  const app = harness();
+  await app.connect('https://example.com/');
+  let coldReloads = 0;
+  app.window.retryViewerNavigation = async () => { coldReloads++; };
+  app.window.MonkehPrivacy = { sandbox: () => 'allow-scripts allow-same-origin allow-downloads' };
+  app.get('viewer-frame').setAttribute('sandbox', 'allow-scripts allow-same-origin');
+  await app.get('browser-reload').fire('click');
+  assert.equal(coldReloads, 1);
+  assert.equal(app.sessions[0].reloaded, undefined);
+  app.get('viewer-frame').setAttribute('sandbox', app.window.MonkehPrivacy.sandbox(true));
+  await app.get('browser-reload').fire('click');
+  assert.equal(app.sessions[0].reloaded, true);
+  assert.equal(coldReloads, 1);
+});
+
 test('the network retry action reaches the isolated host through the narrow reconnect method', async () => {
   const app = harness();
   app.window.MonkehTools.prepareNavigation('https://example.com/');
@@ -262,4 +318,106 @@ test('runtime picker completion resets the button and permits starting again on 
   assert.equal(picker.textContent, 'Pick element');
   await picker.fire('click');
   assert.equal(picker.getAttribute('aria-pressed'), 'true');
+});
+
+test('picking reveals the selected DOM row, expands its ancestors and opens Inspect', async () => {
+  const app = harness();
+  await app.connect('https://example.com/');
+  const session = app.sessions[0];
+  let parent = session.document.documentElement;
+  for (let depth = 0; depth < 6; depth++) {
+    const child = app.node();
+    child.localName = depth === 5 ? 'button' : 'section';
+    child.remoteId = `node-${depth}`;
+    child.id = depth === 5 ? 'picked-button' : '';
+    parent.children.push(child);
+    parent = child;
+  }
+  session.callbacks.onSelect(parent);
+  await flush();
+  const rows = [];
+  function visit(item, hidden = false) {
+    hidden ||= item.hidden;
+    if (item.getAttribute?.('aria-selected') === 'true') rows.push({ item, hidden });
+    for (const child of item.children) visit(child, hidden);
+  }
+  visit(app.get('inspector-tree'));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].hidden, false);
+  assert.match(rows[0].item.textContent, /picked-button/);
+  assert.equal(rows[0].item.scrolled.block, 'nearest');
+  assert.equal(rows[0].item.classList.contains('bt-tree-selected'), true);
+  assert.equal(app.get('inspector-tree').getAttribute('aria-activedescendant'), rows[0].item.id);
+  assert.equal(app.get('tool-inspector').hidden, false);
+  assert.equal(app.get('tool-console').hidden, true);
+  assert.equal(app.get('browser-tools').hidden, false);
+  await app.get('tools-close').fire('click');
+  assert.equal(app.get('browser-tools').hidden, true);
+});
+
+test('inspector text, attribute, delete and undo buttons edit only the selected remote node', async () => {
+  const app = harness();
+  await app.connect('https://example.com/');
+  const session = app.sessions[0];
+  const selected = app.node(); selected.localName = 'p'; selected.remoteId = 'selected';
+  session.document.documentElement.children.push(selected);
+  const edits = [];
+  session.editNode = async (node, change) => {
+    assert.equal(node, selected);
+    edits.push(change.kind);
+    node.info = { ...(await session.describe(node)), text: change.value || 'Changed', canUndo: true };
+    return node;
+  };
+  session.undo = async () => { edits.push('undo'); selected.info.canUndo = false; return selected; };
+  session.callbacks.onSelect(selected);
+  await flush();
+  app.get('inspector-text').value = 'Updated paragraph';
+  await app.get('inspector-text-form').fire('submit');
+  assert.equal(app.get('inspector-text').value, 'Updated paragraph');
+  assert.equal(app.get('inspector-undo').disabled, false);
+  app.get('inspector-attribute-name').value = 'data-label';
+  app.get('inspector-attribute-value').value = 'Changed';
+  await app.get('inspector-attribute-form').fire('submit');
+  await app.get('inspector-attribute-remove').fire('click');
+  await app.get('inspector-delete').fire('click');
+  assert.match(app.get('inspector-edit-status').textContent, /deleted/);
+  await app.get('inspector-undo').fire('click');
+  assert.deepEqual(edits, ['text', 'attribute', 'removeAttribute', 'delete', 'undo']);
+  assert.equal(app.get('inspector-undo').disabled, true);
+  assert.match(app.get('inspector-edit-status').textContent, /undone/);
+});
+
+test('right dock width resizes horizontally by drag and keyboard and releases pointer cleanup', async () => {
+  const app = harness();
+  const handle = app.get('tools-resize');
+  const panel = app.get('browser-tools');
+  assert.equal(panel.style.values.get('--tools-width'), '420px');
+  assert.equal(handle.getAttribute('aria-orientation'), 'vertical');
+  await handle.fire('pointerdown', { button: 0, clientX: 900, pointerId: 1 });
+  assert.equal(app.get('viewer-frame').style.pointerEvents, 'none');
+  await handle.fire('pointermove', { clientX: 820 });
+  assert.equal(panel.style.values.get('--tools-width'), '500px');
+  await handle.fire('pointercancel');
+  assert.equal(app.get('viewer-frame').style.pointerEvents, '');
+  await handle.fire('keydown', { key: 'ArrowLeft' });
+  assert.equal(panel.style.values.get('--tools-width'), '524px');
+  await handle.fire('keydown', { key: 'ArrowRight' });
+  assert.equal(panel.style.values.get('--tools-width'), '500px');
+});
+
+test('closing clears console logs by default and honors the explicit retain preference', async () => {
+  const app = harness();
+  await app.connect('https://example.com/');
+  app.sessions[0].callbacks.onConsole({ level: 'log', args: ['private log'] });
+  app.get('console-input').value = 'private command';
+  app.window.MonkehTools.closeViewer();
+  assert.doesNotMatch(app.text('console-output'), /private log/);
+  assert.equal(app.get('console-input').value, '');
+  await app.connect('https://example.com/');
+  app.window.MonkehPrivacy = { get: () => ({ clearConsoleOnClose: false }) };
+  app.sessions.at(-1).callbacks.onConsole({ level: 'log', args: ['retained log'] });
+  app.window.MonkehTools.closeViewer();
+  assert.match(app.text('console-output'), /retained log/);
+  app.window.MonkehTools.clearConsole();
+  assert.doesNotMatch(app.text('console-output'), /retained log/);
 });

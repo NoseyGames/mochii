@@ -7,6 +7,7 @@
     wispEndpoints: Object.freeze([
       // Original Monkeh endpoint, also published by the Anura project.
       Object.freeze({ name: 'Anura', url: 'wss://anura.pro/wisp/' }),
+      Object.freeze({ name: 'Monkeh backup (limited)', url: 'wss://monkeh.1234-imwatchingyouopenthedoor.workers.dev/wisp/' }),
     ]),
     windowsVm: null,
   });
@@ -26,7 +27,7 @@
     }
     return Object.freeze({
       mode: 'static', proxyOrigin, shellOrigins: Object.freeze([shellOrigin]),
-      wispEndpoints: deployment.wispEndpoints, maxWispBackups: 10,
+      wispEndpoints: deployment.wispEndpoints, maxWispBackups: 14,
       requiresAuthentication: false, windowsVm: deployment.windowsVm,
     });
   }

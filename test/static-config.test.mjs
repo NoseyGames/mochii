@@ -28,7 +28,7 @@ test('production and local static hosts share an immutable server list without A
       assert.equal(config.proxyOrigin, host);
       assert.equal(config.shellOrigins[0], app);
       assert.equal(config.requiresAuthentication, false);
-      assert(config.wispEndpoints.length > 0 && config.wispEndpoints.length <= 11);
+      assert(config.wispEndpoints.length > 0 && config.wispEndpoints.length <= 15);
       assert(Object.isFrozen(config.wispEndpoints));
       for (const endpoint of config.wispEndpoints) {
         assert(Object.isFrozen(endpoint));

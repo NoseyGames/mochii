@@ -24,6 +24,21 @@ let historyPosition = 0;
 let generation = 0;
 let consoleRenderPending = false;
 let readyRetries = 0;
+let editing = false;
+let remoteNavigation = 0;
+
+function sameNode(first, second) {
+  return first === second || Boolean(first && second && first.remoteId !== undefined &&
+    typeof first.remoteId === typeof second.remoteId && first.remoteId === second.remoteId);
+}
+
+function editControls(info = null) {
+  const unavailable = !runtime || !selectedElement || editing;
+  for (const id of ['inspector-attribute-apply', 'inspector-attribute-remove']) $(id).disabled = unavailable;
+  $('inspector-delete').disabled = unavailable || !info?.canDelete;
+  $('inspector-text-apply').disabled = unavailable || info?.textTruncated === true || info?.tag === 'html';
+  $('inspector-undo').disabled = !runtime || editing || !info?.canUndo;
+}
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -51,6 +66,7 @@ function setConnection(text, connected = false) {
   $('console-input').disabled = !connected;
   $('inspector-pick').disabled = !connected;
   $('userscript-run').disabled = !connected;
+  if (!connected) editControls();
 }
 
 function showPanel(open = true) {
@@ -110,6 +126,14 @@ function renderConsole() {
   if (atBottom) output.scrollTop = output.scrollHeight;
 }
 
+function clearConsole() {
+  entries = [];
+  commandHistory = [];
+  historyPosition = 0;
+  $('console-input').value = '';
+  renderConsole();
+}
+
 function stopPicking() {
   runtime?.stopPicking()?.catch?.(() => {});
   $('inspector-pick').setAttribute('aria-pressed', 'false');
@@ -118,15 +142,19 @@ function stopPicking() {
 
 function disconnect() {
   generation++;
+  remoteNavigation++;
   stopPicking();
   runtime?.dispose();
   runtime = null;
   currentDocument = null;
   selectedElement = null;
+  editing = false;
   $('inspector-tree').replaceChildren(element('div', 'bt-empty-state', 'Open a page to inspect its elements.'));
   $('inspector-summary').textContent = 'Select an element';
   $('inspector-attributes').replaceChildren();
   $('inspector-styles').replaceChildren();
+  $('inspector-text').value = '';
+  $('inspector-edit-status').textContent = '';
   setConnection('Waiting for page');
 }
 
@@ -143,6 +171,10 @@ async function describeSelection(node) {
     const attributes = info.attributes.map(({ name, value }) => {
       const row = element('div', 'bt-attribute-row');
       row.append(element('code', '', name), element('span', '', value));
+      row.addEventListener('click', () => {
+        $('inspector-attribute-name').value = name;
+        $('inspector-attribute-value').value = value;
+      });
       return row;
     });
     $('inspector-attributes').replaceChildren(...(attributes.length ? attributes : [element('p', 'bt-empty-state', 'No attributes')]));
@@ -155,7 +187,11 @@ async function describeSelection(node) {
       });
       return row;
     }));
-    document.querySelectorAll('.bt-tree-node').forEach(button => button.setAttribute('aria-selected', String(button.inspectedElement === node)));
+    $('inspector-text').value = info.text || '';
+    $('inspector-text').disabled = info.textTruncated === true;
+    $('inspector-text').title = info.textTruncated ? 'Text is too large to edit here. Use the console.' : 'Replaces this element’s text and nested contents.';
+    editControls(info);
+    await renderTree(false);
   } catch (error) { addEntry('error', [error.message]); }
 }
 
@@ -165,7 +201,7 @@ async function renderTree(refresh = true) {
   const target = runtime;
   const session = generation;
   try {
-    if (refresh) await target.refreshTree();
+    if (refresh) await target.refreshTree(selectedElement);
     if (target !== runtime || session !== generation) return;
   } catch (error) {
     if (target === runtime && session === generation) tree.replaceChildren(element('div', 'bt-empty-state', error.message));
@@ -175,12 +211,27 @@ async function renderTree(refresh = true) {
     tree.replaceChildren(element('div', 'bt-empty-state', 'The page is loading. Refresh the inspector after it appears.'));
     return;
   }
+  const ancestors = new Set();
+  const parents = new Map();
+  const search = [target.document.documentElement];
+  let found;
+  for (let index = 0; index < search.length && index < 800; index++) {
+    const node = search[index];
+    if (sameNode(node, selectedElement)) { found = node; break; }
+    for (const child of target.getChildren(node)) {
+      if (parents.has(child) || child === target.document.documentElement || search.length >= 800) continue;
+      parents.set(child, node); search.push(child);
+    }
+  }
+  for (let node = found; node; node = parents.get(node)) ancestors.add(node);
   let count = 0;
+  let rowId = 0;
+  let selectedButton;
   function branch(node, depth = 0) {
     const wrapper = element('div', 'bt-tree-branch');
     wrapper.setAttribute('role', 'none');
     const row = element('div', 'bt-tree-row');
-    const children = runtime.getChildren(node);
+    const children = target.getChildren(node);
     const expand = element('button', 'bt-tree-expand', children.length ? '▸' : '·');
     expand.type = 'button';
     expand.disabled = !children.length;
@@ -190,7 +241,11 @@ async function renderTree(refresh = true) {
     const button = element('button', 'bt-tree-node', `<${label}>`);
     button.type = 'button';
     button.setAttribute('role', 'treeitem');
-    button.setAttribute('aria-selected', String(node === selectedElement));
+    const isSelected = sameNode(node, selectedElement);
+    button.id = `inspector-node-${++rowId}`;
+    button.setAttribute('aria-selected', String(isSelected));
+    button.classList.toggle('bt-tree-selected', isSelected);
+    if (isSelected) selectedButton = button;
     button.inspectedElement = node;
     button.addEventListener('click', () => { void target.select(node).catch(error => addEntry('error', [error.message])); });
     row.append(expand, button);
@@ -213,10 +268,19 @@ async function renderTree(refresh = true) {
     };
     expand.addEventListener('click', toggleChildren);
     wrapper.append(row, nested);
-    if (depth < 2 && children.length) toggleChildren();
+    if ((depth < 2 || ancestors.has(node)) && children.length) toggleChildren();
     return wrapper;
   }
-  try { tree.replaceChildren(branch(runtime.document.documentElement)); }
+  try {
+    tree.replaceChildren(branch(target.document.documentElement));
+    if (selectedElement && !selectedButton) {
+      tree.append(element('p', 'bt-help', 'The selected element is outside this bounded tree. Its details and edit controls are available below.'));
+    }
+    if (selectedButton) {
+      tree.setAttribute('aria-activedescendant', selectedButton.id);
+      selectedButton.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    } else tree.removeAttribute?.('aria-activedescendant');
+  }
   catch (error) { tree.replaceChildren(element('div', 'bt-empty-state', error.message)); }
 }
 
@@ -240,11 +304,14 @@ async function connectFrame(force = false) {
         if (runtime !== target) return;
         generation++;
         selectedElement = null;
+        editing = false;
         currentUrl = page.url;
         $('browser-url').value = currentUrl;
         $('inspector-summary').textContent = 'Select an element';
         $('inspector-attributes').replaceChildren();
         $('inspector-styles').replaceChildren();
+        $('inspector-text').value = '';
+        $('inspector-edit-status').textContent = '';
         setConnection(page.isError ? 'Proxy error · tools connected' : 'Connected · isolated page', true);
         void renderTree(false);
         addEntry('info', ['Page connected. Console capture starts here.']);
@@ -255,7 +322,7 @@ async function connectFrame(force = false) {
         }
       },
       onConsole: event => { if (runtime === target) addEntry(event.level, event.args, event.time); },
-      onSelect: node => { if (runtime === target) { showPanel(); selectTab('inspector'); void describeSelection(node); } },
+      onSelect: node => { if (runtime === target) { selectTab('inspector'); showPanel(); void describeSelection(node); } },
       onPickEnd: () => {
         if (runtime !== target) return;
         $('inspector-pick').setAttribute('aria-pressed', 'false');
@@ -265,6 +332,7 @@ async function connectFrame(force = false) {
         if (runtime !== target) return;
         generation++;
         selectedElement = null;
+        editing = false;
         setConnection('Loading isolated page');
         if (!$('console-preserve').checked) { entries = []; renderConsole(); }
       },
@@ -371,7 +439,7 @@ document.querySelectorAll('[data-tool-tab]').forEach(button => {
 });
 $('console-filter').addEventListener('input', renderConsole);
 $('console-level').addEventListener('change', renderConsole);
-$('console-clear').addEventListener('click', () => { entries = []; renderConsole(); });
+$('console-clear').addEventListener('click', clearConsole);
 $('console-form').addEventListener('submit', async event => {
   event.preventDefault();
   const source = $('console-input').value.trim();
@@ -424,6 +492,48 @@ $('inspector-style-form').addEventListener('submit', async event => {
     if (runtime === target && selectedElement === selected) await describeSelection(selected);
   } catch (error) { $('inspector-summary').textContent = error.message; }
 });
+
+async function applyElementEdit(change = null) {
+  if (editing) return;
+  const target = runtime;
+  const session = generation;
+  if (!target || (change && !selectedElement)) {
+    $('inspector-edit-status').textContent = 'Select an element in the viewed page first.';
+    return;
+  }
+  editing = true;
+  editControls();
+  $('inspector-edit-status').textContent = change ? 'Applying edit…' : 'Undoing edit…';
+  try {
+    const node = change ? await target.editNode(selectedElement, change) : await target.undo();
+    if (target !== runtime || session !== generation) return;
+    editing = false;
+    await describeSelection(node);
+    $('inspector-edit-status').textContent = change?.kind === 'delete'
+      ? 'Element deleted. Undo restores it.' : change ? 'Updated this page. Changes last until reload.' : 'Edit undone.';
+  } catch (error) {
+    if (target === runtime && session === generation) $('inspector-edit-status').textContent = error.message;
+  } finally {
+    if (target === runtime && session === generation) {
+      editing = false;
+      if (selectedElement) {
+        try { editControls(await target.describe(selectedElement)); } catch { editControls(); }
+      } else editControls();
+    }
+  }
+}
+
+$('inspector-attribute-form').addEventListener('submit', event => {
+  event.preventDefault();
+  return applyElementEdit({ kind: 'attribute', name: $('inspector-attribute-name').value.trim(), value: $('inspector-attribute-value').value });
+});
+$('inspector-attribute-remove').addEventListener('click', () => applyElementEdit({ kind: 'removeAttribute', name: $('inspector-attribute-name').value.trim() }));
+$('inspector-text-form').addEventListener('submit', event => {
+  event.preventDefault();
+  return applyElementEdit({ kind: 'text', value: $('inspector-text').value });
+});
+$('inspector-delete').addEventListener('click', () => applyElementEdit({ kind: 'delete' }));
+$('inspector-undo').addEventListener('click', () => applyElementEdit());
 $('userscript-new').addEventListener('click', () => {
   if (!dirty || confirm('Discard unsaved changes to this script?')) { editScript(); $('userscript-name').focus(); }
 });
@@ -460,7 +570,10 @@ $('browser-address').addEventListener('submit', event => {
 $('browser-reload').addEventListener('click', async () => {
   if (!currentUrl) return;
   try {
-    if (runtime) await runtime.reload();
+    const expectedSandbox = window.MonkehPrivacy?.sandbox?.(true);
+    const changedPermissions = runtime?.isRemote && typeof expectedSandbox === 'string' && frame.getAttribute('sandbox') !== expectedSandbox;
+    if (changedPermissions) await window.retryViewerNavigation?.();
+    else if (runtime) await runtime.reload();
     // srcdoc overrides src for catalog games and error placeholders. Let the
     // shell retry its original navigation instead of reassigning an inert src.
     else await window.retryViewerNavigation?.();
@@ -468,11 +581,13 @@ $('browser-reload').addEventListener('click', async () => {
 });
 
 const resize = $('tools-resize');
-function setHeight(height) {
-  const max = Math.max(140, innerHeight - 155);
-  const min = Math.min(240, max);
-  const value = Math.round(Math.max(min, Math.min(max, height)));
-  panel.style.setProperty('--tools-height', `${value}px`);
+function setWidth(width) {
+  const viewport = typeof innerWidth === 'number' ? innerWidth : 1280;
+  const max = Math.max(140, Math.min(900, viewport * 0.7));
+  const min = Math.min(280, max);
+  const value = Math.round(Math.max(min, Math.min(max, width)));
+  panel.style.setProperty('--tools-width', `${value}px`);
+  resize.setAttribute('aria-orientation', 'vertical');
   resize.setAttribute('aria-valuenow', String(value));
   resize.setAttribute('aria-valuemin', String(min));
   resize.setAttribute('aria-valuemax', String(max));
@@ -480,25 +595,29 @@ function setHeight(height) {
 resize.addEventListener('pointerdown', event => {
   if (event.button !== 0) return;
   event.preventDefault();
-  const height = panel.getBoundingClientRect().height;
-  const start = event.clientY;
+  const width = panel.getBoundingClientRect().width || 420;
+  const start = event.clientX;
   resize.setPointerCapture(event.pointerId);
   frame.style.pointerEvents = 'none';
-  const move = update => setHeight(height + start - update.clientY);
+  const move = update => setWidth(width + start - update.clientX);
   const finish = () => {
     resize.removeEventListener('pointermove', move);
+    resize.removeEventListener('pointerup', finish);
+    resize.removeEventListener('pointercancel', finish);
+    resize.removeEventListener('lostpointercapture', finish);
     frame.style.pointerEvents = '';
   };
   resize.addEventListener('pointermove', move);
   resize.addEventListener('pointerup', finish, { once: true });
   resize.addEventListener('pointercancel', finish, { once: true });
+  resize.addEventListener('lostpointercapture', finish, { once: true });
 });
 resize.addEventListener('keydown', event => {
-  if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+  if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
   event.preventDefault();
-  setHeight(panel.getBoundingClientRect().height + (event.key === 'ArrowUp' ? 24 : -24));
+  setWidth((panel.getBoundingClientRect().width || 420) + (event.key === 'ArrowLeft' ? 24 : -24));
 });
-window.addEventListener('resize', () => { if (!panel.hidden) setHeight(panel.getBoundingClientRect().height); });
+window.addEventListener('resize', () => { if (!panel.hidden) setWidth(panel.getBoundingClientRect().width || 420); });
 frame.addEventListener('load', () => connectFrame());
 window.addEventListener('message', event => {
   if (!expectingDocument || event.source !== frame.contentWindow || event.origin !== window.MonkehProxyOrigin || event.data?.type !== 'monkeh-proxy:ready') return;
@@ -506,6 +625,41 @@ window.addEventListener('message', event => {
   void connectFrame(true);
 });
 window.MonkehTools = {
+  clearConsole,
+  async navigateRemote(url) {
+    const target = runtime;
+    let destination;
+    try {
+      destination = new URL(url);
+      const source = new URL(frame.src, location.href);
+      if (!expectingDocument || !target?.hasHandshake || typeof target.navigate !== 'function' ||
+          source.origin !== window.MonkehProxyOrigin || source.pathname !== '/proxy-host.html' || source.origin === location.origin ||
+          !['http:', 'https:'].includes(destination.protocol) || destination.username || destination.password ||
+          destination.href.length > 4096 || [location.origin, source.origin].includes(destination.origin)) return false;
+    } catch { return false; }
+    const token = ++remoteNavigation;
+    generation++;
+    stopPicking();
+    selectedElement = null;
+    editing = false;
+    expectedUrl = currentUrl = destination.href;
+    $('browser-url').value = currentUrl;
+    $('inspector-tree').replaceChildren(element('div', 'bt-empty-state', 'Loading page elements…'));
+    $('inspector-summary').textContent = 'Select an element';
+    $('inspector-attributes').replaceChildren();
+    $('inspector-styles').replaceChildren();
+    $('inspector-text').value = '';
+    $('inspector-edit-status').textContent = '';
+    if (!$('console-preserve').checked) { entries = []; renderConsole(); }
+    setConnection('Loading isolated page');
+    try {
+      const accepted = await target.navigate(destination.href);
+      return accepted === true && target === runtime && token === remoteNavigation;
+    } catch (error) {
+      if (target === runtime && token === remoteNavigation) addEntry('warn', ['Reopening the browser connection.', error.message]);
+      return false;
+    }
+  },
   prepareNavigation(url) {
     disconnect();
     expectingDocument = false;
@@ -526,7 +680,13 @@ window.MonkehTools = {
     try { await runtime.reconnect(); return true; }
     catch (error) { addEntry('warn', [error.message]); return false; }
   },
-  closeViewer() { expectingDocument = false; disconnect(); showPanel(false); $('hero-search').focus(); },
+  closeViewer() {
+    expectingDocument = false; disconnect(); showPanel(false);
+    let clearOnClose = true;
+    try { clearOnClose = window.MonkehPrivacy?.get?.().clearConsoleOnClose !== false; } catch { /* Keep the privacy default. */ }
+    if (clearOnClose) clearConsole();
+    $('hero-search').focus();
+  },
 };
 
 selectTab('console');
@@ -534,4 +694,4 @@ renderConsole();
 editScript(store.list()[0]);
 if (store.warning) scriptStatus(store.warning, true);
 setConnection('Open a page');
-setHeight(Math.min(370, innerHeight * 0.5));
+setWidth(420);

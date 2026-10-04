@@ -18,6 +18,7 @@ let latestPage;
 let documentGeneration = 0;
 const activeRequests = new Set();
 let navigationGeneration = 0;
+let requestedUrl = null;
 let disposed = false;
 let nodes = new Map();
 let ids = new WeakMap();
@@ -52,22 +53,54 @@ function nodeId(node) {
   return ids.get(node);
 }
 
-function treeSnapshot() {
+function treeSnapshot(focus = null) {
   if (!runtime) throw new Error('Wait for the page to load.');
   const root = runtime.document.documentElement;
+  const path = [];
+  for (let current = focus; current && path.length < 64; current = current.parentElement) {
+    path.unshift(current);
+    if (current === root) break;
+  }
+  if (path[0] !== root) path.length = 0;
+  const pathChildren = new Map(path.slice(0, -1).map((node, index) => [node, path[index + 1]]));
   const queue = [root];
   const records = [];
-  const included = new Set();
-  while (queue.length && records.length < 800) {
-    const node = queue.shift();
+  const included = new Map();
+  const visited = new Set();
+  function include(node) {
     const id = nodeId(node);
-    if (included.has(id)) continue;
-    included.add(id);
-    const children = runtime.getChildren(node).slice(0, Math.max(0, 800 - records.length - queue.length - 1));
-    queue.push(...children);
-    records.push({ id, localName: String(node.localName || 'element').slice(0, 80), elementId: String(node.id || '').slice(0, 500), className: String(typeof node.className === 'string' ? node.className : node.getAttribute?.('class') || '').slice(0, 500), children: children.map(nodeId) });
+    if (!included.has(node)) {
+      const record = { id, localName: String(node.localName || 'element').slice(0, 80), elementId: String(node.id || '').slice(0, 500), className: String(typeof node.className === 'string' ? node.className : node.getAttribute?.('class') || '').slice(0, 500), children: [] };
+      included.set(node, record);
+      records.push(record);
+    }
+    return included.get(node);
+  }
+  // Reserve the picked node's ancestor chain before filling the bounded tree.
+  // A node beyond the first 800 elements must still be revealed accurately.
+  for (const node of path.length ? path : [root]) include(node);
+  while (queue.length) {
+    const node = queue.shift();
+    if (visited.has(node)) continue;
+    visited.add(node);
+    const record = included.get(node);
+    let children = runtime.getChildren(node).slice(0, 250);
+    const priority = pathChildren.get(node);
+    // getChildren returns the first siblings in document order. Reserve an
+    // omitted picked-path child at the end; never move it before real siblings.
+    if (priority && !children.includes(priority)) children = [...children.slice(0, 249), priority];
+    for (const child of children) {
+      if (!included.has(child) && records.length >= 800) continue;
+      const childRecord = include(child);
+      if (!record.children.includes(childRecord.id)) record.children.push(childRecord.id);
+      if (!visited.has(child)) queue.push(child);
+    }
   }
   return { rootId: nodeId(root), nodes: records };
+}
+
+function selectionSnapshot(node) {
+  return { id: nodeId(node), info: runtime.describe(node), tree: treeSnapshot(node) };
 }
 
 function selectedNode(params) {
@@ -89,12 +122,12 @@ async function command(method, params) {
     case 'evaluate':
       if (typeof params.code !== 'string' || params.code.length > 110000) throw new Error('The script is too large.');
       return formatValue(await requireRuntime().evaluate(params.code)).slice(0, 12000);
-    case 'tree': return treeSnapshot();
+    case 'tree': return treeSnapshot(params.id === undefined ? null : selectedNode(params));
     case 'describe': return requireRuntime().describe(selectedNode(params));
     case 'select': {
       const node = selectedNode(params);
       runtime.select(node);
-      return { id: nodeId(node), info: runtime.describe(node) };
+      return selectionSnapshot(node);
     }
     case 'pick':
       if (params.active === true) requireRuntime().startPicking();
@@ -106,10 +139,25 @@ async function command(method, params) {
       runtime.setStyle(node, params.property, params.value);
       return runtime.describe(node);
     }
+    case 'edit': {
+      const node = requireRuntime().editNode(selectedNode(params), params);
+      runtime.select(node);
+      return selectionSnapshot(node);
+    }
+    case 'undo': {
+      const node = requireRuntime().undo();
+      runtime.select(node);
+      return selectionSnapshot(node);
+    }
     case 'reload':
       if (runtime) frame.contentWindow.location.reload();
       else await navigate();
       return null;
+    case 'navigate': {
+      const target = httpUrl(params.url);
+      if (!config || config.shellOrigins.includes(new URL(target).origin) || new URL(target).origin === location.origin) throw new Error('App pages cannot be opened as proxy destinations.');
+      return await navigate(target);
+    }
     case 'reconnect': await network?.connect({ force: true }); return null;
     default: throw new Error('Unsupported browser command.');
   }
@@ -126,9 +174,9 @@ async function receive(event) {
   const generation = documentGeneration;
   try {
     const result = await deadline(command(request.method, request.params && typeof request.params === 'object' ? request.params : {}), 'The command timed out. Reload the page if its script is unresponsive.');
-    if (!disposed && generation === documentGeneration && replyPort === port) replyPort?.postMessage({ id, result });
+    if (!disposed && (request.method === 'navigate' || generation === documentGeneration) && replyPort === port) replyPort?.postMessage({ id, result });
   } catch (error) {
-    if (!disposed && generation === documentGeneration && replyPort === port) replyPort?.postMessage({ id, error: String(error.message || error).slice(0, 2000) });
+    if (!disposed && (request.method === 'navigate' || generation === documentGeneration) && replyPort === port) replyPort?.postMessage({ id, error: String(error.message || error).slice(0, 2000) });
   } finally { activeRequests.delete(requestToken); }
 }
 
@@ -162,7 +210,7 @@ frame.addEventListener('load', () => {
       onConsole: event => {
         if (generation === documentGeneration) send('console', { level: event.level, args: event.args.slice(0, 50).map(value => formatValue(value).slice(0, 12000)), time: event.time });
       },
-      onSelect: node => send('select', { id: nodeId(node), info: runtime.describe(node) }),
+      onSelect: node => send('select', selectionSnapshot(node)),
       onPickEnd: () => send('pickEnd', {}),
       onNavigate: () => {
         if (generation !== documentGeneration) return;
@@ -205,10 +253,14 @@ async function start() {
   if (starting) return starting;
   starting = (async () => {
     if (!isSecureContext || !navigator.serviceWorker || !window.SharedWorker) throw new Error('Proxy browsing requires HTTPS or localhost and a browser with SharedWorker support.');
+    if (network && navigator.serviceWorker.controller) {
+      await network.connect();
+      return;
+    }
     if (!config) {
       const loadedConfig = await globalThis.MonkehConfig.fetchConfig();
       if (!Array.isArray(loadedConfig.shellOrigins) || loadedConfig.proxyOrigin !== location.origin ||
-          !Array.isArray(loadedConfig.wispEndpoints) || loadedConfig.wispEndpoints.length < 1 || loadedConfig.wispEndpoints.length > 11) throw new Error('The isolated proxy origin is misconfigured.');
+          !Array.isArray(loadedConfig.wispEndpoints) || loadedConfig.wispEndpoints.length < 1 || loadedConfig.wispEndpoints.length > 15) throw new Error('The isolated proxy origin is misconfigured.');
       config = loadedConfig;
       // Ask the shell to retry its init message now that allowed origins loaded.
       for (const origin of config.shellOrigins) window.parent.postMessage({ type: 'monkeh-proxy:ready' }, origin);
@@ -216,7 +268,7 @@ async function start() {
     await controlledWorker();
     if (disposed) throw new Error('This browser view was closed.');
     if (!network) {
-      if (!Array.isArray(config.wispEndpoints) || config.wispEndpoints.length < 1 || config.wispEndpoints.length > 11) throw new Error('Invalid server list.');
+      if (!Array.isArray(config.wispEndpoints) || config.wispEndpoints.length < 1 || config.wispEndpoints.length > 15) throw new Error('Invalid server list.');
       const endpoints = config.wispEndpoints.map(entry => {
         const url = new URL(entry.url, location.href);
         if (url.protocol === 'http:') url.protocol = 'ws:';
@@ -237,21 +289,27 @@ async function start() {
   return starting;
 }
 
-async function navigate() {
+async function navigate(url = null) {
   const generation = ++navigationGeneration;
   try {
-    if (disposed) return;
+    if (disposed) return false;
     status.hidden = false;
     retry.hidden = true;
-    const targetUrl = httpUrl(decodeURIComponent(location.hash.slice(1)));
+    const targetUrl = httpUrl(url ?? requestedUrl ?? decodeURIComponent(location.hash.slice(1)));
+    requestedUrl = targetUrl;
     await start();
-    if (disposed || generation !== navigationGeneration) return;
+    if (disposed || generation !== navigationGeneration) return false;
+    if (url !== null) window.history?.replaceState(null, '', '#' + encodeURIComponent(targetUrl));
     frame.src = __uv$config.prefix + __uv$config.encodeUrl(targetUrl);
-  } catch (error) { if (!disposed && generation === navigationGeneration) showError(error); }
+    return true;
+  } catch (error) {
+    if (!disposed && generation === navigationGeneration) showError(error);
+    return false;
+  }
 }
 
 retry.addEventListener('click', () => navigate());
-window.addEventListener('hashchange', () => navigate());
+window.addEventListener('hashchange', () => { requestedUrl = null; void navigate(); });
 window.addEventListener('offline', () => network?.setOnline(false).catch(() => {}));
 window.addEventListener('online', () => network?.setOnline(true).catch(() => {}));
 window.addEventListener('pagehide', () => { disposed = true; navigationGeneration++; runtime?.dispose(); network?.dispose(); port?.close(); });

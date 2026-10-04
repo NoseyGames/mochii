@@ -14,7 +14,7 @@ export const staticFiles = Object.freeze([
   'browser-tools/config.js', 'browser-tools/shell-entry.js', 'browser-tools/tools.js', 'browser-tools/tools.css',
   'browser-tools/runtime.js', 'browser-tools/remote-runtime.js',
   'browser-tools/proxy-network.js', 'browser-tools/proxy-host.js',
-  'browser-tools/userscripts.js',
+  'browser-tools/userscripts.js', 'browser-tools/privacy.js', 'browser-tools/ai-help.js',
   'ultrav/uv.bundle.js', 'ultrav/uv.client.js', 'ultrav/uv.handler.js',
   'ultrav/uv.sw.js', 'ultrav/uv.config.js',
 ]);

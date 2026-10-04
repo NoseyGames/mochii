@@ -23,13 +23,13 @@
   <link rel="stylesheet" href="/browser-tools/tools.css" />
   <script src="/browser-tools/config.js"></script>
   <script src="/browser-tools/shell-entry.js"></script>
+  <script type="module" src="/browser-tools/privacy.js"></script>
   <script type="module" src="/browser-tools/tools.js"></script>
+  <script type="module" src="/browser-tools/ai-help.js"></script>
 
 </head>
 <body>
 
-  <!-- Background Interactive Canvas -->
-  <canvas id="bg-canvas"></canvas>
 
   <div class="app-viewport">
     <!-- Top Floating Pill Navigation -->
@@ -143,6 +143,15 @@
           </div>
           <button type="button" class="viewer-btn" onclick="retryProxyNetwork()">Reconnect</button>
         </div>
+
+        <label class="setting-item"><span class="setting-info"><span class="setting-title">Search engine</span><span class="setting-desc">Used when you enter a search instead of an address.</span></span><select data-privacy="searchEngine" aria-label="Search engine"><option value="duckduckgo">DuckDuckGo</option><option value="brave">Brave</option><option value="google">Google</option></select></label>
+        <label class="setting-item"><span class="setting-info"><span class="setting-title">Require HTTPS for entered addresses</span><span class="setting-desc">Blocks opening an HTTP address from the search and address bars. Links within pages may still use HTTP.</span></span><input type="checkbox" data-privacy="httpsOnly"></label>
+        <label class="setting-item"><span class="setting-info"><span class="setting-title">Allow popups</span><span class="setting-desc">Let viewed websites open new windows. Off by default.</span></span><input type="checkbox" data-privacy="allowPopups"></label>
+        <label class="setting-item"><span class="setting-info"><span class="setting-title">Allow downloads</span><span class="setting-desc">Let viewed websites initiate file downloads.</span></span><input type="checkbox" data-privacy="allowDownloads"></label>
+        <label class="setting-item"><span class="setting-info"><span class="setting-title">Clear console when closing the browser</span><span class="setting-desc">Removes captured logs and command history from this workspace.</span></span><input type="checkbox" data-privacy="clearConsoleOnClose"></label>
+        <label class="setting-item"><span class="setting-info"><span class="setting-title">Show catalog images</span><span class="setting-desc">Load cover images from catalog providers when you open Games or Apps.</span></span><input type="checkbox" data-privacy="showCovers"></label>
+        <label class="setting-item"><span class="setting-info"><span class="setting-title">AI coding help</span><span class="setting-desc">Cloudflare receives only the question and code you choose to send in Tools → Help.</span></span><input type="checkbox" data-privacy="aiEnabled"></label>
+        <p class="setting-desc" id="privacy-status" role="status">Preferences stay in this browser. Public proxy operators handle your traffic; these settings do not make browsing anonymous.</p>
       </div>
     </div>
   </div>
@@ -170,10 +179,10 @@
     </div>
     <div id="network-notice" class="network-notice" role="status" hidden><span id="network-notice-text"></span><button type="button" onclick="document.getElementById('browser-reload').click()">Reload page</button><button type="button" aria-label="Dismiss network notice" onclick="this.parentElement.hidden = true">×</button></div>
     <div class="viewer-body">
-      <iframe class="viewer-frame" id="viewer-frame" title="Game or app viewer" src="about:blank" allowfullscreen></iframe>
+      <iframe class="viewer-frame" id="viewer-frame" title="Game or app viewer" referrerpolicy="no-referrer" src="about:blank" allowfullscreen></iframe>
     </div>
       <aside id="browser-tools" class="browser-tools" aria-label="Browser developer tools" hidden>
-    <div id="tools-resize" class="bt-resize" role="separator" aria-label="Resize browser tools" aria-orientation="horizontal" aria-valuemin="240" aria-valuemax="700" aria-valuenow="370" tabindex="0"><span></span></div>
+    <div id="tools-resize" class="bt-resize" role="separator" aria-label="Resize browser tools" aria-orientation="vertical" aria-valuemin="280" aria-valuemax="900" aria-valuenow="420" tabindex="0"><span></span></div>
     <header class="bt-header">
       <div class="bt-heading">
         <span class="bt-brand-icon" aria-hidden="true">&lt;/&gt;</span>
@@ -190,7 +199,7 @@
       <button id="tab-console" class="bt-tab" type="button" role="tab" data-tool-tab="console" aria-selected="true" aria-controls="tool-console"><svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 5 5 5-5 5M11 15h5"/></svg>Console</button>
       <button id="tab-inspector" class="bt-tab" type="button" role="tab" data-tool-tab="inspector" aria-selected="false" aria-controls="tool-inspector" tabindex="-1"><svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7 3H3v4m10-4h4v4M3 13v4h4m10-4v4h-4M8 8l7 3-3 1-1 3Z"/></svg>Inspect</button>
       <button id="tab-scripts" class="bt-tab" type="button" role="tab" data-tool-tab="scripts" aria-selected="false" aria-controls="tool-scripts" tabindex="-1"><svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 5-4 5 4 5m8-10 4 5-4 5m-3-12-2 14"/></svg>Userscripts</button>
-      <span class="bt-tabs-note">Your page, your workspace</span>
+      <button id="tab-help" class="bt-tab" type="button" role="tab" data-tool-tab="help" aria-selected="false" aria-controls="tool-help" tabindex="-1">Help</button>
     </div>
 
     <section id="tool-console" class="bt-panel bt-console" role="tabpanel" aria-labelledby="tab-console">
@@ -221,6 +230,15 @@
           <div class="bt-pane-label">SELECTED ELEMENT</div>
           <div id="inspector-summary" class="bt-element-summary bt-code">Select an element to inspect it.</div>
           <div class="bt-detail-section"><h3>Attributes</h3><div id="inspector-attributes" class="bt-properties"></div></div>
+
+          <form id="inspector-attribute-form" class="bt-style-form">
+            <h3>Edit attribute</h3><div class="bt-style-inputs"><label><span>Name</span><input id="inspector-attribute-name" class="bt-input bt-code" maxlength="128" placeholder="title" required></label><label><span>Value</span><input id="inspector-attribute-value" class="bt-input bt-code" maxlength="10000"></label></div>
+            <div class="bt-script-actions"><button id="inspector-attribute-apply" class="bt-button" type="submit" disabled>Set attribute</button><button id="inspector-attribute-remove" class="bt-button" type="button" disabled>Remove attribute</button></div>
+          </form>
+          <form id="inspector-text-form" class="bt-style-form">
+            <h3>Edit text</h3><label class="bt-sr-only" for="inspector-text">Element text</label><textarea id="inspector-text" class="bt-input bt-code" rows="4" maxlength="10000"></textarea><p class="bt-help">Replacing text also removes nested elements. Use Undo edit to restore them.</p><button id="inspector-text-apply" class="bt-button" type="submit" disabled>Replace text</button>
+          </form>
+          <div class="bt-script-actions"><button id="inspector-delete" class="bt-button bt-button-danger" type="button" disabled>Delete element</button><button id="inspector-undo" class="bt-button" type="button" disabled>Undo edit</button></div><p id="inspector-edit-status" class="bt-help" role="status">Edits last until this page reloads.</p>
           <div class="bt-detail-section"><h3>Computed styles</h3><div id="inspector-styles" class="bt-properties"></div></div>
           <form id="inspector-style-form" class="bt-style-form">
             <h3>Edit inline style</h3>
@@ -239,6 +257,18 @@
         <textarea id="userscript-code" class="bt-code-editor" aria-describedby="userscript-help" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="// Make this page your own&#10;console.log('Hello from your userscript!');"></textarea>
         <div class="bt-script-footer"><div class="bt-script-feedback"><p id="userscript-status" class="bt-script-status" role="status" aria-live="polite">Create a script or open one from your library.</p><p id="userscript-help" class="bt-help">Separate URL patterns with commas. Use * as a wildcard. Use Run now to execute your draft; automatic execution is paused on remote pages.</p></div><div class="bt-script-actions"><button id="userscript-delete" class="bt-button bt-button-danger" type="button">Delete</button><button id="userscript-run" class="bt-button" type="button">Run now</button><button id="userscript-save" class="bt-button bt-button-accent" type="button">Save script</button></div></div>
       </div>
+    </section>
+
+    <section id="tool-help" class="bt-panel bt-ai-panel" role="tabpanel" aria-labelledby="tab-help" hidden>
+      <form id="ai-help-form" class="bt-ai-form">
+        <p class="bt-ai-notice">Ask about JavaScript, CSS, or a userscript. Only the text below is sent to Cloudflare Workers AI when you press Ask. Free usage is limited; no account is needed here.</p>
+        <label for="ai-question">Question</label><textarea id="ai-question" class="bt-input" rows="3" maxlength="2000" required placeholder="How can I change this page's heading?"></textarea>
+        <div class="bt-script-actions"><label for="ai-code">Code <span class="bt-field-optional">optional</span></label><button id="ai-use-draft" class="bt-button" type="button">Use userscript draft</button></div>
+        <textarea id="ai-code" class="bt-input bt-code" rows="8" maxlength="6000" spellcheck="false" placeholder="Paste code to review. Remove passwords, tokens, and private information first."></textarea>
+        <div class="bt-script-actions"><button id="ai-submit" class="bt-button bt-button-accent" type="submit">Ask</button><button id="ai-cancel" class="bt-button" type="button" hidden>Cancel</button><button id="ai-clear" class="bt-button" type="button">Clear</button></div>
+        <p id="ai-status" class="bt-help" role="status">Answers stay here until cleared or this tab reloads. Suggestions never run automatically.</p>
+        <pre id="ai-output" class="bt-ai-output" aria-label="Coding help response" tabindex="0"></pre>
+      </form>
     </section>
   </aside>
 
@@ -288,7 +318,7 @@
       updateStatus('Checking browser configuration…', '#f59e0b');
       networkPromise = (async () => {
         const config = await globalThis.MonkehConfig.fetchConfig();
-        if (!Array.isArray(config.wispEndpoints) || !config.wispEndpoints.length || config.wispEndpoints.length > 11) throw new Error('Invalid proxy server configuration.');
+        if (!Array.isArray(config.wispEndpoints) || !config.wispEndpoints.length || config.wispEndpoints.length > 15) throw new Error('Invalid proxy server configuration.');
         const origin = new URL(config.proxyOrigin);
         if (origin.origin !== config.proxyOrigin || origin.origin === location.origin || origin.username || origin.password || !['http:', 'https:'].includes(origin.protocol)) throw new Error('The proxy must use a separate browser origin.');
         if (location.protocol === 'https:' && origin.protocol !== 'https:') throw new Error('The isolated proxy requires HTTPS.');
@@ -347,94 +377,6 @@
     }
 
     /* =========================================================
-       3. Background Interactive Canvas
-       ========================================================= */
-    const canvas = document.getElementById('bg-canvas');
-    const ctx = canvas.getContext('2d');
-    let particles = [];
-    let mouse = { x: null, y: null, radius: 120 };
-
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-
-    window.addEventListener('mousemove', (e) => {
-      mouse.x = e.clientX;
-      mouse.y = e.clientY;
-    });
-
-    window.addEventListener('mouseout', (e) => {
-      if (!e.relatedTarget) mouse.x = mouse.y = null;
-    });
-
-    class Particle {
-      constructor() {
-        this.x = Math.random() * canvas.width;
-        this.y = Math.random() * canvas.height;
-        this.size = Math.random() * 1.5 + 0.5;
-        this.baseX = this.x;
-        this.baseY = this.y;
-        this.density = (Math.random() * 20) + 1;
-        this.alpha = Math.random() * 0.4 + 0.1;
-      }
-
-      draw() {
-        ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        ctx.closePath();
-        ctx.fill();
-      }
-
-      update() {
-        let dx = mouse.x - this.x;
-        let dy = mouse.y - this.y;
-        let distance = Math.sqrt(dx * dx + dy * dy);
-        if (mouse.x !== null && mouse.y !== null && distance > 0 && distance < mouse.radius) {
-          let force = (mouse.radius - distance) / mouse.radius;
-          let directionX = dx / distance;
-          let directionY = dy / distance;
-          this.x -= directionX * force * this.density * 0.4;
-          this.y -= directionY * force * this.density * 0.4;
-        } else {
-          if (this.x !== this.baseX) {
-            let dx = this.x - this.baseX;
-            this.x -= dx * 0.05;
-          }
-          if (this.y !== this.baseY) {
-            let dy = this.y - this.baseY;
-            this.y -= dy * 0.05;
-          }
-        }
-      }
-    }
-
-    function initParticles() {
-      particles = [];
-      const count = Math.floor((canvas.width * canvas.height) / 12000);
-      for (let i = 0; i < count; i++) {
-        particles.push(new Particle());
-      }
-    }
-
-    function animateParticles() {
-      if (!ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      particles.forEach(p => {
-        p.draw();
-        p.update();
-      });
-      requestAnimationFrame(animateParticles);
-    }
-
-    initParticles();
-    animateParticles();
-
-    /* =========================================================
        4. Iframe Proxy Routing & UI Navigation
        ========================================================= */
     function getSearchUrl(query) {
@@ -449,7 +391,7 @@
       } catch (_) {
         // A search phrase is not required to be a valid URL.
       }
-      return 'https://duckduckgo.com/?q=' + encodeURIComponent(trimmed);
+      return window.MonkehPrivacy?.search(trimmed) || 'https://duckduckgo.com/?q=' + encodeURIComponent(trimmed);
     }
 
     function handleHeroSearch(query) {
@@ -607,7 +549,7 @@
             d.className = 'game-item';
             d.onclick = () => openViewer(t, a, u, false);
             d.innerHTML = `
-              ${v ? `<img class="game-cover" src="${escapeHtml(v)}" alt="${escapeHtml(t)}" loading="lazy" onerror="this.style.display='none'">` : ''}
+              ${v && window.MonkehPrivacy?.get().showCovers !== false ? `<img class="game-cover" src="${escapeHtml(v)}" alt="${escapeHtml(t)}" loading="lazy" onerror="this.style.display='none'">` : ''}
               <div class="game-info">
                 <span class="game-title">${escapeHtml(t)}</span>
                 ${a ? `<span class="game-author">${escapeHtml(a)}</span>` : ''}
@@ -696,7 +638,7 @@
             d.className = 'game-item';
             d.onclick = () => openViewer(t, a, u, false);
             d.innerHTML = `
-              ${v ? `<img class="game-cover" src="${escapeHtml(v)}" alt="${escapeHtml(t)}" loading="lazy" onerror="this.style.display='none'">` : ''}
+              ${v && window.MonkehPrivacy?.get().showCovers !== false ? `<img class="game-cover" src="${escapeHtml(v)}" alt="${escapeHtml(t)}" loading="lazy" onerror="this.style.display='none'">` : ''}
               <div class="game-info">
                 <span class="game-title">${escapeHtml(t)}</span>
                 ${a ? `<span class="game-author">${escapeHtml(a)}</span>` : ''}
@@ -712,7 +654,7 @@
           { name: 'Flyflix', author: 'Flyflix', url: '/flyflix.html', cover: '' },
           { name: 'Voxiles', author: 'bog', url: '/apps/vox.html', cover: '' },
           { name: 'Auk', author: '', url: '/apps/auk.html', cover: '' },
-          { name: 'Desktop Lab', author: 'Browser desktops', url: '/apps/desktop.html', cover: '' }
+          { name: 'Desktops', author: 'Browser desktops', url: '/apps/desktop.html', cover: '' }
         ];
 
         window.rawApps = defaultAppList;
@@ -762,6 +704,7 @@
     }
 
     async function openViewer(title, author, url, isProxied = false) {
+      const canReuseProxy = isProxied && viewerIsProxied;
       viewerTarget = { title, author, url, isProxied };
       viewerIsProxied = isProxied;
       lastEndpoint = null;
@@ -780,19 +723,28 @@
       document.getElementById('viewer-author').textContent = author ? 'by ' + author : '';
 
       viewer.classList.add('active');
-      window.MonkehTools?.prepareNavigation(url, isProxied);
-      frame.removeAttribute('srcdoc');
-      frame.src = 'about:blank';
-      showViewerMessage(isProxied ? 'Connecting to the proxy...' : 'Loading...');
 
       try {
         if (!url) throw new Error('This catalog entry has no playable URL.');
         const target = new URL(url, window.location.href);
         if (!/^https?:$/.test(target.protocol)) throw new Error('Only HTTP and HTTPS pages can be opened.');
         if (target.username || target.password) throw new Error('Addresses containing login details cannot be opened.');
-
         if (isProxied) {
           if (target.origin === window.location.origin) throw new Error('App pages cannot be opened as proxy destinations.');
+          if (target.protocol === 'http:' && window.MonkehPrivacy?.get().httpsOnly !== false) throw new Error('HTTPS is required for entered addresses. Change this in Settings to open an HTTP page.');
+          const sandbox = window.MonkehPrivacy?.sandbox(true) || 'allow-scripts allow-same-origin allow-forms allow-pointer-lock';
+          if (canReuseProxy && frame.getAttribute?.('sandbox') === sandbox) {
+            const reused = await window.MonkehTools?.navigateRemote?.(target.href);
+            if (navigation !== viewerNavigation) return;
+            if (reused) return;
+          }
+        }
+        window.MonkehTools?.prepareNavigation(url, isProxied);
+        frame.removeAttribute('srcdoc');
+        frame.src = 'about:blank';
+        showViewerMessage(isProxied ? 'Connecting to the proxy...' : 'Loading...');
+
+        if (isProxied) {
           const ready = await initializeNetwork();
           if (navigation !== viewerNavigation) return;
           if (!ready) throw new Error(networkErrorMessage);
@@ -800,7 +752,7 @@
           frame.removeAttribute('srcdoc');
           // The origin is different from the shell. Retain browser capabilities
           // while preventing the remote page from navigating the outer app.
-          frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-downloads allow-popups');
+          frame.setAttribute('sandbox', window.MonkehPrivacy?.sandbox(true) || 'allow-scripts allow-same-origin allow-forms allow-pointer-lock');
           frame.src = window.MonkehProxyOrigin + '/proxy-host.html#' + encodeURIComponent(target.href);
         } else if (target.origin === window.location.origin) {
           if (!['/apps/auk.html', '/apps/vox.html', '/apps/desktop.html', '/flyflix.html'].includes(target.pathname)) throw new Error('This local app is not in the trusted app list.');
@@ -822,12 +774,14 @@
           base.href = new URL(base.getAttribute('href') || sourceUrl, sourceUrl).href;
           doc.head.prepend(base);
           window.MonkehTools?.expectDocument(sourceUrl, false);
-          frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-pointer-lock allow-downloads');
+          frame.setAttribute('sandbox', window.MonkehPrivacy?.sandbox(false) || 'allow-scripts allow-forms allow-pointer-lock');
           frame.setAttribute('referrerpolicy', 'no-referrer');
           frame.srcdoc = '<!doctype html>' + doc.documentElement.outerHTML;
         }
       } catch (error) {
         if (navigation !== viewerNavigation || error.name === 'AbortError') return;
+        window.MonkehTools?.prepareNavigation(url, isProxied);
+        frame.src = 'about:blank';
         showViewerMessage(`Unable to load this page: ${error.message}`);
       } finally {
         if (navigation === viewerNavigation) viewerRequest = null;

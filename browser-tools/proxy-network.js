@@ -118,7 +118,7 @@ export function probeWisp(url, {
 
 /**
  * Serializes transport replacement and health checks for an administrator-owned
- * primary plus up to ten backups. It never navigates or reloads a page.
+ * primary plus up to fourteen backups. It never navigates or reloads a page.
  *
  * connect({ force: true }) probes and replaces the active transport, and bypasses
  * cooldown for an explicit Retry action.
@@ -142,8 +142,8 @@ export function createProxyNetwork({
   probeTimeoutMs = 5000,
   online: initiallyOnline = true,
 } = {}) {
-  if (!Array.isArray(endpoints) || !endpoints.length || endpoints.length > 11) {
-    throw new TypeError('Configure one primary proxy and at most ten backups.');
+  if (!Array.isArray(endpoints) || !endpoints.length || endpoints.length > 15) {
+    throw new TypeError('Configure one primary proxy and at most fourteen backups.');
   }
   const urls = [...new Set(endpoints.map(endpointUrl))];
   if (typeof activate !== 'function' || typeof probe !== 'function') throw new TypeError('Proxy activation and probe callbacks are required.');

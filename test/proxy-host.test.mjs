@@ -46,6 +46,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   const evaluated = [];
   const runtimes = [];
   let activated = 0;
+  let registrations = 0;
   let networkOptions;
   const network = { connects: 0, failures: 0, disposed: 0,
     async connect() { this.connects++; if (this.connects === 1) await networkOptions.activate('ws://127.0.0.1:3101/wisp/'); networkOptions.onStatus({ status: 'connected', activeEndpoint: 'ws://127.0.0.1:3101/wisp/', configuredCount: 1 }); return 'ws://127.0.0.1:3101/wisp/'; },
@@ -54,7 +55,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   const sandbox = {
     MonkehUseBackendConfig: true,
     window: contextWindow, document: doc, location, isSecureContext: true,
-    navigator: { onLine: true, serviceWorker: { async register() {}, ready: Promise.resolve(), controller: {}, addEventListener() {}, removeEventListener() {} } },
+    navigator: { onLine: true, serviceWorker: { async register() { registrations++; }, ready: Promise.resolve(), controller: {}, addEventListener() {}, removeEventListener() {} } },
     URL, AbortSignal, AbortController, TextEncoder, TextDecoder, Map, WeakMap, Set, decodeURIComponent, encodeURIComponent,
     fetch: fetchConfig || (async () => new Response(JSON.stringify({ shellOrigins: [shellOrigin], proxyOrigin, wispEndpoints: [{ name: 'Primary', url: '/wisp/' }], ...extraConfig }), { headers: { 'Content-Type': 'application/json' } })),
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn, ms }); return id; }, clearTimeout(id) { timers.delete(id); },
@@ -84,7 +85,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
     return connection;
   }
   function loadPage() { frame.fire('load'); }
-  return { contextWindow, doc, get, frame, pageWindow, pageDoc, root, network, timers, evaluated, runtimes, init, loadPage, location, navigations, get activated() { return activated; } };
+  return { contextWindow, doc, get, frame, pageWindow, pageDoc, root, network, timers, evaluated, runtimes, init, loadPage, location, navigations, get activated() { return activated; }, get registrations() { return registrations; } };
 }
 
 test('proxy host accepts bridge transfer only from the allowed shell window and origin', async () => {
@@ -149,6 +150,97 @@ test('proxy host bounds returned console values, document metadata, and tree nod
   const event = connection.messages.find(message => message.event === 'console').data;
   assert.equal(event.args.length, 50);
   assert(event.args.every(value => value.length <= 12000));
+  app.contextWindow.fire('pagehide');
+});
+
+test('picking an element outside the initial tree reserves its full ancestor path within the node cap', async () => {
+  const app = await harness();
+  app.root.children = Array.from({ length: 1200 }, (_, index) => ({ nodeType: 1, localName: 'section', id: `section-${index}`, className: '', children: [], parentElement: app.root, ownerDocument: app.pageDoc }));
+  const parent = app.root.children[1100];
+  const picked = { nodeType: 1, localName: 'button', id: 'picked', className: '', children: [], parentElement: parent, ownerDocument: app.pageDoc };
+  parent.children.push(picked);
+  const connection = app.init();
+  app.loadPage();
+  assert(!connection.messages.find(message => message.event === 'page').data.tree.nodes.some(record => record.elementId === 'picked'));
+  app.runtimes[0].callbacks.onSelect(picked);
+  const selection = connection.messages.find(message => message.event === 'select').data;
+  assert(selection.tree.nodes.length <= 800);
+  const rootRecord = selection.tree.nodes.find(record => record.id === selection.tree.rootId);
+  const parentRecord = selection.tree.nodes.find(record => record.elementId === 'section-1100');
+  const pickedRecord = selection.tree.nodes.find(record => record.elementId === 'picked');
+  assert(rootRecord.children.includes(parentRecord.id));
+  assert(parentRecord.children.includes(pickedRecord.id));
+  const childNames = rootRecord.children.map(id => selection.tree.nodes.find(record => record.id === id).elementId);
+  assert.equal(childNames[0], 'section-0');
+  assert.equal(childNames.at(-1), 'section-1100', 'reserved selections preserve real sibling order');
+  assert.equal(selection.id, pickedRecord.id);
+  app.contextWindow.fire('pagehide');
+});
+
+test('selection snapshots preserve head/body and sibling order while revealing an ordinary node', async () => {
+  const app = await harness();
+  const make = (name, parent) => ({ nodeType: 1, localName: name, id: name, className: '', children: [], parentElement: parent, ownerDocument: app.pageDoc });
+  const head = make('head', app.root);
+  const body = make('body', app.root);
+  app.root.children = [head, body];
+  const style = make('style', body), svg = make('svg', body), paragraph = make('p', body);
+  body.children = [style, svg, paragraph];
+  const connection = app.init(); app.loadPage();
+  app.runtimes[0].callbacks.onSelect(paragraph);
+  const { tree } = connection.messages.find(message => message.event === 'select').data;
+  const names = record => record.children.map(id => tree.nodes.find(node => node.id === id).localName);
+  assert.deepEqual(Array.from(names(tree.nodes.find(node => node.id === tree.rootId))), ['head', 'body']);
+  assert.deepEqual(Array.from(names(tree.nodes.find(node => node.localName === 'body'))), ['style', 'svg', 'p']);
+  app.contextWindow.fire('pagehide');
+});
+
+test('warm navigation RPC reuses the active proxy transport and service worker', async () => {
+  const app = await harness();
+  const connection = app.init(); app.loadPage();
+  await connection.request({ id: 1, method: 'navigate', params: { url: 'https://other.example/new?q=one' } });
+  assert.equal(connection.messages.find(message => message.id === 1).result, true);
+  assert.equal(app.frame.src, '/service/' + encodeURIComponent('https://other.example/new?q=one'));
+  assert.equal(app.activated, 1);
+  assert.equal(app.registrations, 1);
+  assert.equal(app.runtimes.length, 1, 'navigation does not replace the host itself');
+  for (const [id, url] of [[2, 'javascript:bad()'], [3, shellOrigin + '/math.html'], [4, proxyOrigin + '/math.html'], [5, 'https://user:secret@example.com/']]) {
+    await connection.request({ id, method: 'navigate', params: { url } });
+    assert.equal(typeof connection.messages.find(message => message.id === id).error, 'string');
+  }
+  assert.equal(app.activated, 1);
+  assert.equal(app.registrations, 1);
+  app.contextWindow.fire('pagehide');
+});
+
+test('proxy configuration permits fifteen endpoints and rejects larger pools', async () => {
+  const endpoints = Array.from({ length: 15 }, (_, index) => ({ url: `wss://proxy-${index}.example/wisp/` }));
+  const app = await harness({ config: { wispEndpoints: endpoints } });
+  assert.equal(app.activated, 1);
+  app.contextWindow.fire('pagehide');
+  const tooMany = await harness({ config: { wispEndpoints: [...endpoints, { url: 'wss://extra.example/wisp/' }] } });
+  assert.equal(tooMany.activated, 0);
+  assert.match(tooMany.get('status-message').textContent, /misconfigured/);
+  tooMany.contextWindow.fire('pagehide');
+});
+
+test('element edit and undo RPCs mutate only a node from the viewed document and return a fresh selection', async () => {
+  const app = await harness();
+  const connection = app.init();
+  app.loadPage();
+  const calls = [];
+  app.runtimes[0].editNode = (element, change) => { calls.push({ element, kind: change.kind, value: change.value }); return element; };
+  app.runtimes[0].undo = () => app.root;
+  const id = connection.messages.find(message => message.event === 'page').data.tree.rootId;
+  await connection.request({ id: 1, method: 'edit', params: { id, kind: 'attribute', name: 'class', value: 'updated' } });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].element, app.root);
+  assert.equal(calls[0].value, 'updated');
+  assert.equal(connection.messages.find(message => message.id === 1).result.id, id);
+  await connection.request({ id: 2, method: 'edit', params: { id: 'not-in-page', kind: 'delete' } });
+  assert.match(connection.messages.find(message => message.id === 2).error, /No matching element/);
+  assert.equal(calls.length, 1);
+  await connection.request({ id: 3, method: 'undo' });
+  assert.equal(connection.messages.find(message => message.id === 3).result.tree.rootId, id);
   app.contextWindow.fire('pagehide');
 });
 

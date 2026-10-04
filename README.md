@@ -19,7 +19,7 @@ optional bufferutil native build so pnpm 11's strict install succeeds.
 
 - Cloudflare Pages: build command `pnpm build`, output directory `dist`.
 - Cloudflare Worker: `npx wrangler deploy`; `wrangler.jsonc` builds and uploads
-  static assets. No Worker backend or paid container is required.
+  static assets plus the optional coding-help and limited Wisp routes. No paid container is required.
 - App: https://testingproductionubgdontgo.pages.dev/math.html
 - Isolated proxy host: https://monkeh.1234-imwatchingyouopenthedoor.workers.dev
 
@@ -36,30 +36,33 @@ required for isolation; the public server still needs an internet connection.
 ## Servers and failover
 
 Edit `deployment.wispEndpoints` in `browser-tools/config.js`. It contains the
-original Anura endpoint, `wss://anura.pro/wisp/`. The old Lunar hostname no longer
-resolved during verification and is excluded. Only include servers offered for
-public use or which you control; do not add arbitrary endpoints just to fill slots.
+original Anura endpoint, `wss://anura.pro/wisp/`, and the owned Monkeh Worker
+at `/wisp/` as a limited backup. The old Lunar hostname no longer resolved during
+verification and is excluded. Only include servers offered for public use or
+which you control; do not add arbitrary endpoints just to fill slots.
 
-The client supports a primary plus ten backups, validates a Wisp greeting,
+The client supports a primary plus fourteen backups, validates a Wisp greeting,
 serializes transport changes, checks availability every 30 seconds and switches
 after two failures. **Retry** immediately rechecks the connection. It pauses
 while offline and resumes when the network returns. Switching connections cannot
 preserve TCP sessions; reload is manual so forms and uploads are not replayed.
 
-One working endpoint is bundled, so there is currently no independent live
-backup. Public operators can impose limits, block destinations or stop service.
+The owned backup cannot reach Cloudflare IP ranges and has bounded session,
+transfer and connection limits. It is suitable only for destinations that those
+limits permit. Fifteen available configuration slots do not mean fifteen live
+servers. Public operators can impose limits, block destinations or stop service.
 Their policies govern outgoing traffic; the optional Node gateway's restrictions
 do not apply to those servers. The proxy host must be reachable as well as the
 server. The list is public code and must never contain credentials.
 
 ## Browser tools
 
-Open a page, then select **Tools**. The dock resizes and works in fullscreen.
+Open a page, then select **Tools**. The right dock resizes with a drag or arrow keys, closes with X, and works in fullscreen. Small screens stack the dock below the page.
 
 - **Console:** captured logs/errors, filters, command history, preserve log,
   awaited JavaScript evaluation and `$0` for the inspected element.
 - **Inspect:** pick an element, browse the DOM, search with CSS selectors, inspect
-  attributes/computed styles and apply temporary inline CSS.
+  attributes/computed styles, edit text and attributes, delete elements, undo up to 20 edits, and apply temporary inline CSS. Picking reveals the selected DOM row.
 - **Userscripts:** create, edit, save and manually run JavaScript. Ctrl/Cmd+S
   saves; Ctrl/Cmd+Enter runs. Saved scripts stay in this browser. Automatic
   execution on remote pages is paused to prevent pages obtaining saved source
@@ -69,15 +72,38 @@ Tools operate on proxied pages, not shell apps or opaque catalog frames. Capture
 starts after page load, so early startup logs and nested cross-origin frames
 are not included. These are embedded page tools, not native browser DevTools.
 
+## Privacy and coding help
+
+Settings control the search engine, HTTPS for entered addresses, popups, downloads,
+catalog cover images, clearing console data on close, and access to coding help.
+Popup and download permissions apply when the viewed frame is reopened or reloaded.
+These are browser preferences, not anonymity or tracker-blocking guarantees.
+
+**Tools → Help** sends only the question and optional code shown in its form to
+Cloudflare Workers AI. Copying a userscript draft into the form is explicit;
+page content, cookies, history, and saved scripts are never attached automatically.
+Answers are plain text and never execute. No API key is shipped to browsers.
+
+The Worker uses Qwen2.5 Coder with bounded input/output, request deadlines,
+origin checks, and rate limits. Keep this account on **Workers Free**: its daily
+10,000-neuron allowance stops inference when exhausted. A Paid account can bill
+beyond that allowance; the per-location rate limiter is not a global spending cap.
+Set `ENABLE_ASSIST=false` before changing to a paid account if billing is unwanted.
+Missing bindings and exhausted quotas show a recoverable error. Plain static or
+Node deployments without the Worker API can browse normally but have no AI help.
+
+See [Wisp hosting notes](docs/WISP-HOSTING.md) for public-server verification,
+Cloudflare's TCP restrictions, and why GitHub Actions is used only for CI tests.
+
 ## Apps and current limits
 
-Auk, Voxiles, Desktop Lab and the browser tools are static. Remote catalogs,
+Auk, Voxiles, Desktops and the browser tools are static. Remote catalogs,
 fonts, movie providers, Ruffle, JSZip and CodeMirror depend on their upstreams.
 Voxiles ZIP imports support self-contained entry files; companion-asset archives
 are not fully supported. Provider outages and sites that resist proxy rewriting
 cannot be eliminated by static hosting.
 
-Desktop Lab launches the official v86 Windows 2000/98 browser emulators through
+Desktops launches the official v86 Windows 2000/98 browser emulators through
 Monkeh. These require no account, but are not modern Windows cloud VMs. Save the
 guest state before leaving. Guest networking is disabled and is separate from
 the proxy used to load the emulator page. `deployment.windowsVm` can be set to a

@@ -103,7 +103,7 @@ test('selection descriptions and network metadata are bounded and numeric dimens
   assert.equal(described.attributes.length, 100);
   assert.equal(described.attributes[0].name.length, 128);
   await app.send('network', { status: 'connected', activeEndpoint: 'x'.repeat(9000), configuredCount: 1000, error: '<b>text</b>' });
-  assert.equal(app.events.networks[0].configuredCount, 11);
+  assert.equal(app.events.networks[0].configuredCount, 15);
   assert.equal(app.events.networks[0].activeEndpoint.length, 8192);
 });
 
@@ -146,6 +146,58 @@ test('style changes and selector searches use narrow RPC methods', async t => {
   assert.deepEqual(app.requests[1].params, { selector: '#demo' });
   await app.response(app.requests[1].id, { id: 'body', info: info() });
   await searched;
+});
+
+test('picker snapshots replace the tree without losing selected node identity', async t => {
+  const app = harness(t);
+  await app.send('page', { url: 'https://example.com/', tree: tree() });
+  const body = app.runtime.getChildren()[0];
+  const snapshot = tree();
+  snapshot.nodes[1].children.push('picked');
+  snapshot.nodes.push({ id: 'picked', localName: 'button', elementId: 'chosen', children: [] });
+  await app.send('select', { id: 'picked', info: info({ tag: 'button' }), tree: snapshot });
+  assert.equal(app.runtime.getChildren()[0], body);
+  assert.equal(app.runtime.getChildren(body)[0], app.events.selections[0]);
+  assert.equal(app.events.selections[0].id, 'chosen');
+});
+
+test('element editing and undo use bounded explicit RPC methods and update selection metadata', async t => {
+  const app = harness(t);
+  await app.send('select', { id: 'body', info: info(), tree: tree() });
+  const selected = app.events.selections.at(-1);
+  const edited = app.runtime.editNode(selected, { kind: 'text', value: 'Updated' });
+  await tick();
+  assert.equal(app.requests[0].method, 'edit');
+  assert.deepEqual(app.requests[0].params, { id: 'body', kind: 'text', name: undefined, value: 'Updated' });
+  await app.response(app.requests[0].id, { id: 'body', info: info({ text: 'Updated', canUndo: true }), tree: tree() });
+  assert.equal(await edited, selected);
+  assert.equal((await app.runtime.describe(selected)).text, 'Updated');
+  const undone = app.runtime.undo();
+  await tick();
+  assert.equal(app.requests[1].method, 'undo');
+  await app.response(app.requests[1].id, { id: 'body', info: info({ text: 'Original', canUndo: false }), tree: tree() });
+  await undone;
+  assert.equal((await app.runtime.describe(selected)).text, 'Original');
+  await assert.rejects(app.runtime.editNode(selected, { kind: 'text', value: 'x'.repeat(10001) }), /10,000/);
+  await assert.rejects(app.runtime.editNode(selected, { kind: 'evaluate', value: 'bad' }), /Unsupported/);
+  assert.equal(app.requests.length, 2);
+});
+
+test('navigation acknowledgement survives inner page changes while old DOM commands are retired', async t => {
+  const app = harness(t);
+  const navigation = app.runtime.navigate('https://next.example/path');
+  const oldCommand = app.runtime.evaluate('oldDocumentTask()');
+  const rejected = assert.rejects(oldCommand, /navigating/);
+  await tick();
+  assert.deepEqual(app.requests[0], { id: 1, method: 'navigate', params: { url: 'https://next.example/path' } });
+  await app.send('pagehide');
+  await rejected;
+  await app.send('page', { url: 'https://next.example/path', tree: tree() });
+  await app.response(1, true);
+  assert.equal(await navigation, true);
+  await assert.rejects(app.runtime.navigate('javascript:alert(1)'), /HTTP/);
+  await assert.rejects(app.runtime.navigate('https://user:password@example.com/'), /HTTP/);
+  assert.equal(app.requests.length, 2);
 });
 
 test('unanswered requests time out and dispose rejects pending commands', async t => {

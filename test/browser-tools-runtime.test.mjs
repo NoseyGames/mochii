@@ -36,9 +36,15 @@ function environment() {
   }
   function element(tag = 'div', text = '') {
     const styles = new Map();
+    let ownText = text;
     const node = {
       nodeType: 1, ownerDocument: document, localName: tag, tagName: tag.toUpperCase(),
-      id: '', parentElement: null, children: [], attributes: [], textContent: text,
+      id: '', parentElement: null, children: [], attributes: [],
+      get parentNode() { return this.parentElement; },
+      get childNodes() { return this.children; },
+      get nextSibling() { const siblings = this.parentElement?.children || []; return siblings[siblings.indexOf(this) + 1] || null; },
+      get textContent() { return ownText + this.children.map(child => child.textContent).join(''); },
+      set textContent(value) { ownText = value; this.replaceChildren(); },
       outerHTML: `<${tag}>${text}</${tag}>`,
       style: {
         setProperty(name, value, priority = '') { styles.set(name, { value, priority }); },
@@ -47,8 +53,21 @@ function environment() {
         getPropertyPriority(name) { return styles.get(name)?.priority || ''; },
         *[Symbol.iterator]() { yield* styles.keys(); },
       },
-      setAttribute(name, value) { this.attributes.push({ name, value }); },
+      setAttribute(name, value) { this.removeAttribute(name); this.attributes.push({ name, value }); },
+      getAttribute(name) { return this.attributes.find(attribute => attribute.name === name)?.value ?? null; },
+      removeAttribute(name) { this.attributes = this.attributes.filter(attribute => attribute.name !== name); },
       appendChild(child) { this.children.push(child); child.parentElement = this; return child; },
+      replaceChildren(...children) {
+        for (const child of this.children) child.parentElement = null;
+        this.children = [];
+        if (children.length) ownText = '';
+        children.forEach(child => this.appendChild(child));
+      },
+      insertBefore(child, next) {
+        const index = this.children.indexOf(next);
+        if (index < 0) this.children.push(child); else this.children.splice(index, 0, child);
+        child.parentElement = this;
+      },
       remove() {
         if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(child => child !== this);
         this.parentElement = null;
@@ -122,6 +141,63 @@ test('capture reports browser errors and promise rejections without cancelling t
   runtime.dispose();
   page.dispatch('error', { error });
   assert.equal(events.length, 2);
+});
+
+test('inspector edits attributes and text, and undo restores original child nodes', () => {
+  const { page, document, element } = environment();
+  const target = document.body.appendChild(element('section'));
+  const child = target.appendChild(element('button', 'Original'));
+  child.clickHandler = () => 'still alive';
+  const runtime = attachRuntime(page);
+  runtime.editNode(target, { kind: 'attribute', name: 'data-label', value: 'Changed' });
+  assert.equal(target.getAttribute('data-label'), 'Changed');
+  runtime.editNode(target, { kind: 'text', value: '<strong>Literal text</strong>' });
+  assert.equal(target.textContent, '<strong>Literal text</strong>');
+  assert.equal(target.children.length, 0, 'text editing never parses HTML');
+  assert.equal(runtime.describe(target).canUndo, true);
+  assert.equal(runtime.undo(), target);
+  assert.equal(target.children[0], child, 'undo restores node identity and event handlers');
+  assert.equal(child.clickHandler(), 'still alive');
+  runtime.editNode(target, { kind: 'removeAttribute', name: 'data-label' });
+  assert.equal(target.getAttribute('data-label'), null);
+  runtime.undo();
+  assert.equal(target.getAttribute('data-label'), 'Changed');
+  runtime.undo();
+  assert.equal(target.getAttribute('data-label'), null);
+  assert.equal(runtime.describe(target).canUndo, false);
+  runtime.dispose();
+});
+
+test('inspector delete selects its parent and undo restores the element at its previous position', () => {
+  const { page, document, element } = environment();
+  const first = document.body.appendChild(element('p', 'First'));
+  const removed = document.body.appendChild(element('p', 'Second'));
+  const last = document.body.appendChild(element('p', 'Third'));
+  const runtime = attachRuntime(page);
+  assert.equal(runtime.editNode(removed, { kind: 'delete' }), document.body);
+  assert.deepEqual(document.body.children, [first, last]);
+  assert.equal(runtime.undo(), removed);
+  assert.deepEqual(document.body.children, [first, removed, last]);
+  assert.throws(() => runtime.editNode(document.documentElement, { kind: 'delete' }), /root/);
+  runtime.dispose();
+});
+
+test('inspector edits are bounded, reject foreign nodes, and retain at most twenty undo actions', () => {
+  const { page, document, element } = environment();
+  const target = document.body.appendChild(element('p'));
+  const runtime = attachRuntime(page);
+  assert.throws(() => runtime.editNode({ ...target, ownerDocument: {} }, { kind: 'delete' }), /current page/);
+  assert.throws(() => runtime.editNode(target, { kind: 'attribute', name: 'bad name', value: 'x' }), /attribute name/);
+  assert.throws(() => runtime.editNode(target, { kind: 'text', value: 'x'.repeat(10001) }), /10,000/);
+  assert.throws(() => runtime.editNode(target, { kind: 'outerHTML', value: '<script>bad</script>' }), /Unsupported/);
+  for (let index = 0; index < 25; index++) runtime.editNode(target, { kind: 'attribute', name: 'data-count', value: String(index) });
+  for (let index = 0; index < 20; index++) runtime.undo();
+  assert.equal(target.getAttribute('data-count'), '4');
+  assert.throws(() => runtime.undo(), /no inspector edits/);
+  target.children = Array.from({ length: 1000 }, () => element('i'));
+  assert.throws(() => runtime.editNode(target, { kind: 'delete' }), /too large/);
+  runtime.dispose();
+  assert.throws(() => runtime.editNode(target, { kind: 'text', value: 'later' }), /page has changed/);
 });
 
 test('a broken or reentrant console renderer cannot break normal page logging', () => {

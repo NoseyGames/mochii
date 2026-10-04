@@ -1,0 +1,14 @@
+{
+  "name": "monkeh-wisp-local-test",
+  "main": "index.mjs",
+  "compatibility_date": "2026-10-03",
+  "workers_dev": false,
+  "ratelimits": [
+    { "name": "WISP_RATE", "namespace_id": "106033", "simple": { "limit": 12, "period": 60 } },
+    { "name": "WISP_GLOBAL_RATE", "namespace_id": "106034", "simple": { "limit": 120, "period": 60 } }
+  ],
+  "vars": {
+    "ENABLE_WISP": "true",
+    "WISP_ALLOWED_ORIGINS": "[\"http://127.0.0.1:8788\"]"
+  }
+}

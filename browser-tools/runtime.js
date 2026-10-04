@@ -89,6 +89,8 @@ export function attachRuntime(targetWindow, { onConsole = () => {}, onSelect = (
   const selectedGetter = () => selected;
   let selectedDescriptor;
   let installedSelected = false;
+  const edits = [];
+  let retainedNodes = 0;
 
   function emit(level, args) {
     if (disposed || reporting) return;
@@ -268,8 +270,69 @@ export function attachRuntime(targetWindow, { onConsole = () => {}, onSelect = (
       styles: names.map(name => ({ name, value: truncate(computed.getPropertyValue(name)) })),
       rect: { width: rect.width, height: rect.height },
       text: truncate(element.textContent || ''),
+      textTruncated: (element.textContent || '').length > MAX_TEXT,
       html: truncate(element.outerHTML || ''),
+      canDelete: element !== document.documentElement && Boolean(element.parentNode || element.parentElement),
+      canUndo: edits.length > 0,
     };
+  }
+
+  function remember(restore, node, weight = 1) {
+    edits.push({ restore, node, weight });
+    retainedNodes += weight;
+    while (edits.length > 20 || retainedNodes > 2000) retainedNodes -= edits.shift().weight;
+  }
+
+  function editWeight(element) {
+    const queue = [element];
+    for (let index = 0; index < queue.length; index++) {
+      for (const child of Array.from(queue[index].childNodes || queue[index].children || [])) {
+        if (queue.length >= 1000) throw new Error('This element is too large to edit here. Use the console.');
+        queue.push(child);
+      }
+    }
+    return queue.length;
+  }
+
+  function editNode(element, { kind, name, value } = {}) {
+    ensureElement(element);
+    if (element.isConnected === false) throw new Error('This element is no longer in the page. Refresh the inspector.');
+    if (kind === 'attribute' || kind === 'removeAttribute') {
+      if (typeof name !== 'string' || name.length > 128 || !/^[A-Za-z_:][A-Za-z0-9_:.-]*$/.test(name)) throw new Error('Enter a valid attribute name.');
+      if (kind === 'attribute' && (typeof value !== 'string' || value.length > 10000)) throw new Error('Attribute values must be at most 10,000 characters.');
+      const previous = element.getAttribute(name);
+      if (previous !== null && previous.length > 10000) throw new Error('This attribute is too large to edit here. Use the console.');
+      if (kind === 'removeAttribute') element.removeAttribute(name);
+      else element.setAttribute(name, value);
+      remember(() => previous === null ? element.removeAttribute(name) : element.setAttribute(name, previous), element);
+    } else if (kind === 'text') {
+      if (element === document.documentElement) throw new Error('Select an element inside the document to replace its text.');
+      if (typeof value !== 'string' || value.length > 10000) throw new Error('Text must be at most 10,000 characters.');
+      const weight = editWeight(element);
+      const previous = Array.from(element.childNodes);
+      element.textContent = value;
+      remember(() => element.replaceChildren(...previous), element, weight);
+    } else if (kind === 'delete') {
+      const parent = element.parentNode || element.parentElement;
+      if (element === document.documentElement || !parent) throw new Error('The document root cannot be deleted.');
+      const weight = editWeight(element);
+      const next = element.nextSibling;
+      element.remove();
+      remember(() => parent.insertBefore(element, next?.parentNode === parent ? next : null), element, weight);
+      selected = parent;
+      return parent;
+    } else throw new Error('Unsupported element edit.');
+    return element;
+  }
+
+  function undo() {
+    ensureDocument();
+    const edit = edits.pop();
+    if (!edit) throw new Error('There are no inspector edits to undo.');
+    retainedNodes -= edit.weight;
+    edit.restore();
+    selected = edit.node;
+    return edit.node;
   }
 
   function setStyle(element, property, value) {
@@ -277,13 +340,17 @@ export function attachRuntime(targetWindow, { onConsole = () => {}, onSelect = (
     const name = String(property).trim();
     const rawValue = String(value).trim();
     if (!/^(?:--[\w-]+|-?[a-zA-Z][a-zA-Z0-9-]*)$/.test(name)) throw new Error('Enter a valid CSS property, such as color or font-size.');
-    if (!rawValue) { element.style.removeProperty(name); return; }
+    const previous = element.style.getPropertyValue(name);
+    const previousPriority = element.style.getPropertyPriority(name);
+    const saveUndo = () => remember(() => previous ? element.style.setProperty(name, previous, previousPriority) : element.style.removeProperty(name), element);
+    if (!rawValue) { element.style.removeProperty(name); saveUndo(); return; }
     const important = /\s*!important\s*$/i.test(rawValue);
     const cssValue = important ? rawValue.replace(/\s*!important\s*$/i, '').trim() : rawValue;
     if (targetWindow.CSS?.supports && !targetWindow.CSS.supports(name, cssValue)) {
       throw new Error(`The browser does not support ${name}: ${cssValue}.`);
     }
     element.style.setProperty(name, cssValue, important ? 'important' : '');
+    saveUndo();
   }
 
   async function evaluate(source) {
@@ -311,7 +378,9 @@ export function attachRuntime(targetWindow, { onConsole = () => {}, onSelect = (
       } catch { /* A navigation may already have discarded the property. */ }
     }
     selected = null;
+    edits.length = 0;
+    retainedNodes = 0;
   }
 
-  return { document, evaluate, startPicking, stopPicking, select, getChildren, describe, setStyle, dispose };
+  return { document, evaluate, startPicking, stopPicking, select, getChildren, describe, setStyle, editNode, undo, dispose };
 }

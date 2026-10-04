@@ -35,6 +35,7 @@ function createPage({ protocol = 'http:', storageUnavailable = false } = {}) {
       },
       removeAttribute(name) { this[name] = ''; },
       setAttribute(name, value) { this[name] = value; },
+      getAttribute(name) { return this[name] || null; },
       appendChild(child) { this.children.push(child); },
       getContext() { return null; },
       addEventListener() {}
@@ -139,6 +140,84 @@ test('search waits for isolated origin configuration and then navigates the remo
   config.resolve(configResponse({ proxyOrigin: 'https://proxy.example.org', wispEndpoints: [{ name: 'Primary', url: '/wisp/' }] }));
   await navigation;
   assert.equal(element('viewer-frame').src, 'https://proxy.example.org/proxy-host.html#https%3A%2F%2Fexample.com%2F');
+});
+
+test('accepted warm proxy navigation preserves the outer iframe and its document', async () => {
+  const { page, element } = createPage();
+  const prepared = [], navigated = [];
+  page.MonkehTools = {
+    prepareNavigation: url => prepared.push(url), expectDocument() {},
+    async navigateRemote(url) { navigated.push(url); return true; },
+  };
+  await page.openViewer('First', 'Web', 'https://first.example/', true);
+  const frame = element('viewer-frame');
+  const originalSource = frame.src;
+  Object.defineProperty(frame, 'src', {
+    get: () => originalSource,
+    set() { throw new Error('Warm navigation must not recreate the outer iframe'); },
+  });
+  await page.openViewer('Next', 'Web', 'https://next.example/path', true);
+  assert.deepEqual(navigated, ['https://next.example/path']);
+  assert.deepEqual(prepared, ['https://first.example/']);
+  assert.equal(frame.src, originalSource);
+  assert.equal(frame.srcdoc, '');
+  assert.equal(element('viewer-title').textContent, 'Next');
+});
+
+test('changed popup or download sandbox permissions force a cold proxy navigation', async () => {
+  const { page, element } = createPage();
+  let policy = 'allow-scripts allow-same-origin allow-forms allow-pointer-lock';
+  page.MonkehPrivacy = { get: () => ({ httpsOnly: true }), sandbox: () => policy };
+  const prepared = [];
+  let reused = 0;
+  page.MonkehTools = {
+    prepareNavigation: url => prepared.push(url), expectDocument() {},
+    async navigateRemote() { reused++; return true; },
+  };
+  await page.openViewer('First', '', 'https://first.example/', true);
+  policy += ' allow-downloads';
+  await page.openViewer('Next', '', 'https://next.example/', true);
+  assert.equal(reused, 0);
+  assert.deepEqual(prepared, ['https://first.example/', 'https://next.example/']);
+  assert.equal(element('viewer-frame').sandbox, policy);
+  assert.equal(element('viewer-frame').src, 'http://localhost:3001/proxy-host.html#https%3A%2F%2Fnext.example%2F');
+});
+
+test('stale asynchronous warm reuse cannot replace a newer local app or its retry target', async () => {
+  const { page, element } = createPage();
+  const result = deferred();
+  let attempts = 0;
+  page.MonkehTools = {
+    prepareNavigation() {}, expectDocument() {},
+    navigateRemote() { attempts++; return result.promise; },
+  };
+  await page.openViewer('First', '', 'https://first.example/', true);
+  const stale = page.openViewer('Old destination', '', 'https://old.example/', true);
+  await nextTurn();
+  assert.equal(attempts, 1);
+  await page.openViewer('Auk', '', '/apps/auk.html');
+  result.resolve(false);
+  await stale;
+  assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/auk.html');
+  assert.equal(element('viewer-frame').srcdoc, '');
+  assert.equal(element('viewer-title').textContent, 'Auk');
+  await page.retryViewerNavigation();
+  assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/auk.html');
+  assert.equal(attempts, 1);
+});
+
+test('an unavailable warm bridge falls back to a fresh isolated host', async () => {
+  const { page, element } = createPage();
+  let prepared = 0, attempts = 0;
+  page.MonkehTools = {
+    prepareNavigation() { prepared++; }, expectDocument() {},
+    async navigateRemote() { attempts++; return false; },
+  };
+  await page.openViewer('First', '', 'https://first.example/', true);
+  await page.openViewer('Next', '', 'https://next.example/', true);
+  assert.equal(attempts, 1);
+  assert.equal(prepared, 2);
+  assert.equal(element('viewer-frame').src, 'http://localhost:3001/proxy-host.html#https%3A%2F%2Fnext.example%2F');
 });
 
 test('shell refuses a proxy configured on its own origin', async () => {
