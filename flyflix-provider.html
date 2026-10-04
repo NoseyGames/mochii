@@ -13,8 +13,8 @@
   <p id="provider-error" hidden></p>
   <script src="/browser-tools/config.js"></script>
   <script>
-    // Serve this file only on the proxy origin. The wrapper grants this origin
-    // storage and routing, while the browser denies access to the shell origin.
+                                                                               
+                                                                                
     const generation = Number(new URL(location.href).searchParams.get('run'));
     let shellOrigins = [];
     function report(type) {
@@ -35,8 +35,8 @@
         shellOrigins = config.shellOrigins.slice(0, 20).filter(value => {
           try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && url.origin === value; } catch { return false; }
         });
-        // The provider uses BrowserRouter and expects its home view at '/'.
-        // Its entry document remains /flyflix-provider.html for wrapper reloads.
+                                                                            
+                                                                                 
         history.replaceState(null, '', '/');
         addEventListener('error', () => report('provider-error'));
         addEventListener('unhandledrejection', () => report('provider-error'));

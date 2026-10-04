@@ -1,4 +1,4 @@
-# One static shell mirror. This creates no Node service, database or paid disk.
+                                                                               
 services:
   - type: web
     name: monkeh-shell

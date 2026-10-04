@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="dark">
+  <title>Mochii Cloud · Monkeh</title>
+  <script src="/browser-tools/config.js"></script>
+  <script src="/browser-tools/shell-entry.js"></script>
+  <link rel="stylesheet" href="/apps/mochii-cloud.css">
+  <script type="module" src="/apps/mochii-cloud.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <canvas id="particles" aria-hidden="true"></canvas>
+  <header class="masthead">
+    <a class="brand" href="/apps/mochii-cloud.html" aria-label="Mochii Cloud home"><span class="brand-mark" aria-hidden="true">m</span><span>mochii<span class="brand-cloud"> / cloud</span></span></a>
+    <nav aria-label="Mochii Cloud"><button type="button" data-view="discover" aria-current="page">Discover</button><button type="button" data-view="library">Library</button><button type="button" data-view="saved">Saved</button><button type="button" data-view="guide">Setup</button><button type="button" data-view="settings">Settings</button></nav>
+    <a class="back-link" href="/math" target="_top">Back to Monkeh <span aria-hidden="true">↗</span></a>
+  </header>
+  <main id="main" tabindex="-1">
+    <section id="view-discover" class="view" aria-labelledby="discover-title">
+      <div class="page-intro"><div><p class="eyebrow">YOUR NEXT SESSION</p><h1 id="discover-title">Good games. One place.</h1></div><p class="quiet" id="catalog-count">Browse the collection.</p></div>
+      <article class="hero" id="hero"><img id="hero-image" alt="" fetchpriority="high" referrerpolicy="no-referrer"><div class="hero-shade"></div><div class="hero-copy"><p class="eyebrow" id="hero-label">THE SPOTLIGHT</p><h2 id="hero-title">Find your next world.</h2><p id="hero-description"></p><button type="button" class="button primary" id="hero-open">Explore game <span aria-hidden="true">↗</span></button></div><div class="hero-index"><span id="hero-number">01 / 04</span><button type="button" id="hero-prev" aria-label="Previous featured game">←</button><button type="button" id="hero-next" aria-label="Next featured game">→</button></div></article>
+      <div id="discovery-sections"></div>
+      <div class="collection-footer"><p>Your library, without the clutter.</p><button type="button" class="button" data-go="library">Browse every game <span aria-hidden="true">→</span></button></div>
+    </section>
+    <section id="view-library" class="view" aria-labelledby="library-title" hidden>
+      <div class="page-intro"><div><p class="eyebrow">THE COLLECTION</p><h1 id="library-title">Find your kind of game.</h1></div><span class="quiet" id="result-count" aria-live="polite"></span></div>
+      <div class="filters"><label class="search-label"><span aria-hidden="true">⌕</span><input type="search" id="library-search" placeholder="Search games, genres, or developers" aria-label="Search games, genres, or developers" maxlength="160" autocomplete="off"></label><label class="select-label"><span>Genre</span><select id="genre-filter"><option value="">All genres</option></select></label><label class="select-label"><span>Sort</span><select id="sort-filter"><option value="catalog">Featured</option><option value="title">A–Z</option><option value="recent">Recently opened</option><option value="time">Session time</option></select></label></div>
+      <div class="game-grid" id="library-grid"></div><p id="library-empty" class="empty" hidden>No games match this search. Try another name or genre.</p>
+    </section>
+    <section id="view-saved" class="view" aria-labelledby="saved-title" hidden><div class="page-intro"><div><p class="eyebrow">ON YOUR LIST</p><h1 id="saved-title">Keep the good ones close.</h1></div><span class="quiet">Saved on this device</span></div><div class="game-grid" id="saved-grid"></div><p class="empty" id="saved-empty">Your list starts here. Open a game and choose Save game.</p></section>
+    <section id="view-guide" class="view narrow" aria-labelledby="guide-title" hidden>
+      <div class="page-intro"><div><p class="eyebrow">GETTING STARTED</p><h1 id="guide-title">Ready when you are.</h1></div></div>
+      <p class="lead">Mochii brings the collection together. Games run with their original providers, who manage sign-in, availability, queues, and any charges.</p>
+      <div class="guide-step"><span class="step-number">01</span><div><h2>Set up your provider account</h2><p>Most games open with Raccoon. Sign in on its official site, then return here. Use an email address you can access again if you need to recover the account.</p><a class="button primary" href="https://www.raccoongame.com/login?lang=en" target="_blank" rel="noopener noreferrer">Open Raccoon sign-in ↗</a><details><summary>Other email options</summary><p><a href="https://tempmail.ing/" target="_blank" rel="noopener noreferrer">Open temporary email ↗</a>. Temporary addresses may expire and can make account recovery impossible. Provider rules still apply.</p></details></div></div>
+      <div class="guide-step"><span class="step-number">02</span><div><h2>Come back and choose a game</h2><p>You can launch in this page or a separate tab. A separate tab is usually best when the provider needs cookies, sign-in, or features unavailable in an embedded player.</p><label class="check-label"><input type="checkbox" id="setup-confirmed"> I have finished the provider setup</label><p class="quiet" id="setup-status">This is a reminder only. Mochii cannot check your provider login.</p></div></div>
+      <div class="guide-step"><span class="step-number">03</span><div><h2>Make yourself at home</h2><p>Use Fullscreen or Capture pointer in the player when you need them. Press Esc to release the pointer or leave fullscreen. Controllers can move through this library with the D-pad or left stick; A selects and B goes back.</p><a class="button" href="https://raw.githubusercontent.com/codiesnutkiss-sudo/Cine-Cloud-SRC/main/src/Tutorial.mp4" target="_blank" rel="noopener noreferrer">Watch the original setup video ↗</a></div></div>
+    </section>
+    <section id="view-settings" class="view narrow" aria-labelledby="settings-title" hidden>
+      <div class="page-intro"><div><p class="eyebrow">MAKE IT YOURS</p><h1 id="settings-title">A little personal space.</h1></div></div>
+      <div class="settings-row"><div><h2>Appearance</h2><p>Neutral by default, with a little color if you want it.</p></div><label class="select-label"><span class="sr-only">Theme</span><select id="theme-select"></select></label></div>
+      <div class="settings-row"><div><h2>Background particles</h2><p>Off by default. Paused during play, in hidden tabs, and when reduced motion is enabled.</p></div><label class="select-label"><span class="sr-only">Background particles</span><select id="particle-select"></select></label></div>
+      <div class="settings-row"><div><h2>Library music</h2><p>Choose an audio file from your device. It stays on your device and pauses while you play.</p></div><div class="music-controls"><label class="button file-button">Choose audio<input id="music-file" type="file" accept="audio/*"></label><button type="button" class="button" id="music-toggle" disabled>Play music</button><button type="button" class="text-button" id="music-clear" disabled>Remove</button></div></div><p class="quiet" id="music-name">No audio selected.</p>
+      <div class="settings-row"><div><h2>Controller navigation</h2><p>Use a connected controller to browse. Game controls belong to the provider.</p></div><label class="check-label"><input id="controller-toggle" type="checkbox" checked> Enabled</label></div>
+      <div class="settings-row"><div><h2>Local activity</h2><p>Saved games, session estimates, and preferences live only in this browser. Session time measures an open session, not verified gameplay.</p></div><button type="button" class="button" id="clear-data">Clear local data</button></div>
+      <p class="quiet" id="storage-status" role="status"></p>
+    </section>
+  </main>
+  <footer class="site-footer"><span>mochii cloud</span><span>Pick something worth playing.</span><a href="https://github.com/codiesnutkiss-sudo/Cine-Cloud-SRC" target="_blank" rel="noopener noreferrer">Based on Cine-Cloud ↗</a></footer>
+  <aside id="session-bar" class="session-bar" aria-label="Current session" hidden><div><span class="eyebrow">SESSION OPEN</span><strong id="session-name"></strong><span id="session-time">0m</span></div><div><button type="button" class="button" id="session-return">Return to player</button><button type="button" class="text-button" id="session-end">End tracking</button></div></aside>
+  <dialog id="details-dialog" aria-labelledby="detail-title"><div class="dialog-top"><span class="eyebrow">GAME DETAILS</span><button type="button" class="icon-button" id="detail-close" aria-label="Close game details">×</button></div><div class="detail-layout"><div class="detail-poster"><img id="detail-image" alt="" referrerpolicy="no-referrer"><div class="detail-actions"><button type="button" class="button primary" id="launch-tab">Play in new tab ↗</button><button type="button" class="button" id="launch-embed">Play here</button><button type="button" class="button" id="save-game" aria-pressed="false">Save game</button></div></div><div class="detail-copy"><p class="eyebrow" id="detail-developer"></p><h2 id="detail-title"></h2><div class="tags" id="detail-tags"></div><p class="detail-description" id="detail-description"></p><dl class="stats"><div><dt>Session time</dt><dd id="detail-time"></dd></div><div><dt>Last opened</dt><dd id="detail-last"></dd></div><div><dt>Catalog achievements</dt><dd id="detail-achievements"></dd></div></dl><p class="quiet" id="detail-provider"></p><details class="spec-details"><summary>PC requirements from the source catalog</summary><p class="quiet">These describe the original PC release; they are not your browser's requirements.</p><div id="detail-specs" class="spec-grid"></div></details><details class="share-details"><summary>Share &amp; embed</summary><p><a id="detail-link">Open game link ↗</a></p><button type="button" class="button" id="copy-link">Copy game link</button><label for="embed-code">Readable embed code</label><textarea id="embed-code" rows="5" readonly spellcheck="false"></textarea><button type="button" class="button" id="copy-embed">Copy embed code</button></details></div></div></dialog>
+  <dialog id="player-dialog" aria-labelledby="player-title"><div class="player-toolbar"><strong id="player-title"></strong><div><button type="button" class="button" id="player-newtab">Open in new tab ↗</button><button type="button" class="button" id="player-fullscreen">Fullscreen</button><button type="button" class="button" id="player-pointer">Capture pointer</button><button type="button" class="icon-button" id="player-close" aria-label="Close player">×</button></div></div><p class="player-hint" id="player-hint">The provider controls loading and sign-in. If this stays blank, open it in a new tab. Esc releases the pointer.</p><div id="player-container"></div></dialog>
+  <dialog id="clear-dialog" aria-labelledby="clear-title"><h2 id="clear-title">Clear your local activity?</h2><p>This removes Mochii saved games, session times, and preferences from this browser. Provider accounts and game saves are separate.</p><div class="confirm-actions"><button type="button" class="button" id="clear-cancel">Keep my data</button><button type="button" class="button primary" id="clear-confirm">Clear local data</button></div></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <noscript><p class="empty">Enable JavaScript to browse Mochii Cloud. You can also <a href="https://www.raccoongame.com/" rel="noopener noreferrer">visit the game provider directly</a>.</p></noscript>
+</body>
+</html>

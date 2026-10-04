@@ -382,8 +382,8 @@ test('ordinary pages with similarly named elements do not trigger the proxy erro
 test('explicit error recovery excludes the failed server and opens only the entered address as a new GET', async () => {
   const app = await harness();
   makeErrorPage(app, tlsFailure + '<img src=x onerror=attack()>' + 'x'.repeat(7000));
-  // This could be a form submission or in-page redirect. Recovery must not
-  // reload it or adopt the URL embedded in the untrusted error document.
+                                                                           
+                                                                         
   app.pageWindow.location.href = proxyOrigin + '/service/' + encodeURIComponent('https://example.com/payment-submit');
   app.loadPage();
   assert.equal(app.get('status-trace').textContent.length, 6000);

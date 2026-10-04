@@ -37,8 +37,8 @@ export async function admitConnection(request, env) {
 }
 
 export async function resolvePublicAddress(hostname, signal, fetcher = fetch) {
-  // One fixed HTTPS resolver request per stream; the validated answer, never
-  // the unchecked hostname, is passed to TCP connect to prevent rebinding.
+                                                                             
+                                                                           
   const response = await fetcher(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`, {
     headers: { Accept: 'application/dns-json' }, redirect: 'manual', signal,
   });

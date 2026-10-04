@@ -17,7 +17,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-// The harness models browser boundaries; the actual page scripts run unchanged.
+                                                                                
 function createPage({ protocol = 'http:', storageUnavailable = false } = {}) {
   const elements = new Map();
   const serviceWorkerListeners = new Map();
@@ -289,7 +289,7 @@ test('closing and reopening the viewer prevents an old remote load from replacin
   let signal;
   page.fetch = (_url, options) => {
     signal = options.signal;
-    // Deliberately finish even after abort to exercise the stale-result guard.
+                                                                               
     return pendingResponse.promise;
   };
   const oldNavigation = page.openViewer('Old game', '', 'https://example.com/old.html');
@@ -379,6 +379,19 @@ test('viewer rejects untrusted local navigation and credential-bearing URLs', as
   assert.match(element('viewer-frame').srcdoc, /login details/);
   await page.openViewer('Invalid', '', 'http://localhost:3000/math.html', true);
   assert.match(element('viewer-frame').srcdoc, /App pages cannot be opened/);
+});
+
+test('Mochii Cloud is available offline from the app catalog and opens as a local app', async () => {
+  const { page, element } = createPage({ storageUnavailable: true });
+  const remoteCatalog = deferred();
+  page.fetch = () => remoteCatalog.promise;
+  page.openAppsPopover();
+  assert.ok(page.rawApps.some(app => app.name === 'Mochii Cloud' && app.url === '/apps/mochii-cloud.html'));
+  await page.openViewer('Mochii Cloud', '', '/apps/mochii-cloud.html');
+  assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/mochii-cloud.html');
+  assert.equal(element('viewer-frame').sandbox, '');
+  remoteCatalog.resolve({ ok: true, text: async () => '[]' });
+  await nextTurn();
 });
 
 test('external catalog HTML runs in an opaque sandbox and a local app clears that sandbox', async () => {

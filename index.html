@@ -337,7 +337,7 @@
   <script>
     const historyBtn = document.getElementById('history-btn');
 
-    // This is a cosmetic navigation gate, not authentication.
+                                                              
     historyBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       try {
@@ -348,7 +348,7 @@
       }
     });
 
-    // Redirect anywhere else clicked to Google Classroom
+                                                         
     document.addEventListener('click', () => {
       window.location.href = 'https://classroom.google.com';
     });

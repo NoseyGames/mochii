@@ -2,8 +2,8 @@ import { createProxyNetwork } from './proxy-network.js';
 import { attachRuntime, formatValue } from './runtime.js';
 import './config.js';
 
-// This entire document is on the expendable proxy origin. It never receives
-// shell storage, credentials, or saved scripts unless the user runs a draft.
+                                                                            
+                                                                             
 const frame = document.getElementById('page');
 const status = document.getElementById('status');
 const retry = document.getElementById('retry');
@@ -38,7 +38,7 @@ function httpUrl(value) {
 }
 
 function send(event, data) {
-  try { port?.postMessage({ event, data }); } catch { /* A closing shell has no receiver. */ }
+  try { port?.postMessage({ event, data }); } catch {                                        }
 }
 
 function clearDiagnostic() {
@@ -71,8 +71,8 @@ function pageDiagnostic(doc) {
   if (title?.textContent?.trim() !== 'Error processing your request' || trace?.localName !== 'textarea') return null;
   const details = String(trace.value || trace.textContent || '').slice(0, 6000);
   if (!details) return null;
-  // These familiar UV DOM markers are only an untrusted diagnostic hint.
-  // They must never cause network changes or replay a request automatically.
+                                                                         
+                                                                             
   return { document: doc, details, tls: /tls|ssl|certificate|handshake/i.test(details),
     endpoint: network?.activeEndpoint || latestNetwork?.activeEndpoint || null,
     address: lastGetAddress };
@@ -108,8 +108,8 @@ function switchServer(retryFailure = null) {
       if (!isCurrent()) return false;
       if (retryFailure) {
         if (pageFailure !== retryFailure || !retryFailure.address) return false;
-        // Assigning a validated host-entered address makes a fresh GET. Never
-        // call location.reload(), use a form action, or trust error-page URLs.
+                                                                              
+                                                                               
         return await navigate(retryFailure.address);
       }
       showProgress('The server changed. New requests use the new connection. Open an address when you want to try the page again.');
@@ -160,8 +160,8 @@ function treeSnapshot(focus = null) {
     }
     return included.get(node);
   }
-  // Reserve the picked node's ancestor chain before filling the bounded tree.
-  // A node beyond the first 800 elements must still be revealed accurately.
+                                                                              
+                                                                            
   for (const node of path.length ? path : [root]) include(node);
   while (queue.length) {
     const node = queue.shift();
@@ -170,8 +170,8 @@ function treeSnapshot(focus = null) {
     const record = included.get(node);
     let children = runtime.getChildren(node).slice(0, 250);
     const priority = pathChildren.get(node);
-    // getChildren returns the first siblings in document order. Reserve an
-    // omitted picked-path child at the end; never move it before real siblings.
+                                                                           
+                                                                                
     if (priority && !children.includes(priority)) children = [...children.slice(0, 249), priority];
     for (const child of children) {
       if (!included.has(child) && records.length >= 800) continue;
@@ -241,8 +241,8 @@ async function command(method, params) {
       const target = httpUrl(params.url);
       if (!config || config.shellOrigins.includes(new URL(target).origin) || new URL(target).origin === location.origin) throw new Error('App pages cannot be opened as proxy destinations.');
       await navigate(target);
-      // A failed connection is handled in this host's retry notice. Preserve
-      // its current page instead of asking the shell to destroy it and retry.
+                                                                             
+                                                                              
       return !disposed;
     }
     case 'reconnect': await network?.connect({ force: true }); return null;
@@ -322,8 +322,8 @@ function connectDocument() {
     });
     pageFailure = pageDiagnostic(doc);
     const isError = Boolean(pageFailure);
-    // Build the bounded DOM snapshot only when Inspect requests it. Large
-    // pages become usable without waiting for an inspector traversal.
+                                                                          
+                                                                      
     latestPage = { url: decodedPageUrl(), title: String(doc.title).slice(0, 300), isError };
     status.hidden = true;
     send('page', latestPage);
@@ -332,8 +332,8 @@ function connectDocument() {
   } catch (error) {
     runtime?.dispose(); runtime = null;
     send('pagehide', {});
-    // A site may navigate directly to a different origin; the page can remain
-    // visible, but it cannot expose tools through this origin's bridge.
+                                                                              
+                                                                        
     if (doc) showError(error);
     return false;
   }
@@ -354,9 +354,9 @@ function watchDocument(previousDocument) {
         doc.addEventListener('DOMContentLoaded', readyListener, { once: true });
         return;
       }
-    } catch { /* Direct cross-origin navigation stays visible without tools. */ }
-    // Expiry never stops or replaces a slow page. Native load remains the
-    // fallback if its document does not become accessible during this watch.
+    } catch {                                                                   }
+                                                                          
+                                                                             
     if (++attempts <= 120) documentWatchTimer = setTimeout(check, attempts < 20 ? 100 : 500);
   }
   documentWatchTimer = setTimeout(check, 100);
@@ -364,7 +364,7 @@ function watchDocument(previousDocument) {
 
 frame.addEventListener('load', () => {
   if (disposed) return;
-  try { if (frame.contentWindow.location.href === 'about:blank') return; } catch { /* Cross-origin pages remain visible without tools. */ }
+  try { if (frame.contentWindow.location.href === 'about:blank') return; } catch {                                                        }
   stopDocumentWatch();
   if (!connectDocument() && !frame.contentDocument) status.hidden = true;
 });
@@ -399,7 +399,7 @@ async function start() {
       if (!Array.isArray(loadedConfig.shellOrigins) || loadedConfig.proxyOrigin !== location.origin ||
           !Array.isArray(loadedConfig.wispEndpoints) || loadedConfig.wispEndpoints.length < 1 || loadedConfig.wispEndpoints.length > 32) throw new Error('The isolated proxy origin is misconfigured.');
       config = loadedConfig;
-      // Ask the shell to retry its init message now that allowed origins loaded.
+                                                                                 
       for (const origin of config.shellOrigins) window.parent.postMessage({ type: 'monkeh-proxy:ready' }, origin);
     }
     if (disposed) throw new Error('This browser view was closed.');
@@ -414,14 +414,14 @@ async function start() {
       transport = new BareMux.BareMuxConnection('/bearmux/worker.js');
       const fallbackEndpoints = endpoints.filter((_, index) => config.wispEndpoints[index].fallback === true);
       network = createProxyNetwork({ endpoints, fallbackEndpoints,
-        // Preserve the actual promise: a timeout wrapper cannot cancel the
-        // SharedWorker mutation and could let a stale activation win later.
+                                                                           
+                                                                            
         activate: url => transport.setTransport('/bearmux/epoxy/index.mjs', [{ wisp: url }]),
         onStatus: state => { latestNetwork = state; send('network', state); }
       });
       if (navigator.onLine === false) await network.setOnline(false);
     }
-    // Start independent setup together; navigation still waits for both.
+                                                                         
     await Promise.all([controlledWorker(), network.connect()]);
   })().finally(() => { starting = null; });
   return starting;
@@ -448,8 +448,8 @@ async function navigate(url = null) {
   } catch (error) {
     if (!disposed && generation === navigationGeneration) {
       showError(error);
-      // The shell paused its controls when requesting navigation. Restore
-      // the still-visible document's metadata when preparation fails.
+                                                                          
+                                                                      
       if (runtime && latestPage) send('page', latestPage);
     }
     return false;

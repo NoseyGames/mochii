@@ -218,9 +218,9 @@ test('Wisp rejects direct IP streams, including IPv6 forms that can hide private
       try {
         await once(socket, 'message', { signal: AbortSignal.timeout(5000) });
         const header = Buffer.alloc(8);
-        header[0] = 0x01; // CONNECT
-        header.writeUInt32LE(1, 1); // Stream ID
-        header[5] = 0x01; // TCP
+        header[0] = 0x01;           
+        header.writeUInt32LE(1, 1);             
+        header[5] = 0x01;       
         header.writeUInt16LE(80, 6);
         const closed = once(socket, 'message', { signal: AbortSignal.timeout(5000) });
         socket.send(Buffer.concat([header, Buffer.from(hostname)]));

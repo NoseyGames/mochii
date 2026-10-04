@@ -28,7 +28,7 @@ function checkJavaScript(source, label, module = false) {
       if (result.error) throw result.error;
       if (result.status !== 0) throw new Error(result.stderr.trim());
     } else {
-      // Compile only. Browser globals and vendored bundles must never execute here.
+                                                                                    
       new Script(source, { filename: label });
     }
   } catch (error) {
@@ -48,8 +48,8 @@ function decodeAttribute(value) {
 
 function checkHtml(html, label) {
   const classicScripts = [];
-  // Consume whole tags (including quoted > characters), then skip raw script/style
-  // contents. Looking for handlers across the whole file would misparse JS strings.
+                                                                                   
+                                                                                    
   const tags = /<!--[\s\S]*?-->|<![^>]*>|<\/?([a-z][\w:-]*)\b((?:"[^"]*"|'[^']*'|[^'">])*)>/gi;
   let tag;
   while ((tag = tags.exec(html))) {
@@ -82,7 +82,7 @@ function checkHtml(html, label) {
     }
     tags.lastIndex = end ? close.lastIndex : html.length;
   }
-  // Classic scripts share a global scope: separate parsing misses duplicate classes.
+                                                                                     
   if (classicScripts.length > 1) checkJavaScript(classicScripts.join('\n;\n'), `${label} shared script scope`);
 }
 

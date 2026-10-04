@@ -1,5 +1,5 @@
-// Shared by static pages, modules and the service worker. Edit this list when
-// moving the site or adding an operator-approved public Wisp server.
+                                                                              
+                                                                     
 (() => {
   const productionShellOrigins = Object.freeze([
     'https://testingproductionubgdontgo.pages.dev',
@@ -11,9 +11,9 @@
     shellOrigins: productionShellOrigins,
     proxyOrigin: 'https://monkeh.1234-imwatchingyouopenthedoor.workers.dev',
     wispEndpoints: Object.freeze([
-      // Supplied by the site owner with production-use permission. Preserve
-      // exact paths: a WebSocket URL need not end in a slash. The client races
-      // valid Wisp greetings, so unavailable or unrelated relays are skipped.
+                                                                            
+                                                                               
+                                                                              
       Object.freeze({ name: 'Mercury', url: 'wss://wisp.mercurywork.shop/' }),
       Object.freeze({ name: 'GL Series', url: 'wss://glseries.net/wisp/' }),
       Object.freeze({ name: 'Wispserver.dev', url: 'wss://wispserver.dev/wisp' }),
@@ -42,7 +42,7 @@
       Object.freeze({ name: 'Nostr', url: 'wss://nostr.me/relay' }),
       Object.freeze({ name: 'Crostr', url: 'wss://relay.crostr.com/' }),
       Object.freeze({ name: 'Solife', url: 'wss://wisp.solife.me/' }),
-      // Keep the original working path too; it is an alias, not another server.
+                                                                                
       Object.freeze({ name: 'Anura', url: 'wss://anura.pro/wisp/' }),
       Object.freeze({ name: 'Monkeh backup (limited)', url: 'wss://monkeh.1234-imwatchingyouopenthedoor.workers.dev/wisp/', fallback: true }),
     ]),
@@ -52,7 +52,7 @@
   function staticConfig(origin = globalThis.location?.origin) {
     let shellOrigins = deployment.shellOrigins;
     let proxyOrigin = deployment.proxyOrigin;
-    // Two plain static servers suffice for local development; no API is used.
+                                                                              
     if (['http://localhost:4173', 'http://localhost:4174'].includes(origin)) {
       shellOrigins = Object.freeze(['http://localhost:4173']);
       proxyOrigin = 'http://localhost:4174';
@@ -78,7 +78,7 @@
       if (config.shellOrigins.includes(location.origin)) return false;
       shellOrigin = config.shellOrigins[0];
     } catch {
-      // Preview copies link to the canonical shell; they do not gain bridge access.
+                                                                                    
       if (location.hostname?.endsWith('.testingproductionubgdontgo.pages.dev')) shellOrigin = deployment.shellOrigin;
       else return false;
     }
@@ -90,7 +90,7 @@
   const routingError = 'The proxy backend is not connected: /api/config returned a web page instead of JSON. The site owner must route /api/config to the running Monkeh backend; static hosting alone cannot run the proxy.';
 
   async function cancelBody(response) {
-    try { await response.body?.cancel(); } catch { /* Preserve the useful error. */ }
+    try { await response.body?.cancel(); } catch {                                  }
   }
 
   async function readText(response) {
@@ -117,7 +117,7 @@
       }
       return text + decoder.decode();
     } catch (error) {
-      try { await reader.cancel(); } catch { /* Preserve the original error. */ }
+      try { await reader.cancel(); } catch {                                    }
       throw error;
     } finally { reader.releaseLock(); }
   }

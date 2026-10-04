@@ -248,7 +248,7 @@ test('closing a stream or connection during DNS cannot reopen a TCP socket', asy
       ws.close();
       await closed;
     } else {
-      // A following blocked stream gives an observable barrier after CLOSE.
+                                                                            
       ws.send(closePacket(1));
       const barrier = once(ws, 'message');
       ws.send(connectPacket(2, '127.0.0.1'));

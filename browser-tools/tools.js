@@ -7,7 +7,7 @@ const frame = $('viewer-frame');
 const panel = $('browser-tools');
 const toggle = $('browser-tools-toggle');
 let storage;
-try { storage = window.localStorage; } catch { /* The editor still works in memory. */ }
+try { storage = window.localStorage; } catch {                                         }
 const store = createUserscriptStore(storage);
 let runtime = null;
 let serverSwitchPending = false;
@@ -115,9 +115,9 @@ function addEntry(level, args, time = Date.now()) {
   const text = args.map(value => formatValue(value)).join(' ').slice(0, 12000);
   entries.push({ level, text, time });
   if (entries.length > 500) entries.shift();
-  // Capture stays bounded while hidden, without doing layout or building rows.
+                                                                               
   if (panel.hidden || activeTab !== 'console') return;
-  // Busy pages can log hundreds of messages in a single frame.
+                                                               
   if (!window.requestAnimationFrame) { renderConsole(); return; }
   if (!consoleRenderPending) {
     consoleRenderPending = true;
@@ -166,7 +166,7 @@ function renderConsole() {
 function resetConsoleEntries() {
   entries = [];
   consoleRows.clear();
-  // Privacy clears must remove rendered text even while the dock is hidden.
+                                                                            
   $('console-output').replaceChildren();
   renderConsole();
 }
@@ -367,8 +367,8 @@ async function connectFrame(force = false) {
         $('inspector-tree').replaceChildren(element('div', 'bt-empty-state', 'Open Inspect to load this page’s elements.'));
         renderActiveTab();
         addEntry('info', ['Page connected. Console capture starts here.']);
-        // The host shares the untrusted page's origin, so even its URL metadata
-        // cannot authorize disclosure of saved scripts to that page.
+                                                                                
+                                                                     
         if (store.list().some(script => script.enabled)) {
           addEntry('warn', ['Automatic userscripts are paused for isolated pages. Review the page and use Run to send a script manually.']);
         }
@@ -439,7 +439,7 @@ function editScript(script = null) {
   selectedScriptId = script?.id || null;
   $('userscript-name').value = script?.name || 'My page script';
   let match = 'https://example.com/*';
-  try { if (currentUrl) match = new URL(currentUrl).origin + '/*'; } catch { /* Keep example. */ }
+  try { if (currentUrl) match = new URL(currentUrl).origin + '/*'; } catch {                     }
   $('userscript-match').value = script?.match || match;
   $('userscript-code').value = script?.code ?? '// Runs in the viewed page. Save to keep this script.\nconsole.log("Hello from my userscript", document.title);\n';
   $('userscript-enabled').checked = script?.enabled || false;
@@ -467,7 +467,7 @@ async function runScript(script, target = runtime, automatic = false) {
   if (!automatic) scriptStatus(`Running ${label}…`);
   try {
     if (!script.code.trim()) throw new Error('Write some JavaScript first.');
-    // A function scope lets saved scripts declare const/let safely on each run.
+                                                                                
     const result = await target.evaluate(`(async function() {\n${script.code}\n}).call(window)\n//# sourceURL=monkeh-userscript-${(script.id || 'draft').replace(/[^\w-]/g, '')}.js`);
     if (session !== generation) return;
     addEntry('info', [`${automatic ? 'Auto-ran' : 'Ran'} userscript: ${label}`, ...(result === undefined ? [] : [result])]);
@@ -630,8 +630,8 @@ $('browser-reload').addEventListener('click', async () => {
     const changedPermissions = runtime?.isRemote && typeof expectedSandbox === 'string' && frame.getAttribute('sandbox') !== expectedSandbox;
     if (changedPermissions) await window.retryViewerNavigation?.();
     else if (runtime) await runtime.reload();
-    // srcdoc overrides src for catalog games and error placeholders. Let the
-    // shell retry its original navigation instead of reassigning an inert src.
+                                                                             
+                                                                               
     else await window.retryViewerNavigation?.();
   } catch (error) { addEntry('warn', [error.message]); }
 });
@@ -757,7 +757,7 @@ window.MonkehTools = {
   closeViewer() {
     expectingDocument = false; disconnect(); showPanel(false);
     let clearOnClose = true;
-    try { clearOnClose = window.MonkehPrivacy?.get?.().clearConsoleOnClose !== false; } catch { /* Keep the privacy default. */ }
+    try { clearOnClose = window.MonkehPrivacy?.get?.().clearConsoleOnClose !== false; } catch {                                 }
     if (clearOnClose) clearConsole();
     $('hero-search').focus();
   },

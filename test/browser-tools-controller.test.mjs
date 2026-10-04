@@ -8,8 +8,8 @@ import { formatValue } from '../browser-tools/runtime.js';
 const source = (await readFile(new URL('../browser-tools/tools.js', import.meta.url), 'utf8')).replace(/^import .+;\r?\n/gm, '');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-// Minimal host only: controller behavior is real, while runtime and browser DOM
-// operations are substituted. Runtime evaluation/cleanup have separate tests.
+                                                                                
+                                                                              
 function harness(saved = []) {
   const allNodes = [];
   function node() {

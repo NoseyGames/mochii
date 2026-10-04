@@ -795,8 +795,8 @@
             if (gameObjectUrls.delete(url)) URL.revokeObjectURL(url);
         }
 
-        // Count streamed bytes as well as Content-Length; compressed responses and
-        // chunked transfers must not bypass the download limit.
+                                                                                   
+                                                                
         async function readGameBytes(url, limit = MAX_GAME_BYTES) {
             if (!gameObjectUrls.has(url)) remoteGameUrl(url);
             const controller = new AbortController();
@@ -857,7 +857,7 @@
         }
 
         class GameLoaders {
-            // Flash SWF Loader using Ruffle
+                                            
             static async loadFlash(game, container) {
                 const bytes = await readGameBytes(game.url);
                 const iframe = document.createElement('iframe');
@@ -884,8 +884,8 @@
                         iframe.contentWindow.postMessage({ type: 'load-flash', token, bytes: bytes.buffer }, '*', [bytes.buffer]);
                     }, { once: true });
                 });
-                // Ruffle's networking option alone is insufficient: restrict network
-                // requests with CSP and run both the emulator and movie in an opaque frame.
+                                                                                     
+                                                                                            
                 iframe.srcdoc = `<!doctype html><html><head><meta charset="utf-8">
                     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com/@ruffle-rs/ruffle@0.6.0/; style-src 'unsafe-inline'; connect-src https://unpkg.com/@ruffle-rs/ruffle@0.6.0/; img-src data: blob:; media-src data: blob:; worker-src blob:">
                     <style>html,body,ruffle-player{margin:0;width:100%;height:100%;display:block;background:#000}</style>
@@ -911,7 +911,7 @@
                 }
             }
 
-            // HTML5 Game Loader
+                                
             static async loadHTML(game, container) {
                 const iframe = document.createElement('iframe');
                 iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-pointer-lock');
@@ -933,7 +933,7 @@
                 };
             }
 
-            // JavaScript Game Loader
+                                     
             static async loadJavaScript(game, container) {
                 try {
                     const jsCode = new TextDecoder().decode(await readGameBytes(game.url, 1024 * 1024));
@@ -942,7 +942,7 @@
                     iframe.referrerPolicy = 'no-referrer';
                     iframe.title = game.name || 'JavaScript game';
                     iframe.style.cssText = 'width:100%;height:100%;border:0;background:#000';
-                    // A separate document releases game timers and listeners when it is closed.
+                                                                                                
                     const encodedCode = JSON.stringify(jsCode).replace(/</g, '\\u003c');
                     iframe.srcdoc = '<!DOCTYPE html><html><body style="margin:0;background:#000">' +
                         '<canvas id="gameCanvas" width="800" height="600" style="width:100%;height:100%;object-fit:contain"></canvas>' +
@@ -955,7 +955,7 @@
                 }
             }
 
-            // ZIP Archive Loader (extracts and loads main file)
+                                                                
             static async loadZIP(game, container) {
                 try {
                     if (!window.JSZip) throw new Error('ZIP support could not load. Check your connection and try again.');
@@ -964,7 +964,7 @@
                     const zipContents = await zip.loadAsync(arrayBuffer);
                     if (Object.keys(zipContents.files).length > 256) throw new Error('ZIP archives may contain at most 256 entries');
                     
-                    // Look for main files in order of priority
+                                                               
                     const mainFiles = ['index.html', 'game.html', 'main.html', 'index.swf', 'game.swf'];
                     let mainFile = null;
                     
@@ -976,7 +976,7 @@
                     }
                     
                     if (!mainFile) {
-                        // If no main file found, use the first HTML or SWF file
+                                                                                
                         const htmlSwfFiles = Object.keys(zipContents.files).filter(name => 
                             name.endsWith('.html') || name.endsWith('.swf')
                         );
@@ -994,14 +994,14 @@
                     });
                     const fileUrl = createGameUrl(fileData);
                     
-                    // Create a temporary game object for the extracted file
+                                                                            
                     const extractedGame = {
                         ...game,
                         url: fileUrl,
                         type: mainFile.name.toLowerCase().endsWith('.swf') ? 'swf' : 'html'
                     };
                     
-                    // Load the extracted file using appropriate loader
+                                                                       
                     let result;
                     try {
                         result = extractedGame.type === 'swf'
@@ -1009,7 +1009,7 @@
                             : await this.loadHTML(extractedGame, container);
                     } catch (error) { revokeGameUrl(fileUrl); throw error; }
                     
-                    // Override cleanup to also revoke the blob URL
+                                                                   
                     const originalCleanup = result.cleanup;
                     result.cleanup = () => {
                         originalCleanup();
@@ -1022,7 +1022,7 @@
                 }
             }
 
-            // JSON Game Config Loader (for web games with metadata)
+                                                                    
             static async loadJSON(game, container) {
                 try {
                     const config = JSON.parse(new TextDecoder().decode(await readGameBytes(game.url, 256 * 1024)));
@@ -1031,7 +1031,7 @@
                         throw new Error('JSON config missing gameUrl field');
                     }
                     
-                    // Create game object from JSON config
+                                                          
                     const configuredUrl = remoteGameUrl(config.gameUrl, game.sourceUrl || game.url);
                     const configuredType = config.type || this.detectGameType(configuredUrl);
                     if (configuredType === 'json') throw new Error('Nested JSON game configs are not supported');
@@ -1043,14 +1043,14 @@
                         type: configuredType
                     };
                     
-                    // Load the configured game
+                                               
                     return await this.loadGame(configuredGame, container);
                 } catch (error) {
                     throw new Error(`JSON config loading failed: ${error.message}`);
                 }
             }
 
-            // Main game loader dispatcher
+                                          
             static async loadGame(game, container) {
                 switch (game.type) {
                     case 'swf':
@@ -1068,7 +1068,7 @@
                 }
             }
 
-            // Detect game type from file extension or URL
+                                                          
             static detectGameType(url) {
                 const extension = url.split(/[?#]/)[0].split('.').pop().toLowerCase();
                 switch (extension) {
@@ -1077,7 +1077,7 @@
                     case 'js': return 'js';
                     case 'zip': return 'zip';
                     case 'json': return 'json';
-                    default: return 'html'; // Default to HTML for unknown types
+                    default: return 'html';                                     
                 }
             }
         }
@@ -1257,8 +1257,8 @@
                 try {
                     const filename = parsedUrl.pathname.substring(parsedUrl.pathname.lastIndexOf('/') + 1);
                     const gameType = GameLoaders.detectGameType(url);
-                    // HTML navigates in its sandbox so relative resources retain their
-                    // origin. Other formats are bounded before entering the library.
+                                                                                       
+                                                                                     
                     const limit = gameType === 'json' ? 256 * 1024 : gameType === 'js' ? 1024 * 1024 : MAX_GAME_BYTES;
                     const bytes = gameType === 'html' ? null : await readGameBytes(url, limit);
                     if (!this.canAddGame(bytes?.byteLength || 0)) return;
@@ -1364,7 +1364,7 @@
                     const game = this.activeGames[index];
                     const wasActive = game.element.classList.contains('active');
                     
-                    // Call cleanup function if available
+                                                         
                     if (game.loader && game.loader.cleanup) {
                         game.loader.cleanup();
                     }
@@ -1403,7 +1403,7 @@
                 const confirmed = await this.showModal('clear library', 'are you sure you want to clear all games? this action cannot be undone.');
                 
                 if (confirmed) {
-                    // Clean up all active games
+                                                
                     this.activeGames.forEach(game => {
                         if (game.loader && game.loader.cleanup) {
                             game.loader.cleanup();

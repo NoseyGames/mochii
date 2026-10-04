@@ -5,20 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>mochii</title>
 
-  <!-- Google Fonts: Inter & Material Symbols Outlined -->
+                                                          
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
 
-  <!-- Local Proxy & BareMux Scripts -->
+                                        
 
   
-  <!-- Ultraviolet Proxy Scripts -->
+                                    
 
 
 
-  <!-- Stylesheet -->
+                     
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="/browser-tools/tools.css" />
   <style>
@@ -39,7 +39,7 @@
 
 
   <div class="app-viewport">
-    <!-- Top Floating Pill Navigation -->
+                                         
     <nav class="floating-nav">
       <button class="nav-icon" title="Games" onclick="openGamesPopover()">
         <span class="material-symbols-outlined">sports_esports</span>
@@ -52,7 +52,7 @@
       </button>
     </nav>
 
-    <!-- Main Hero Section -->
+                              
     <main class="main-container">
       <div class="hero-content">
         <h1 class="title">mochii</h1>
@@ -74,7 +74,7 @@
     </main>
   </div>
 
-  <!-- Games Modal Overlay -->
+                              
   <div class="overlay-backdrop" id="games-popover">
     <div class="modal-card">
       <div class="modal-header">
@@ -103,7 +103,7 @@
     </div>
   </div>
 
-  <!-- Apps Modal Overlay -->
+                             
   <div class="overlay-backdrop" id="apps-popover">
     <div class="modal-card">
       <div class="modal-header">
@@ -132,7 +132,7 @@
     </div>
   </div>
 
-  <!-- Settings Modal Overlay -->
+                                 
   <div class="overlay-backdrop" id="settings-modal">
     <div class="modal-card">
       <div class="modal-header">
@@ -163,7 +163,7 @@
     </div>
   </div>
 
-  <!-- Game / App Frame Viewer Overlay -->
+                                          
   <div class="viewer-overlay" id="zone-viewer">
     <div class="viewer-header">
       <div class="viewer-info">
@@ -283,11 +283,11 @@
 
   </div>
 
-  <!-- Script Implementation -->
+                                
   <script>
-    /* =========================================================
-       1. Isolated Proxy Configuration
-       ========================================================= */
+                                                                
+                                      
+                                                                   
 
     let networkPromise = null;
     let networkErrorMessage = '';
@@ -341,7 +341,7 @@
         const authLink = document.getElementById('proxy-auth-link');
         authLink.href = origin.origin + '/api/health';
         authLink.hidden = !config.requiresAuthentication;
-        // Retire only this app's old shell-origin worker after the migration.
+                                                                              
         if (navigator.serviceWorker?.getRegistrations) {
           const registrations = await navigator.serviceWorker.getRegistrations();
           for (const registration of registrations) {
@@ -385,9 +385,9 @@
         .replaceAll("'", "&#039;");
     }
 
-    /* =========================================================
-       4. Iframe Proxy Routing & UI Navigation
-       ========================================================= */
+                                                                
+                                              
+                                                                   
     function getSearchUrl(query) {
       const trimmed = query.trim();
       const hasProtocol = /^https?:\/\//i.test(trimmed);
@@ -398,7 +398,7 @@
           return url.href;
         }
       } catch (_) {
-        // A search phrase is not required to be a valid URL.
+                                                             
       }
       return window.MonkehPrivacy?.search(trimmed) || 'https://duckduckgo.com/?q=' + encodeURIComponent(trimmed);
     }
@@ -660,6 +660,7 @@
         };
 
         const defaultAppList = [
+          { name: 'Mochii Cloud', author: 'Cloud gaming library', url: '/apps/mochii-cloud.html', cover: '' },
           { name: 'Flyflix', author: 'Flyflix', url: '/flyflix.html', cover: '' },
           { name: 'Voxiles', author: 'bog', url: '/apps/vox.html', cover: '' },
           { name: 'Auk', author: '', url: '/apps/auk.html', cover: '' },
@@ -765,21 +766,21 @@
           window.MonkehTools?.prepareNavigation(url, true);
           window.MonkehTools?.expectDocument(target.href, true);
           frame.removeAttribute('srcdoc');
-          // The origin is different from the shell. Retain browser capabilities
-          // while preventing the remote page from navigating the outer app.
+                                                                                
+                                                                            
           frame.setAttribute('sandbox', window.MonkehPrivacy?.sandbox(true) || 'allow-scripts allow-same-origin allow-forms allow-pointer-lock');
           frame.src = window.MonkehProxyOrigin + '/proxy-host.html#' + encodeURIComponent(target.href);
         } else if (target.origin === window.location.origin) {
-          if (!['/apps/auk.html', '/apps/vox.html', '/apps/desktop.html', '/flyflix.html'].includes(target.pathname)) throw new Error('This local app is not in the trusted app list.');
-          // Native navigation preserves local apps' relative script and asset URLs.
+          if (!['/apps/auk.html', '/apps/vox.html', '/apps/desktop.html', '/apps/mochii-cloud.html', '/flyflix.html'].includes(target.pathname)) throw new Error('This local app is not in the trusted app list.');
+                                                                                    
           window.MonkehTools?.prepareNavigation(url, false);
           window.MonkehTools?.expectDocument(target.href, false);
           frame.removeAttribute('srcdoc');
           frame.removeAttribute('sandbox');
           frame.src = target.href;
         } else {
-          // Catalog CDNs may serve HTML as text/plain, so render it as a document.
-          // A base URL preserves relative assets and links from the source page.
+                                                                                   
+                                                                                 
           viewerRequest = new AbortController();
           const response = await fetch(target.href, { signal: AbortSignal.any([viewerRequest.signal, AbortSignal.timeout(20000)]) });
           if (!response.ok) throw new Error(`The page returned HTTP ${response.status}.`);
@@ -802,8 +803,8 @@
         if (navigation !== viewerNavigation || error.name === 'AbortError') return;
         const message = `Unable to load this page: ${error.message}`;
         if (viewerHasContent) {
-          // Keep the current document usable when a new fetch or connection
-          // fails. The user can retry without losing a partially loaded page.
+                                                                            
+                                                                              
           viewerIsProxied = previousIsProxied;
           showViewerProgress(message, true);
         } else {

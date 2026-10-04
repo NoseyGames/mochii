@@ -1,5 +1,5 @@
-// A WebSocket upgrade alone does not prove that an endpoint speaks Wisp.
-// Wire format: https://github.com/MercuryWorkshop/wisp-protocol/blob/v2/protocol.md
+                                                                         
+                                                                                    
 
 function endpointUrl(value) {
   if (typeof value !== 'string' || /[\u0000-\u0020\u007f]/.test(value)) {
@@ -44,7 +44,7 @@ function validateInfo(bytes) {
   }
 }
 
-/** Probe the actual Wisp handshake, without opening any destination stream. */
+                                                                               
 export function probeWisp(url, {
   WebSocketCtor = globalThis.WebSocket,
   timeoutMs = 5000,
@@ -71,7 +71,7 @@ export function probeWisp(url, {
         socket.removeEventListener('message', onMessage);
         socket.removeEventListener('error', onError);
         socket.removeEventListener('close', onClose);
-        try { socket.close(); } catch { /* The failed socket may already be closed. */ }
+        try { socket.close(); } catch {                                                }
       }
       if (error) reject(error);
       else resolve(greeting);
@@ -94,8 +94,8 @@ export function probeWisp(url, {
         } else if (bytes[0] === 5 && !receivedInfo) {
           validateInfo(bytes);
           receivedInfo = true;
-          // Some servers send INFO even without subprotocol negotiation. Complete
-          // their handshake and wait for CONTINUE; INFO alone is not readiness.
+                                                                                  
+                                                                                
           socket.send(new Uint8Array([5, 0, 0, 0, 0, 2, Math.min(bytes[6], 1)]));
         } else {
           throw new Error('Proxy rejected or sent an unexpected Wisp handshake.');
@@ -103,7 +103,7 @@ export function probeWisp(url, {
       } catch (error) { finish(error); }
     }
     try {
-      // Omitting a subprotocol requests v1, supported by both v1 and v2 servers.
+                                                                                 
       socket = new WebSocketCtor(endpoint);
       socket.binaryType = 'arraybuffer';
       socket.addEventListener('message', onMessage);
@@ -116,19 +116,19 @@ export function probeWisp(url, {
   });
 }
 
-/**
- * Races valid Wisp handshakes while serializing transport replacement and health
- * checks for up to 32 endpoints. Optional fallback endpoints are tried only
- * after the ordinary endpoint race is exhausted. It never reloads a page.
- *
- * connect({ force: true }) probes and replaces the active transport, and bypasses
- * cooldown for an explicit Retry action.
- * reportFailure() checks the proxy itself: a broken destination page is not
- * sufficient reason to replace a healthy proxy.
- * switchEndpoint({ failedEndpoint }) explicitly selects a different endpoint
- * without marking a destination TLS failure as a global proxy outage. It only
- * changes the transport; the caller decides whether a safe request may retry.
- */
+   
+                                                                                 
+                                                                            
+                                                                          
+  
+                                                                                  
+                                         
+                                                                            
+                                                
+                                                                             
+                                                                              
+                                                                              
+   
 export function createProxyNetwork({
   endpoints,
   fallbackEndpoints = [],
@@ -174,8 +174,8 @@ export function createProxyNetwork({
 
   function publish(status, extra = {}) {
     snapshot = Object.freeze({ status, activeEndpoint: active, configuredCount: urls.length, healthFailures, retryAt: null, error: null, ...extra });
-    // Display errors must not interrupt transport recovery.
-    try { onStatus(snapshot); } catch { /* The network remains operational. */ }
+                                                            
+    try { onStatus(snapshot); } catch {                                        }
   }
   function clearScheduled() {
     if (timer !== null) clearTimer(timer);
@@ -198,7 +198,7 @@ export function createProxyNetwork({
       delay = Math.min(maxRetryMs, Math.max(retryMs * 2 ** Math.min(Math.max(exhaustedCount - 1, 0), 20), earliest - now()));
       publish('unavailable', { error: snapshot.error || 'No proxy is currently available.', retryAt: now() + delay });
     }
-    // A status subscriber can synchronously retry, go offline, or dispose.
+                                                                           
     if (disposed || !online || pending || switching) return;
     timer = setTimer(() => {
       timer = null;
@@ -233,8 +233,8 @@ export function createProxyNetwork({
       if (!force && failures.get(url).until > now()) continue;
       candidates.push({ index, url });
     }
-    // A limited relay (for example Workers TCP) must not outrun a general-purpose
-    // proxy just because its handshake is faster.
+                                                                                  
+                                                  
     for (const group of [candidates.filter(item => !fallbackUrls.has(item.url)), candidates.filter(item => fallbackUrls.has(item.url))]) {
       const winner = await raceCandidates(group, signal);
       if (winner) return winner;
@@ -261,9 +261,9 @@ export function createProxyNetwork({
       publish('connecting', { attempt: 0, candidates: candidates.length });
       assertCurrent(signal);
       for (const entry of entries) {
-        // Every rejection gets a handler immediately. Late results from canceled
-        // probes cannot mutate cooldowns, queue a stale activation, or block a
-        // replacement race even if a custom probe ignores AbortSignal.
+                                                                                 
+                                                                               
+                                                                       
         Promise.resolve().then(() => {
           if (finished || entry.controller.signal.aborted) throw aborted();
           return probe(entry.url, { signal: entry.controller.signal, timeoutMs: probeTimeoutMs, setTimer, clearTimer });
@@ -284,8 +284,8 @@ export function createProxyNetwork({
         publish('connecting', { endpoint: url, attempt: ++attempted, candidates: candidates.length });
         assertCurrent(signal);
         try {
-          // Keep the operation pending until activation settles, including on
-          // cancellation: a late setTransport must never overwrite a new one.
+                                                                              
+                                                                              
           await activate(url, { signal });
           assertCurrent(signal);
           active = url;
@@ -309,16 +309,16 @@ export function createProxyNetwork({
   }
   function existingOrCancelled(options, next) {
     if (!pending) return null;
-    // Let a cancelled activation settle before a fresh one starts. Multiple
-    // callers following that same cancellation still coalesce through run().
+                                                                            
+                                                                             
     if (controller?.signal.aborted) return pending.catch(() => {}).then(() => next(options));
     return pending;
   }
   function connectCore({ force = false, excluded = new Set() } = {}) {
     if (disposed) return Promise.reject(aborted());
     if (!online) return Promise.reject(new Error('Your device is offline.'));
-    // Preserve an explicit retry while a monitor is still checking the active
-    // endpoint. Its first failed probe alone must not swallow the Retry action.
+                                                                              
+                                                                                
     if (force && active && pending && !controller?.signal.aborted) {
       return pending.catch(() => {}).then(() => connectCore({ force: true, excluded }));
     }
@@ -326,8 +326,8 @@ export function createProxyNetwork({
     if (inFlight) return inFlight;
     if (active) {
       if (!force) return Promise.resolve(active);
-      // Rebuild a broken transport even if a fresh handshake is healthy. The
-      // current endpoint wins equal-time ties; faster valid peers may replace it.
+                                                                             
+                                                                                  
       nextIndex = urls.indexOf(active);
       active = null;
     }
@@ -337,8 +337,8 @@ export function createProxyNetwork({
     if (!switching) return connectCore({ force });
     if (disposed) return Promise.reject(aborted());
     if (!online) return Promise.reject(new Error('Your device is offline.'));
-    // A reconnect after going offline must wait for the canceled switch's
-    // activation to settle, then start a new operation in the new lifecycle.
+                                                                          
+                                                                             
     if (switchEpoch !== lifecycleEpoch) return switching.catch(() => {}).then(() => connect({ force }));
     return switching;
   }
@@ -358,11 +358,11 @@ export function createProxyNetwork({
     const epoch = lifecycleEpoch;
     switchEpoch = epoch;
     const work = Promise.resolve().then(async () => {
-      // Health checks and mutations already in progress retain their real
-      // lifetime. Never race a new setTransport against a late old activation.
+                                                                          
+                                                                               
       if (pending) await pending.catch(() => {});
       if (disposed || !online || epoch !== lifecycleEpoch) throw aborted();
-      // The preceding health check may already have selected another server.
+                                                                             
       if (failedUrl !== null && active && active !== failedUrl) return active;
       const omitted = failedUrl ?? active;
       const excluded = new Set(omitted === null ? [] : [omitted]);

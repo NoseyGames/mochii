@@ -1,4 +1,4 @@
-// Local copy of the controller previously loaded from Consessions/flyflix/auxscript.js.
+                                                                                        
 const clearBtn = document.getElementById("clear-btn");
 const newFileBtn = document.getElementById("new-file-btn");
 
@@ -173,11 +173,11 @@ closeShortcutsBtn.addEventListener("click", closeShortcutsModal);
 
 
 
-/**
- * Display a notification bubble.
- * @param {string} message - The message to display.
- * @param {string} type - The type of notification ('success', 'error', 'info').
- */
+   
+                                 
+                                                    
+                                                                                
+   
 function showNotification(message, type = 'info') {
   const notification = document.createElement("div");
   notification.classList.add("notification", type);
@@ -191,9 +191,9 @@ function showNotification(message, type = 'info') {
   }, 3000);
 }
 
-/**
- * Initialize the application by loading data from localStorage or creating a default file.
- */
+   
+                                                                                           
+   
 function initialize() {
   let savedData;
   try {
@@ -259,7 +259,7 @@ function initialize() {
 
   
   let shortcutsClosed;
-  try { shortcutsClosed = localStorage.getItem("shortcutsClosed"); } catch (error) { /* Storage may be unavailable. */ }
+  try { shortcutsClosed = localStorage.getItem("shortcutsClosed"); } catch (error) {                                   }
   if (shortcutsClosed === "true" || savedData?.showShortcuts === false) {
     shortcutsModal.style.display = "none";
     shortcutsModal.setAttribute("aria-hidden", "true");
@@ -276,11 +276,11 @@ function initialize() {
   toggleAutosave();
 }
 
-/**
- * Create a new file and add it to the editor.
- * @param {string} name - The base name of the file.
- * @param {string} language - The programming language of the file.
- */
+   
+                                              
+                                                    
+                                                                   
+   
 function createNewFile(name, language) {
   if (files.length >= MAX_EDITOR_FILES) {
     showNotification(`This project can contain up to ${MAX_EDITOR_FILES} files.`, 'error');
@@ -325,11 +325,11 @@ function createNewFile(name, language) {
   showNotification(`Created new file "${fileName}".`, "success");
 }
 
-/**
- * Get the file extension based on the language.
- * @param {string} language - The programming language.
- * @returns {string} - The corresponding file extension.
- */
+   
+                                                
+                                                       
+                                                        
+   
 function getExtension(language) {
   const extensions = {
     html: ".html",
@@ -349,10 +349,10 @@ function getExtension(language) {
   return extensions[language.toLowerCase()] || ".txt";
 }
 
-/**
- * Add a new tab to the tabs list.
- * @param {Object} file - The file object.
- */
+   
+                                  
+                                          
+   
 function addTab(file) {
   const li = document.createElement("li");
   li.setAttribute("data-id", file.id);
@@ -361,10 +361,10 @@ function addTab(file) {
   tabsList.appendChild(li);
 }
 
-/**
- * Add a new file to the sidebar list.
- * @param {Object} file - The file object.
- */
+   
+                                      
+                                          
+   
 function addSidebarFile(file) {
   const li = document.createElement("li");
   li.setAttribute("data-id", file.id);
@@ -376,10 +376,10 @@ function addSidebarFile(file) {
   sidebarFilesList.appendChild(li);
 }
 
-/**
- * Add a new editor panel corresponding to the file using CodeMirror.
- * @param {Object} file - The file object.
- */
+   
+                                                                     
+                                          
+   
 function addEditor(file) {
   const panel = document.createElement("div");
   panel.classList.add("editor-panel");
@@ -430,10 +430,10 @@ function addEditor(file) {
   editor.getWrapperElement().style.fontSize = `${fontSizeSlider.value}px`;
 }
 
-/**
- * Add a preview iframe for an HTML file.
- * @param {Object} file - The HTML file object.
- */
+   
+                                         
+                                               
+   
 function addPreview(file) {
   const iframe = document.createElement("iframe");
   iframe.classList.add("preview-iframe");
@@ -447,11 +447,11 @@ function addPreview(file) {
   previews[file.id] = iframe;
 }
 
-/**
- * Get the CodeMirror mode based on the language.
- * @param {string} language - The programming language.
- * @returns {string} - The corresponding CodeMirror mode.
- */
+   
+                                                 
+                                                       
+                                                         
+   
 function getCodeMirrorMode(language) {
   const modes = {
     html: "htmlmixed",
@@ -471,10 +471,10 @@ function getCodeMirrorMode(language) {
   return modes[language.toLowerCase()] || "javascript";
 }
 
-/**
- * Set the active file and update the UI accordingly.
- * @param {number} id - The unique identifier of the file.
- */
+   
+                                                     
+                                                          
+   
 function setActiveFile(id) {
   activeFileId = id;
 
@@ -544,10 +544,10 @@ function runActivePreview() {
   updatePreviewControls();
 }
 
-/**
- * Debounced handler for input changes to update live preview.
- * @param {number} fileId - The unique identifier of the file.
- */
+   
+                                                              
+                                                              
+   
 function handleInputDebounced(fileId) {
   const file = files.find(f => f.id === fileId);
   if (file && editors[fileId]) file.content = editors[fileId].getValue();
@@ -557,10 +557,10 @@ function handleInputDebounced(fileId) {
   }, DEBOUNCE_DELAY); 
 }
 
-/**
- * Handle input event in CodeMirror editor to update file content and preview.
- * @param {number} fileId - The unique identifier of the file.
- */
+   
+                                                                              
+                                                              
+   
 function handleInput(fileId) {
   const file = files.find(f => f.id === fileId);
   if (file) {
@@ -579,10 +579,10 @@ function handleInput(fileId) {
   }
 }
 
-/**
- * Update the live preview based on the specified HTML file.
- * @param {number} htmlFileId - The unique identifier of the HTML file to preview.
- */
+   
+                                                            
+                                                                                  
+   
 function updatePreview(htmlFileId) {
   const htmlFile = files.find(f => f.id === htmlFileId && f.language.toLowerCase() === 'html');
   if (!htmlFile) {
@@ -632,9 +632,9 @@ function updatePreview(htmlFileId) {
   }
 }
 
-/**
- * Save the current state to localStorage.
- */
+   
+                                          
+   
 function saveToLocalStorage(silent = false) {
   if (initializing) return;
   if (preserveUnreadableSave) {
@@ -664,9 +664,9 @@ function saveToLocalStorage(silent = false) {
   }
 }
 
-/**
- * Download the active file with the correct MIME type.
- */
+   
+                                                       
+   
 function downloadAsFile() {
   if (!activeFileId) {
     showNotification("No active file to download.", "error");
@@ -692,11 +692,11 @@ function downloadAsFile() {
   showNotification(`Downloaded "${file.name}".`, "success");
 }
 
-/**
- * Get the MIME type based on the language.
- * @param {string} language - The programming language.
- * @returns {string} - The corresponding MIME type.
- */
+   
+                                           
+                                                       
+                                                   
+   
 function getMimeType(language) {
   const mimeTypes = {
     html: "text/html",
@@ -716,9 +716,9 @@ function getMimeType(language) {
   return mimeTypes[language.toLowerCase()] || "text/plain";
 }
 
-/**
- * Handle clearing the content of the active file.
- */
+   
+                                                  
+   
 function handleClear() {
   if (!activeFileId) {
     showNotification("No active file to clear.", "error");
@@ -745,18 +745,18 @@ function handleClear() {
   }
 }
 
-/**
- * Open the New File modal.
- */
+   
+                           
+   
 function openNewFileModal() {
   newFileModal.style.display = "flex";
   newFileModal.setAttribute("aria-hidden", "false");
   fileNameInput.focus();
 }
 
-/**
- * Close the New File modal.
- */
+   
+                            
+   
 function closeNewFileModal() {
   newFileModal.style.display = "none";
   newFileModal.setAttribute("aria-hidden", "true");
@@ -764,9 +764,9 @@ function closeNewFileModal() {
   fileLanguageSelect.value = "html";
 }
 
-/**
- * Handle creating a new file from the modal inputs.
- */
+   
+                                                    
+   
 function handleCreateFile() {
   const language = fileLanguageSelect.value;
   const name = fileNameInput.value.trim();
@@ -780,26 +780,26 @@ function handleCreateFile() {
   closeNewFileModal();
 }
 
-/**
- * Open the Settings modal.
- */
+   
+                           
+   
 function openSettingsModal() {
   settingsModal.style.display = "flex";
   settingsModal.setAttribute("aria-hidden", "false");
   themeSelect.focus();
 }
 
-/**
- * Close the Settings modal.
- */
+   
+                            
+   
 function closeSettingsModal() {
   settingsModal.style.display = "none";
   settingsModal.setAttribute("aria-hidden", "true");
 }
 
-/**
- * Change the theme based on user selection.
- */
+   
+                                            
+   
 function changeTheme() {
   const selectedTheme = themeSelect.value;
   applyTheme(selectedTheme);
@@ -812,19 +812,19 @@ function changeTheme() {
   showNotification(`Theme changed to "${selectedTheme}".`, "info");
 }
 
-/**
- * Apply the selected theme by updating the body class.
- * @param {string} theme - The selected theme.
- */
+   
+                                                       
+                                              
+   
 function applyTheme(theme) {
   document.body.classList.remove('dark', 'light', 'solarized', 'dracula', 'monokai', 'github-dark');
   document.body.classList.add(theme);
 }
 
-/**
- * Get the current theme based on the body class.
- * @returns {string} - The current theme.
- */
+   
+                                                 
+                                         
+   
 function getCurrentTheme() {
   const themes = ['dark', 'light', 'solarized', 'dracula', 'monokai', 'github-dark'];
   for (const theme of themes) {
@@ -835,9 +835,9 @@ function getCurrentTheme() {
   return 'dark'; 
 }
 
-/**
- * Change the font size of the editor.
- */
+   
+                                      
+   
 function changeFontSize() {
   const size = fontSizeSlider.value;
   fontSizeValue.textContent = `${size}px`;
@@ -849,9 +849,9 @@ function changeFontSize() {
   showNotification(`Font size set to ${size}px.`, "info");
 }
 
-/**
- * Update the font size display and apply it to editors.
- */
+   
+                                                        
+   
 function updateFontSize() {
   const size = fontSizeSlider.value;
   fontSizeValue.textContent = `${size}px`;
@@ -861,9 +861,9 @@ function updateFontSize() {
   });
 }
 
-/**
- * Toggle the Auto-Run Preview feature.
- */
+   
+                                       
+   
 function toggleAutoRun() {
   saveToLocalStorage();
   if (autoRunToggle.checked) {
@@ -878,9 +878,9 @@ function toggleAutoRun() {
   updatePreviewControls();
 }
 
-/**
- * Toggle the visibility of line numbers.
- */
+   
+                                         
+   
 function toggleLineNumbers() {
   const show = lineNumbersToggle.checked;
   Object.values(editors).forEach(editor => {
@@ -890,9 +890,9 @@ function toggleLineNumbers() {
   showNotification(`Line Numbers ${show ? 'enabled' : 'disabled'}.`, "info");
 }
 
-/**
- * Change the tab size based on user selection.
- */
+   
+                                               
+   
 function changeTabSize() {
   const size = parseInt(tabSizeSelect.value);
   Object.values(editors).forEach(editor => {
@@ -903,9 +903,9 @@ function changeTabSize() {
   showNotification(`Tab size set to ${size}.`, "info");
 }
 
-/**
- * Toggle the FPS Counter visibility.
- */
+   
+                                     
+   
 function toggleFPS() {
   showFPS = showFPSToggle.checked;
   fpsCounter.style.display = showFPS ? "block" : "none";
@@ -913,9 +913,9 @@ function toggleFPS() {
   showNotification(`FPS Counter ${showFPS ? 'shown' : 'hidden'}.`, "info");
 }
 
-/**
- * Toggle the Autosave feature.
- */
+   
+                               
+   
 function toggleAutosave() {
   clearInterval(autosaveInterval);
   if (autosaveToggle.checked) {
@@ -931,9 +931,9 @@ function toggleAutosave() {
   }
 }
 
-/**
- * Toggle the Keyboard Shortcuts modal.
- */
+   
+                                       
+   
 function toggleShortcuts() {
   if (shortcutsToggle.checked) {
     openShortcutsModal();
@@ -942,29 +942,29 @@ function toggleShortcuts() {
   }
 }
 
-/**
- * Open the Keyboard Shortcuts modal.
- */
+   
+                                     
+   
 function openShortcutsModal() {
   shortcutsToggle.checked = true;
   shortcutsModal.style.display = "flex";
   shortcutsModal.setAttribute("aria-hidden", "false");
-  try { localStorage.setItem("shortcutsClosed", "false"); } catch (error) { /* Keep the editor usable without storage. */ }
+  try { localStorage.setItem("shortcutsClosed", "false"); } catch (error) {                                               }
 }
 
-/**
- * Close the Keyboard Shortcuts modal.
- */
+   
+                                      
+   
 function closeShortcutsModal() {
   shortcutsToggle.checked = false;
   shortcutsModal.style.display = "none";
   shortcutsModal.setAttribute("aria-hidden", "true");
-  try { localStorage.setItem("shortcutsClosed", "true"); } catch (error) { /* Keep the editor usable without storage. */ }
+  try { localStorage.setItem("shortcutsClosed", "true"); } catch (error) {                                               }
 }
 
-/**
- * Update the FPS Counter.
- */
+   
+                          
+   
 function updateFPS() {
   const update = () => {
     frames++;
@@ -981,10 +981,10 @@ function updateFPS() {
   requestAnimationFrame(update);
 }
 
-/**
- * Handle deleting a file.
- * @param {number} fileId - The unique identifier of the file.
- */
+   
+                          
+                                                              
+   
 function handleDeleteFile(fileId) {
   const fileIndex = files.findIndex(f => f.id === fileId);
   if (fileIndex === -1) return;
@@ -1033,10 +1033,10 @@ function handleDeleteFile(fileId) {
   }
 }
 
-/**
- * Filter files in the sidebar based on the search query.
- * @param {string} query - The search query.
- */
+   
+                                                         
+                                            
+   
 function filterFiles(query) {
   Array.from(sidebarFilesList.children).forEach(fileItem => {
     const fileName = fileItem.querySelector("span").textContent.toLowerCase();
@@ -1048,10 +1048,10 @@ function filterFiles(query) {
   });
 }
 
-/**
- * Handle Keyboard Shortcuts.
- * @param {KeyboardEvent} event
- */
+   
+                             
+                               
+   
 function handleKeyboardShortcuts(event) {
   if (event.ctrlKey || event.metaKey) {
     switch (event.key.toLowerCase()) {
@@ -1091,9 +1091,9 @@ function handleKeyboardShortcuts(event) {
   }
 }
 
-/**
- * Toggle the Preview Container visibility.
- */
+   
+                                           
+   
 function togglePreview() {
   if (activeFileId && files.find(f => f.id === activeFileId && f.language.toLowerCase() === 'html')) {
     const iframe = previews[activeFileId];

@@ -4,9 +4,9 @@ import { WebSocket, WebSocketServer } from 'ws';
 import ipaddr from 'ipaddr.js';
 import { isPublicAddress, resolvePublicAddress } from './server-network.mjs';
 
-// A bounded implementation of the TCP subset of Wisp v1/v2. In particular,
-// pending DNS/connect work belongs to a stream and cannot outlive its close.
-// Epoxy can encode a whole plaintext HTTP upload in one Wisp message.
+                                                                           
+                                                                             
+                                                                      
 const MAX_FRAME = 8 * 1024 * 1024;
 const MAX_INPUT_BUFFER = 16 * 1024 * 1024;
 const MAX_GLOBAL_INPUT_BUFFER = 64 * 1024 * 1024;
@@ -41,7 +41,7 @@ function hostnameFrom(data) {
 
 function validInfo(data) {
   if (data.length < 7 || data[0] !== 0x05 || data.readUInt32LE(1) !== 0 || data[5] !== 2) return false;
-  // Unknown optional extensions may be ignored, but their framing must be valid.
+                                                                                 
   for (let offset = 7; offset < data.length;) {
     if (offset + 5 > data.length) return false;
     const end = offset + 5 + data.readUInt32LE(offset + 1);
@@ -105,9 +105,9 @@ export function createWispGateway(config, { resolve = resolvePublicAddress, conn
         globalIncomingBytes -= data.length;
         if (error) { closeStream(stream, CLOSED.network); return; }
         stream.acknowledged++;
-        // Wisp grants are absolute, not additive. Early grants race DATA still
-        // in flight and would make strict credit checks reject honest clients.
-        // Wait for the whole granted window before granting another one.
+                                                                               
+                                                                               
+                                                                         
         if (stream.acknowledged >= FLOW_WINDOW) {
           stream.credit += stream.acknowledged;
           stream.acknowledged = 0;
@@ -134,8 +134,8 @@ export function createWispGateway(config, { resolve = resolvePublicAddress, conn
         try { address = await resolve(hostname); } finally { pendingLookups--; }
         if (stream.closed || closed || ws.readyState !== WebSocket.OPEN) { closeStream(stream); return; }
         if (!isPublicAddress(address)) { closeStream(stream, CLOSED.blocked); return; }
-        // Connect to the validated literal. Never ask the TCP layer to resolve
-        // the hostname again, avoiding DNS rebinding between check and use.
+                                                                               
+                                                                            
         const socket = connect({ host: address, port, allowHalfOpen: false });
         stream.socket = socket;
         socket.setNoDelay(true);
@@ -171,8 +171,8 @@ export function createWispGateway(config, { resolve = resolvePublicAddress, conn
     }, 30000);
     heartbeat.unref();
     ws.on('pong', () => { alive = true; });
-    // ws already starts the appropriate close handshake for receiver errors
-    // (including 1009 for oversize payloads). Keep it from becoming unhandled.
+                                                                            
+                                                                               
     ws.on('error', () => {});
     ws.on('close', () => {
       closed = true;
@@ -211,7 +211,7 @@ export function createWispGateway(config, { resolve = resolvePublicAddress, conn
           void openStream(id, hostname, port);
         } else if (type === 0x02) {
           const stream = streams.get(id);
-          // In-flight data can arrive after a remote close; safely discard it.
+                                                                               
           if (!stream) return;
           const payload = data.subarray(5);
           if (--stream.credit < 0 || incomingBytes + payload.length > MAX_INPUT_BUFFER || globalIncomingBytes + payload.length > MAX_GLOBAL_INPUT_BUFFER) { ws.terminate(); return; }

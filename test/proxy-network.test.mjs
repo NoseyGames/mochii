@@ -25,7 +25,7 @@ function clock() {
     get nextAt() { return Math.min(...[...timers.values()].map(timer => timer.at)); },
     async advance(ms) {
       time += ms;
-      // Newly scheduled timers run on subsequent advances, as actual tasks do.
+                                                                               
       for (const [key, timer] of [...timers]) {
         if (timer.at <= time && timers.delete(key)) timer.callback();
       }

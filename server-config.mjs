@@ -45,8 +45,8 @@ export function loadServerConfig(env = process.env) {
       throw new Error('PUBLIC_ORIGIN must be an HTTPS origin (HTTP is allowed only for localhost).');
     }
   }
-  // Match the listener's address family. localhost can resolve to IPv6, and a
-  // server explicitly bound to ::1 cannot be reached through 127.0.0.1.
+                                                                              
+                                                                        
   const localOriginHost = host === '::1' ? '[::1]' : host.toLowerCase() === 'localhost' ? 'localhost' : '127.0.0.1';
   let proxyOrigin;
   try { proxyOrigin = new URL(env.PROXY_ORIGIN || `http://${localOriginHost}:${proxyPort}`); } catch { throw new Error('PROXY_ORIGIN must be an absolute origin.'); }

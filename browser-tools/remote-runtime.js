@@ -1,5 +1,5 @@
-// The shell holds only a bounded, inert DOM snapshot. The MessagePort is handed
-// to the configured proxy origin; page data is never interpreted as shell code.
+                                                                                
+                                                                                
 const MAX_NODES = 800;
 const text = (value, limit = 5000) => typeof value === 'string' ? value.slice(0, limit) : '';
 const validId = value => Number.isSafeInteger(value) && value >= 0 || typeof value === 'string' && value.length > 0 && value.length <= 128;
@@ -80,8 +80,8 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
     }
     const root = incoming.get(keyFor(tree.rootId));
     if (!root) throw new Error('The page tree has no root');
-    // Build a spanning tree. A compromised page cannot send cycles/deep nesting
-    // to make shell rendering recurse forever.
+                                                                                
+                                               
     const visited = new Set();
     function visit(node, depth) {
       const key = keyFor(node.remoteId);
@@ -103,7 +103,7 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
     if (!validId(id)) throw new Error('Invalid selected element');
     const key = keyFor(id);
     if (!nodes.has(key)) {
-      // Selector/picker results can be outside the first 800 tree nodes.
+                                                                         
       if (nodes.size >= MAX_NODES + 50) throw new Error('Refresh the inspector to select more elements.');
       nodes.set(key, { remoteId: id, localName: info?.tag || 'element', id: '', className: '', children: [] });
     }
@@ -125,8 +125,8 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
     if (pending.size >= 32) return Promise.reject(new Error('Too many pending tool commands. Wait for the page to respond.'));
     const id = ++requestId;
     return new Promise((resolve, reject) => {
-      // Switching can wait for a health probe and both public/fallback races.
-      // Its larger budget does not relax timeouts for page scripts or DOM RPCs.
+                                                                              
+                                                                                
       const timeout = options.requestTimeout ?? (method === 'switchServer' ? 30000 : 10000);
       const timer = setTimeout(() => { pending.delete(id); reject(new Error('The page did not respond to this command.')); }, timeout);
       pending.set(id, { resolve, reject, timer, method });
@@ -194,8 +194,8 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
             configuredCount: Number.isSafeInteger(event.configuredCount) ? Math.max(0, Math.min(32, event.configuredCount)) : 0,
             error: text(event.error, 1000) });
           break;
-        // Unknown events are inert. No page message can navigate the shell,
-        // read saved userscripts, evaluate code in the shell, or change storage.
+                                                                            
+                                                                                 
       }
     } catch (error) { callbacks.onError?.(new Error(text(error.message))); }
   };

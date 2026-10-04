@@ -27,7 +27,7 @@ async function verifyEpoxy(t) {
   const sockets = new Set();
   const previous = { WebSocket: globalThis.WebSocket, Request: globalThis.Request, self: globalThis.self };
   globalThis.self = globalThis;
-  // Browsers resolve Request("") against the document; Node needs an absolute URL.
+                                                                                   
   globalThis.Request = class extends previous.Request { constructor(url, options) { super(url === '' ? origin : url, options); } };
   globalThis.WebSocket = class extends WebSocket {
     constructor(url, protocols) {
@@ -57,8 +57,8 @@ async function verifyEpoxy(t) {
 
 if (isMainThread) {
   test('the real Epoxy WASM transport streams a multi-megabyte upload through the bounded gateway', { timeout: 15000 }, async t => {
-    // Epoxy keeps its WASM scheduler timers alive. Give it a worker lifecycle,
-    // just as the browser does, and terminate that worker after verification.
+                                                                               
+                                                                              
     const worker = new Worker(new URL(import.meta.url));
     t.after(() => worker.terminate());
     const [result] = await once(worker, 'message');

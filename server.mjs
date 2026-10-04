@@ -38,7 +38,7 @@ function reply(req, res, status, message, headers = {}) {
 }
 
 function requestPath(req) {
-  // Decode before resolving; never accept Windows paths or dot segments.
+                                                                         
   const pathname = decodeURIComponent((req.url || '/').split('?')[0]);
   if (!pathname.startsWith('/') || pathname.startsWith('//') || /[\\\x00-\x20\x7f]/.test(pathname) ||
       pathname.split('/').some(segment => segment.startsWith('.') || segment.includes(':'))) {
@@ -54,7 +54,7 @@ function assetFor(pathname, proxyMode = false) {
     if (!['/bearmux/', '/ultrav/'].some(prefix => pathname.startsWith(prefix))) return null;
   }
   if (publicFiles.has(filename)) return { directory: root, filename };
-  // Installed packages provide a matched worker/client and transport with embedded WASM.
+                                                                                         
   for (const [prefix, directory] of [
     ['/bearmux/epoxy/', epoxyPath],
     ['/bearmux/', baremuxPath],
@@ -136,8 +136,8 @@ async function serve(req, res, config, proxyMode) {
     res.writeHead(200, headers);
     if (req.method === 'HEAD') res.end();
     else if (pathname === '/browser-tools/config.js') {
-      // Optional Node hosting opts into its API. The checked-in file and static
-      // build always use the public server list without requesting /api/config.
+                                                                                
+                                                                                
       res.end('globalThis.MonkehUseBackendConfig = true;\n' + await readFile(filename, 'utf8'));
     }
     else createReadStream(filename).on('error', () => res.destroy()).pipe(res);
@@ -165,14 +165,14 @@ function createConfiguredServer({ env = process.env, wispOptions } = {}, proxyMo
   server.close = callback => { gateway.close(); return close(callback); };
 
   server.on('upgrade', (req, socket, head) => {
-    // Socket errors before the WebSocket receiver attaches must not crash Node.
+                                                                                
     socket.on('error', () => socket.destroy());
     const reject = (status, reason, headers = '') => {
       socket.end(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Length: 0\r\n${headers}\r\n`);
       socket.setTimeout(1000, () => socket.destroy());
     };
     let pathname;
-    try { pathname = requestPath(req); } catch { /* Rejected below. */ }
+    try { pathname = requestPath(req); } catch {                       }
     if (pathname !== '/wisp/') {
       reject(404, 'Not Found');
       return;

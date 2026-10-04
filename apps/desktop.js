@@ -57,8 +57,8 @@ export function mountDesktopLauncher(doc = document, context = window) {
   doc.getElementById('launch-windows2000').addEventListener('click', () => launch(desktopProfileUrl('windows2000')));
   doc.getElementById('launch-windows98').addEventListener('click', () => launch(desktopProfileUrl('windows98')));
 
-  // Gateway discovery never blocks the account-free emulators, and never opens
-  // a third-party page until the user clicks a launch button.
+                                                                               
+                                                              
   const ready = globalThis.MonkehConfig.fetchConfig({ fetch: context.fetch.bind(context), signal: controller.signal }).then(config => {
     if (disposed) return;
     const gateway = validateDesktopGateway(config?.windowsVm);

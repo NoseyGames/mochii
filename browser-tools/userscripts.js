@@ -33,7 +33,7 @@ function parsePattern(pattern) {
   if (subdomains && (parsed.hostname.startsWith('[') || /^[\d.]+$/.test(parsed.hostname))) {
     fail('Subdomain wildcards need a domain name, not an IP address.');
   }
-  // Keep explicit default ports: URL.port normalizes :80 / :443 away.
+                                                                      
   const portMatch = /:(\d+)$/.exec(domain);
   const port = portMatch ? String(Number(portMatch[1])) : '';
   return {
@@ -45,7 +45,7 @@ function parsePattern(pattern) {
   };
 }
 
-/** Validate comma/newline separated HTTP(S) patterns. Returns trimmed patterns. */
+                                                                                   
 export function validatePatterns(patternText) {
   if (typeof patternText !== 'string' || !patternText.trim()) fail('Enter at least one URL pattern.');
   if (patternText.length > 2000) fail('URL patterns must be 2,000 characters or fewer.');
@@ -55,7 +55,7 @@ export function validatePatterns(patternText) {
   return patterns;
 }
 
-// A literal glob matcher avoids interpreting regex characters in URLs as code.
+                                                                               
 function matchGlob(pattern, value) {
   let p = 0;
   let v = 0;
@@ -79,7 +79,7 @@ function matchGlob(pattern, value) {
   return p === pattern.length;
 }
 
-/** Match the destination URL, never the containing app's URL. */
+                                                                 
 export function matchesUrl(patternText, url) {
   let target;
   let patterns;
@@ -113,7 +113,7 @@ function newId() {
   try {
     if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
   } catch {
-    // Older browsers / restricted contexts can still create local script drafts.
+                                                                                 
   }
   return `script_${Date.now().toString(36)}_${(++fallbackId).toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -130,7 +130,7 @@ function cleanRecord(record, id) {
   return { id, name: record.name.trim(), match: record.match.trim(), code: record.code, enabled: record.enabled === true };
 }
 
-/** A localStorage-backed store. Failed writes throw; list() recovers for the UI. */
+                                                                                    
 export function createUserscriptStore(storage) {
   let warning = null;
 

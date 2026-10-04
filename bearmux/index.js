@@ -6,8 +6,8 @@
 
 	const maxRedirects = 20;
 
-	// The user likely has overwritten all networking functions after importing bare-client
-	// It is our responsibility to make sure components of Bare-Client are using native networking functions
+	                                                                                       
+	                                                                                                        
 	const fetch = globalThis.fetch;
 	const WebSocket = globalThis.WebSocket;
 	const Request = globalThis.Request;
@@ -23,7 +23,7 @@
 	};
 
 	async function searchForPort() {
-	    // @ts-expect-error
+	                       
 	    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
 	    const promise = Promise.race([...clients.map((x) => tryGetPort(x)), new Promise((_, reject) => setTimeout(reject, 1000, new Error("")))]);
 	    try {
@@ -46,7 +46,7 @@
 	function createPort(path, channel, registerHandlers) {
 	    const worker = new SharedWorker(path, "bare-mux-worker");
 	    if (registerHandlers) {
-	        // uv removes navigator.serviceWorker so this errors
+	                                                            
 	        if (navigator.serviceWorker) {
 	            navigator.serviceWorker.addEventListener("message", event => {
 	                if (event.data.type === "getPort" && event.data.port) {
@@ -71,10 +71,10 @@
 	        this.createChannel(workerPath, true);
 	    }
 	    createChannel(workerPath, inInit) {
-	        // @ts-expect-error
+	                           
 	        if (self.clients) {
-	            // running in a ServiceWorker
-	            // ask a window for the worker port, register for refreshPort
+	                                         
+	                                                                         
 	            this.port = searchForPort();
 	            this.channel.onmessage = (event) => {
 	                if (event.data.type === "refreshPort") {
@@ -83,15 +83,15 @@
 	            };
 	        }
 	        else if (workerPath && SharedWorker) {
-	            // running in a window, was passed a workerPath
-	            // create the SharedWorker and help other bare-mux clients get the workerPath
+	                                                           
+	                                                                                         
 	            if (!workerPath.startsWith("/") && !workerPath.includes("://"))
 	                throw new Error("Invalid URL. Must be absolute or start at the root.");
 	            this.port = createPort(workerPath, this.channel, inInit);
 	        }
 	        else if (SharedWorker) {
-	            // running in a window, was not passed a workerPath
-	            // ask other bare-mux clients for the workerPath
+	                                                               
+	                                                            
 	            this.port = new Promise(resolve => {
 	                this.channel.onmessage = (event) => {
 	                    if (event.data.type === "path") {
@@ -102,7 +102,7 @@
 	            });
 	        }
 	        else {
-	            // SharedWorker does not exist
+	                                          
 	            throw new Error("Unable to get a channel to the SharedWorker.");
 	        }
 	    }
@@ -155,7 +155,7 @@
 	    }
 	    return true;
 	}
-	// get the unhooked value
+	                         
 	Object.getOwnPropertyDescriptor(WebSocket.prototype, 'readyState').get;
 	const wsProtocols = ['ws:', 'wss:'];
 	const statusEmpty = [101, 204, 205, 304];
@@ -181,9 +181,9 @@
 	    }
 	}
 	class BareClient {
-	    /**
-	     * Create a BareClient. Calls to fetch and connect will wait for an implementation to be ready.
-	     */
+	       
+                                                                                                    
+        
 	    constructor(workerPath) {
 	        this.worker = new WorkerConnection(workerPath);
 	    }
@@ -221,15 +221,15 @@
 	                initialCloseHappened = true;
 	            }
 	        });
-	        // TODO socket onerror will be broken
+	                                             
 	        arrayBufferImpl = arrayBufferImpl || wsImpl.constructor.constructor("return ArrayBuffer")().prototype;
 	        requestHeaders = requestHeaders || {};
 	        requestHeaders['Host'] = (new URL(remote)).host;
-	        // requestHeaders['Origin'] = origin;
+	                                             
 	        requestHeaders['Pragma'] = 'no-cache';
 	        requestHeaders['Cache-Control'] = 'no-cache';
 	        requestHeaders['Upgrade'] = 'websocket';
-	        // requestHeaders['User-Agent'] = navigator.userAgent;
+	                                                              
 	        requestHeaders['Connection'] = 'Upgrade';
 	        const onopen = (protocol) => {
 	            fakeReadyState = WebSocketFields.OPEN;
@@ -238,7 +238,7 @@
 	                headers: {
 	                    "sec-websocket-protocol": protocol,
 	                }
-	            }; // what the fuck is a meta
+	            };                           
 	            socket.dispatchEvent(new Event("open"));
 	        };
 	        const onmessage = async (payload) => {
@@ -282,7 +282,7 @@
 	                onclose(event.data.args[0], event.data.args[1]);
 	            }
 	            else if (event.data.type === "error") {
-	                onerror( /* event.data.args[0] */);
+	                onerror(                         );
 	            }
 	        };
 	        this.worker.sendMessage({
@@ -295,33 +295,33 @@
 	                channel: channel.port2,
 	            },
 	        }, [channel.port2]);
-	        // protocol is always an empty before connecting
-	        // updated when we receive the metadata
-	        // this value doesn't change when it's CLOSING or CLOSED etc
+	                                                        
+	                                               
+	                                                                    
 	        const getReadyState = () => fakeReadyState;
-	        // we have to hook .readyState ourselves
+	                                                
 	        Object.defineProperty(socket, 'readyState', {
 	            get: getReadyState,
 	            configurable: true,
 	            enumerable: true,
 	        });
-	        /**
-	         * @returns The error that should be thrown if send() were to be called on this socket according to the fake readyState value
-	         */
+	           
+                                                                                                                                      
+            
 	        const getSendError = () => {
 	            const readyState = getReadyState();
 	            if (readyState === WebSocketFields.CONNECTING)
 	                return new DOMException("Failed to execute 'send' on 'WebSocket': Still in CONNECTING state.");
 	        };
-	        // we have to hook .send ourselves
-	        // use ...args to avoid giving the number of args a quantity
-	        // no arguments will trip the following error: TypeError: Failed to execute 'send' on 'WebSocket': 1 argument required, but only 0 present.
+	                                          
+	                                                                    
+	                                                                                                                                                   
 	        socket.send = function (...args) {
 	            const error = getSendError();
 	            if (error)
 	                throw error;
 	            let data = args[0];
-	            // @ts-expect-error idk why it errors?
+	                                                  
 	            if (data.buffer)
 	                data = data.buffer;
 	            channel.port1.postMessage({ type: "data", data: data }, data instanceof ArrayBuffer ? [data] : []);
@@ -343,12 +343,12 @@
 	        return socket;
 	    }
 	    async fetch(url, init) {
-	        // Only create an instance of Request to parse certain parameters of init such as method, headers, redirect
-	        // But use init values whenever possible
+	                                                                                                                   
+	                                                
 	        const req = new Request(url, init);
-	        // try to use init.headers because it may contain capitalized headers
-	        // furthermore, important headers on the Request class are blocked...
-	        // we should try to preserve the capitalization due to quirks with earlier servers
+	                                                                             
+	                                                                             
+	                                                                                          
 	        const inputHeaders = init?.headers || req.headers;
 	        const headers = inputHeaders instanceof Headers
 	            ? Object.fromEntries(inputHeaders)
@@ -420,4 +420,4 @@
 	Object.defineProperty(exports, '__esModule', { value: true });
 
 }));
-//# sourceMappingURL=index.js.map
+                                 

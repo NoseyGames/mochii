@@ -8,8 +8,8 @@
 /sw.js
   Cache-Control: no-cache
 
-# App entrypoints may be embedded only by their own origin. Proxy host and
-# provider frames intentionally remain embeddable by the separate shell.
+                                                                          
+                                                                        
 /
   X-Frame-Options: SAMEORIGIN
 /index.html

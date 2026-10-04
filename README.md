@@ -121,11 +121,19 @@ Cloudflare's TCP restrictions, and why GitHub Actions is used only for CI tests.
 
 ## Apps and current limits
 
-Auk, Voxiles, Desktops and the browser tools are static. Remote catalogs,
+Auk, Voxiles, Desktops, Mochii Cloud and the browser tools are static. Remote catalogs,
 fonts, movie providers, Ruffle, JSZip and CodeMirror depend on their upstreams.
 Voxiles ZIP imports support self-contained entry files; companion-asset archives
 are not fully supported. Provider outages and sites that resist proxy rewriting
 cannot be eliminated by static hosting.
+
+**Apps → Mochii Cloud** opens the redesigned cloud-gaming catalog. Its 106
+entries retain the upstream game metadata, search, details, themes, controller
+navigation and launch options. Recent sessions and settings are stored locally
+on each mirror. Games and provider sign-in run on their external hosts; Monkeh
+does not create accounts or verify a provider session. Embedded playback has a
+direct-tab fallback for browser or provider restrictions. Source provenance is
+recorded in [third-party sources](docs/THIRD-PARTY-SOURCES.md).
 
 Desktops launches the official v86 Windows 2000/98 browser emulators through
 Monkeh. These require no account, but are not modern Windows cloud VMs. Save the

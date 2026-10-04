@@ -71,8 +71,8 @@ export async function handleAssist(request, env) {
       typeof body.question !== 'string' || !body.question.trim() || body.question.length > 2000 ||
       (body.code !== undefined && (typeof body.code !== 'string' || body.code.length > 6000))) return reply(400, 'Enter a question up to 2,000 characters and code up to 6,000 characters.');
   try {
-    // Shared IPs also share this limit. The global key is per Cloudflare location,
-    // not a billing cap; the Workers Free account enforces the daily AI quota.
+                                                                                   
+                                                                               
     let timer;
     try {
       const result = await Promise.race([
@@ -83,7 +83,7 @@ export async function handleAssist(request, env) {
       return Response.json({ answer: result.response }, { headers });
     } finally { clearTimeout(timer); }
   } catch {
-    // Do not disclose provider errors, request bodies, infrastructure or secrets.
+                                                                                  
     return reply(503, 'Coding help is unavailable or its free daily allowance is used up. Try again later.');
   }
 }

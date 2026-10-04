@@ -4,13 +4,14 @@ import { fileURLToPath } from 'node:url';
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-// An explicit list keeps server code, dependency metadata, tests, and local secrets
-// out of a public upload, even when new files are added elsewhere in the repo.
+                                                                                    
+                                                                               
 export const staticFiles = Object.freeze([
   'index.html', 'math.html', 'history.html', 'flyflix.html',
   'flyflix-provider.html', 'proxy-host.html', 'style.css', 'sw.js', '_headers',
   'apps/auk.html', 'apps/auk.js', 'apps/auk.css', 'apps/vox.html',
   'apps/desktop.html', 'apps/desktop.js', 'apps/desktop.css',
+  'apps/mochii-cloud.html', 'apps/mochii-cloud.css', 'apps/mochii-cloud.js', 'apps/mochii-cloud.data.js',
   'browser-tools/config.js', 'browser-tools/shell-entry.js', 'browser-tools/tools.js', 'browser-tools/tools.css',
   'browser-tools/runtime.js', 'browser-tools/remote-runtime.js',
   'browser-tools/proxy-network.js', 'browser-tools/proxy-host.js',
@@ -47,13 +48,13 @@ export async function buildStatic(rootDirectory = projectRoot) {
     copies.push([join(root, 'node_modules', packageName, source), destination]);
   }
 
-  // Validate every input before replacing a previous successful build.
+                                                                       
   for (const [source] of copies) {
     if (!(await lstat(source)).isFile()) throw new Error(`Static asset is not a regular file: ${source}`);
   }
 
-  // Only clear this project's literal dist directory. Never follow a symlink or
-  // junction to an unrelated directory when rebuilding on Windows or Linux.
+                                                                                
+                                                                            
   const previous = await lstat(output).catch(error => {
     if (error.code === 'ENOENT') return null;
     throw error;
@@ -69,7 +70,7 @@ export async function buildStatic(rootDirectory = projectRoot) {
     await mkdir(dirname(target), { recursive: true });
     await copyFile(source, target);
   }
-  // Pages otherwise treats missing paths as SPA routes and serves index.html.
+                                                                              
   await writeFile(join(output, '404.html'), notFound);
   return { directory: output, files: copies.length + 1 };
 }

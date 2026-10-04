@@ -29,8 +29,8 @@ function validInfo(data) {
   return true;
 }
 
-// Dependencies are injected so the same parser, limits, cleanup, and TCP data
-// path run under both Workers and deterministic Node tests.
+                                                                              
+                                                            
 export function attachWisp(ws, { connect, resolve, version2 = false, limits = LIMITS,
   setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
   const streams = new Map();
@@ -50,7 +50,7 @@ export function attachWisp(ws, { connect, resolve, version2 = false, limits = LI
     queued -= stream.queued;
     stream.queued = 0;
     stream.queue.length = 0;
-    // close() aborts pending reads/writes too. Consume rejected promises.
+                                                                          
     try { Promise.resolve(stream.socket?.close()).catch(() => {}); } catch {}
     if (reason !== undefined) send(packet(4, stream.id, Uint8Array.of(reason)));
   };
@@ -78,8 +78,8 @@ export function attachWisp(ws, { connect, resolve, version2 = false, limits = LI
         if (stream.closed) return;
         stream.queued -= data.byteLength;
         queued -= data.byteLength;
-        // Absolute Wisp credit is replenished only after the entire granted
-        // window drains, avoiding races with frames still in flight.
+                                                                            
+                                                                     
         if (++stream.acknowledged === limits.window) {
           stream.acknowledged = 0;
           stream.credit += limits.window;
@@ -105,7 +105,7 @@ export function attachWisp(ws, { connect, resolve, version2 = false, limits = LI
       if (!isPublicAddress(address)) { closeStream(stream, CLOSED.blocked); return; }
       const socket = connect({ hostname: address, port }, { secureTransport: 'off', allowHalfOpen: false });
       stream.socket = socket;
-      // Listen immediately, including when opened fails before reading starts.
+                                                                               
       socket.closed.catch(() => closeStream(stream, CLOSED.network));
       await socket.opened;
       if (stream.closed || closed) return;
@@ -154,7 +154,7 @@ export function attachWisp(ws, { connect, resolve, version2 = false, limits = LI
         void start(id, hostname, port);
       } else if (type === 2) {
         const stream = streams.get(id);
-        if (!stream) return; // TCP close can race already in-flight client DATA.
+        if (!stream) return;                                                     
         const payload = data.subarray(5);
         if (--stream.credit < 0 || queued + payload.byteLength > limits.queued) { shutdown(1008, 'Input queue limit'); return; }
         if (!account(payload.byteLength)) return;

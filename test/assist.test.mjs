@@ -69,7 +69,7 @@ test('slow request bodies expire after ten seconds and cancel without starting i
   });
   const pending = handleAssist(slowRequest, env({ AI: { run: async () => { inferenceCalls++; return { response: 'Must not run' }; } } }));
   pending.then(() => { completed = true; });
-  // Let both rate checks finish and the body reader consume its first chunk.
+                                                                             
   for (let turn = 0; turn < 10; turn++) await Promise.resolve();
   t.mock.timers.tick(9999);
   await Promise.resolve();

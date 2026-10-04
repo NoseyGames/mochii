@@ -1,4 +1,4 @@
-// The tools run in the viewer's same-origin document. No code is sent elsewhere.
+                                                                                 
 const MAX_TEXT = 5000;
 const MAX_CHILDREN = 250;
 const COMPUTED_PROPERTIES = [
@@ -12,7 +12,7 @@ function truncate(value, limit = MAX_TEXT) {
   return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
 }
 
-// Read descriptors instead of values so logging an object never runs its getters.
+                                                                                  
 export function formatValue(value) {
   const seen = new WeakSet();
   let budget = MAX_TEXT;
@@ -33,7 +33,7 @@ export function formatValue(value) {
       case 'boolean': return write(String(item));
       case 'function': {
         let name = '';
-        try { name = Object.getOwnPropertyDescriptor(item, 'name')?.value || ''; } catch { /* Revoked proxy. */ }
+        try { name = Object.getOwnPropertyDescriptor(item, 'name')?.value || ''; } catch {                      }
         return write(`[Function${typeof name === 'string' && name ? `: ${name}` : ''}]`);
       }
     }
@@ -50,7 +50,7 @@ export function formatValue(value) {
         if (typeof name === 'string' && name !== 'Object') label = `${name} `;
       }
       if (depth >= 3) return write(array ? '[…]' : `${label}{…}`);
-      // Errors keep their useful message; stack text can contain many thousands of characters.
+                                                                                               
       if (/Error $/.test(label) && typeof descriptors.message?.value === 'string') {
         return write(`${label.trim()}: ${descriptors.message.value}`);
       }
@@ -95,7 +95,7 @@ export function attachRuntime(targetWindow, { onConsole = () => {}, onSelect = (
   function emit(level, args) {
     if (disposed || reporting) return;
     reporting = true;
-    try { onConsole({ level, args, time: Date.now() }); } catch { /* Tools must not interrupt the page. */ }
+    try { onConsole({ level, args, time: Date.now() }); } catch {                                          }
     finally { reporting = false; }
   }
 
@@ -103,13 +103,13 @@ export function attachRuntime(targetWindow, { onConsole = () => {}, onSelect = (
     if (navigationReported || disposed) return;
     navigationReported = true;
     dispose();
-    try { onNavigate(); } catch { /* Navigation must continue. */ }
+    try { onNavigate(); } catch {                                 }
   }
 
   function ensureDocument() {
     if (disposed) throw new Error('This page has changed. Wait for it to finish loading and try again.');
     let current;
-    try { current = targetWindow.document; } catch { /* Cross-origin navigation. */ }
+    try { current = targetWindow.document; } catch {                                }
     if (current !== document) {
       reportNavigation();
       throw new Error('This page has changed. Wait for it to finish loading and try again.');
@@ -129,7 +129,7 @@ export function attachRuntime(targetWindow, { onConsole = () => {}, onSelect = (
       Object.defineProperty(targetWindow, '$0', { configurable: true, enumerable: false, get: selectedGetter });
       installedSelected = true;
     }
-  } catch { /* An existing locked page property remains intact. */ }
+  } catch {                                                        }
 
   const pageConsole = targetWindow.console;
   for (const level of ['log', 'info', 'warn', 'error', 'debug', 'clear', 'assert', 'table']) {
@@ -151,7 +151,7 @@ export function attachRuntime(targetWindow, { onConsole = () => {}, onSelect = (
         if (originalDescriptor) Object.defineProperty(pageConsole, level, originalDescriptor);
         else delete pageConsole[level];
       });
-    } catch { /* A locked console method should not disable the other tools. */ }
+    } catch {                                                                   }
   }
 
   function onError(event) {
@@ -241,14 +241,14 @@ export function attachRuntime(targetWindow, { onConsole = () => {}, onSelect = (
     overlay?.remove();
     overlay = null;
     if (wasPicking) {
-      try { onPickEnd(); } catch { /* Picking must stop even if the toolbar cannot update. */ }
+      try { onPickEnd(); } catch {                                                            }
     }
   }
 
   function select(element) {
     ensureElement(element);
     selected = element;
-    try { onSelect(element); } catch { /* Selection should survive a rendering error. */ }
+    try { onSelect(element); } catch {                                                   }
     return element;
   }
 
@@ -363,19 +363,19 @@ export function attachRuntime(targetWindow, { onConsole = () => {}, onSelect = (
     if (disposed) return;
     disposed = true;
     stopPicking();
-    // A WindowProxy can become cross-origin before its iframe load event reaches
-    // the parent. Release everything still accessible without masking that load.
+                                                                                 
+                                                                                 
     for (const [type, listener] of [['error', onError], ['unhandledrejection', onRejection], ['pagehide', reportNavigation]]) {
-      try { targetWindow.removeEventListener(type, listener); } catch { /* The old document has gone away. */ }
+      try { targetWindow.removeEventListener(type, listener); } catch {                                       }
     }
-    for (const restore of consoleRestores) { try { restore(); } catch { /* The page may have locked a method since attachment. */ } }
+    for (const restore of consoleRestores) { try { restore(); } catch {                                                           } }
     if (installedSelected) {
       try {
         if (Object.getOwnPropertyDescriptor(targetWindow, '$0')?.get === selectedGetter) {
           if (selectedDescriptor) Object.defineProperty(targetWindow, '$0', selectedDescriptor);
           else delete targetWindow.$0;
         }
-      } catch { /* A navigation may already have discarded the property. */ }
+      } catch {                                                             }
     }
     selected = null;
     edits.length = 0;
