@@ -28,7 +28,9 @@ test('production and local static hosts share an immutable server list without A
       assert.equal(config.proxyOrigin, host);
       assert.equal(config.shellOrigins[0], app);
       assert.equal(config.requiresAuthentication, false);
-      assert(config.wispEndpoints.length > 0 && config.wispEndpoints.length <= 15);
+      assert.equal(config.wispEndpoints.length, 30);
+      assert.equal(config.maxWispBackups, 31);
+      assert.equal(new Set(config.wispEndpoints.map(entry => new URL(entry.url).href)).size, config.wispEndpoints.length);
       assert(Object.isFrozen(config.wispEndpoints));
       for (const endpoint of config.wispEndpoints) {
         assert(Object.isFrozen(endpoint));
@@ -45,6 +47,18 @@ test('unknown mirrors fail closed and never try parsing a static fallback as JSO
   const fixture = context('https://unknown.example/math');
   await assert.rejects(fixture.page.MonkehConfig.fetchConfig(), /not configured/);
   assert.equal(fixture.requests, 0);
+});
+
+test('the owner-supplied endpoint paths are preserved and only the limited Worker is fallback-only', async () => {
+  const config = await context(shell + '/math').page.MonkehConfig.fetchConfig();
+  const urls = config.wispEndpoints.map(entry => entry.url);
+  for (const url of ['wss://wisp.mercurywork.shop/', 'wss://wispserver.dev/wisp', 'wss://admin.proxy.hydrovolter.com/scramjet/wisp/',
+    'wss://henhouse.social/relay', 'wss://nostr.me/relay', 'wss://anura.pro/', 'wss://anura.pro/wisp/', 'wss://wisp.solife.me/']) {
+    assert(urls.includes(url), url);
+  }
+  const fallbacks = config.wispEndpoints.filter(entry => entry.fallback);
+  assert.equal(fallbacks.length, 1);
+  assert.equal(fallbacks[0].url, proxy.replace('https:', 'wss:') + '/wisp/');
 });
 
 test('shell entry from proxy or Pages previews goes to canonical app preserving navigation', () => {

@@ -32,8 +32,20 @@ function harness(saved = []) {
       removeAttribute(name) { attrs.delete(name); },
       getAttribute: name => attrs.get(name) ?? null,
       hasAttribute: name => attrs.has(name),
-      append(...children) { this.children.push(...children); },
-      replaceChildren(...children) { this.children = children; },
+      append(...children) {
+        for (const child of children) {
+          if (child.isFragment) { this.append(...child.children.slice()); continue; }
+          child.remove(); child.parentNode = this; this.children.push(child);
+        }
+      },
+      replaceChildren(...children) {
+        for (const child of this.children) child.parentNode = null;
+        this.children = []; this.append(...children);
+      },
+      remove() {
+        if (this.parentNode) this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1);
+        this.parentNode = null;
+      },
       getBoundingClientRect() { return { height: 370, width: parseFloat(this.style.values.get('--tools-width')) || 420 }; },
       scrollIntoView(options) { this.scrolled = options; },
       setPointerCapture() {},
@@ -46,7 +58,7 @@ function harness(saved = []) {
   const get = id => { if (!ids.has(id)) ids.set(id, node()); return ids.get(id); };
   const tabs = ['console', 'inspector', 'scripts'].map(name => ({ ...node(), dataset: { toolTab: name } }));
   const document = {
-    getElementById: get, createElement: node, createDocumentFragment: node,
+    getElementById: get, createElement: node, createDocumentFragment: () => Object.assign(node(), { isFragment: true }),
     querySelectorAll: selector => selector === '[data-tool-tab]' ? tabs : allNodes.filter(item => item.className === 'bt-tree-node'),
   };
   let storageValue = JSON.stringify(saved);
@@ -67,7 +79,9 @@ function harness(saved = []) {
       document: { documentElement: node() }, callbacks, evaluated: [], disposed: false, isRemote: true, hasHandshake: false,
       evaluate(code) { this.evaluated.push(code); return this.result; },
       dispose() { this.disposed = true; },
-      getChildren: item => item.children || [], stopPicking() {}, async startPicking() {}, async refreshTree() {}, async reload() { this.reloaded = true; }, async reconnect() { this.reconnected = true; },
+      getChildren: item => item.children || [], stopPicking() {}, async startPicking() {},
+      async refreshTree() { this.refreshes = (this.refreshes || 0) + 1; this.document.documentElement ||= node(); },
+      async reload() { this.reloaded = true; }, async reconnect() { this.reconnected = true; },
       async describe(item) { return item.info || { tag: item.localName, selector: item.id || item.localName, attributes: [], styles: [], text: 'Original', rect: { width: 10, height: 20 }, canDelete: true, canUndo: false }; },
       async navigate(url) { this.navigated = url; return true; },
     };
@@ -90,6 +104,7 @@ function harness(saved = []) {
     if (!existingDocument && sessions.length) {
       const session = sessions[sessions.length - 1];
       session.hasHandshake = true;
+      if (details.withoutTree) session.document.documentElement = null;
       session.callbacks.onPage({ url, title: details.title || 'Example', isError: details.title === 'Error' });
       await flush();
     }
@@ -98,6 +113,8 @@ function harness(saved = []) {
   function text(item) { return item.textContent + item.children.map(text).join(' '); }
   return {
     window, get, connect, sessions, storage, confirmations, node,
+    tab: name => tabs.find(tab => tab.dataset.toolTab === name),
+    createdNodes: () => allNodes.length,
     text: id => text(get(id)),
     blockWrites() { failWrites = true; },
     rejectDiscard() { confirmResult = false; },
@@ -417,7 +434,134 @@ test('closing clears console logs by default and honors the explicit retain pref
   app.window.MonkehPrivacy = { get: () => ({ clearConsoleOnClose: false }) };
   app.sessions.at(-1).callbacks.onConsole({ level: 'log', args: ['retained log'] });
   app.window.MonkehTools.closeViewer();
+  await app.get('browser-tools-toggle').fire('click');
   assert.match(app.text('console-output'), /retained log/);
   app.window.MonkehTools.clearConsole();
   assert.doesNotMatch(app.text('console-output'), /retained log/);
+});
+
+test('hidden console captures only the newest 500 messages without scheduling or rendering rows', async () => {
+  const app = harness();
+  await app.get('tools-close').fire('click');
+  await app.connect('https://example.com/');
+  const scheduled = [];
+  app.window.requestAnimationFrame = callback => scheduled.push(callback);
+  const initialNodes = app.createdNodes();
+  for (let index = 0; index < 600; index++) {
+    app.sessions[0].callbacks.onConsole({ level: 'log', args: [`captured-${index}`] });
+  }
+  assert.equal(scheduled.length, 0);
+  assert.equal(app.createdNodes(), initialNodes);
+  assert.doesNotMatch(app.text('console-output'), /captured-/);
+  await app.get('browser-tools-toggle').fire('click');
+  assert.equal(app.get('console-output').children.length, 500);
+  assert.doesNotMatch(app.text('console-output'), /captured-99\b/);
+  assert.match(app.text('console-output'), /captured-100\b/);
+  assert.match(app.text('console-output'), /captured-599\b/);
+
+  await app.tab('scripts').fire('click');
+  const scriptTabNodes = app.createdNodes();
+  app.sessions[0].callbacks.onConsole({ level: 'error', args: ['captured-in-another-tab'] });
+  assert.equal(app.createdNodes(), scriptTabNodes);
+  assert.equal(scheduled.length, 0);
+  await app.tab('console').fire('click');
+  assert.match(app.text('console-output'), /captured-in-another-tab/);
+  assert.equal(app.get('console-output').children.length, 500);
+});
+
+test('visible console appends rows, retains existing row identity and scroll position, and updates filters', async () => {
+  const app = harness();
+  await app.connect('https://example.com/');
+  app.window.MonkehTools.clearConsole();
+  const output = app.get('console-output');
+  output.scrollHeight = 1000; output.clientHeight = 100; output.scrollTop = 30;
+  const log = (text, level = 'log') => app.sessions[0].callbacks.onConsole({ level, args: [text] });
+  log('first');
+  const firstRow = output.children[0];
+  log('second', 'error');
+  const secondRow = output.children[1];
+  assert.equal(output.children[0], firstRow, 'new messages must not recreate existing rows');
+  assert.equal(output.scrollTop, 30, 'reading older messages must not jump to the bottom');
+  for (let index = 0; index < 499; index++) log(`later-${index}`);
+  assert.equal(output.children.length, 500);
+  assert.equal(output.children[0], secondRow, 'trimming removes only the expired row');
+  assert.equal(firstRow.parentNode, null);
+
+  app.get('console-level').value = 'error';
+  await app.get('console-level').fire('change');
+  assert.equal(output.children.length, 1);
+  assert.match(app.text('console-output'), /second/);
+  app.get('console-filter').value = 'missing';
+  await app.get('console-filter').fire('input');
+  assert.match(app.text('console-output'), /No messages match/);
+  app.get('console-level').value = 'all';
+  app.get('console-filter').value = 'LATER-498';
+  await app.get('console-filter').fire('input');
+  assert.match(app.text('console-output'), /later-498/);
+  assert.equal(output.children.length, 1);
+});
+
+test('a queued console frame stays dormant after closing and privacy clear cannot resurrect logs', async () => {
+  const app = harness();
+  await app.connect('https://example.com/');
+  app.window.MonkehTools.clearConsole();
+  const scheduled = [];
+  app.window.requestAnimationFrame = callback => scheduled.push(callback);
+  app.sessions[0].callbacks.onConsole({ level: 'log', args: ['private pending message'] });
+  assert.equal(scheduled.length, 1);
+  await app.get('tools-close').fire('click');
+  const initialNodes = app.createdNodes();
+  scheduled.shift()();
+  assert.equal(app.createdNodes(), initialNodes);
+  app.window.MonkehTools.clearConsole();
+  await app.get('browser-tools-toggle').fire('click');
+  assert.doesNotMatch(app.text('console-output'), /private pending message/);
+});
+
+test('inspector loads an omitted tree only on demand, including navigation with Inspect already open', async () => {
+  const app = harness();
+  await app.get('tools-close').fire('click');
+  await app.connect('https://example.com/', null, { withoutTree: true });
+  const session = app.sessions[0];
+  assert.equal(session.refreshes, undefined);
+  await app.get('browser-tools-toggle').fire('click');
+  assert.equal(session.refreshes, undefined, 'opening Console must not ask the page for a DOM snapshot');
+  await app.tab('inspector').fire('click');
+  assert.equal(session.refreshes, 1);
+  assert.match(app.text('inspector-tree'), /html/);
+
+  session.document.documentElement = null;
+  session.callbacks.onPage({ url: 'https://example.com/next', title: 'Next' });
+  await flush();
+  assert.equal(session.refreshes, 2, 'the selected inspector must fetch the new page tree');
+  await app.get('tools-close').fire('click');
+  session.document.documentElement = null;
+  session.callbacks.onPage({ url: 'https://example.com/last', title: 'Last' });
+  await flush();
+  assert.equal(session.refreshes, 2, 'a hidden inspector must defer navigation snapshots');
+  await app.get('browser-tools-toggle').fire('click');
+  assert.equal(session.refreshes, 3);
+});
+
+test('inspector coalesces pending snapshots and skips rendering when the user leaves Inspect', async () => {
+  const app = harness();
+  await app.connect('https://example.com/', null, { withoutTree: true });
+  const session = app.sessions[0];
+  let finish;
+  let requests = 0;
+  session.refreshTree = () => {
+    requests++;
+    return new Promise(resolve => { finish = () => { session.document.documentElement = app.node(); resolve(); }; });
+  };
+  await app.tab('inspector').fire('click');
+  await app.tab('inspector').fire('click');
+  assert.equal(requests, 1);
+  await app.tab('scripts').fire('click');
+  const priorTree = app.get('inspector-tree').children[0];
+  finish();
+  await flush();
+  assert.equal(app.get('inspector-tree').children[0], priorTree);
+  await app.tab('inspector').fire('click');
+  assert.equal(requests, 1, 'a completed snapshot can render when Inspect returns');
+  assert.match(app.text('inspector-tree'), /html/);
 });

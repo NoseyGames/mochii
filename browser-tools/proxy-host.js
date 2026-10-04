@@ -23,6 +23,9 @@ let disposed = false;
 let nodes = new Map();
 let ids = new WeakMap();
 let nextNodeId = 0;
+let documentWatchTimer;
+let observedDocument;
+let readyListener;
 
 function httpUrl(value) {
   if (typeof value !== 'string' || value.length > 4096) throw new Error('Invalid page address.');
@@ -40,6 +43,13 @@ function showError(error) {
   document.getElementById('status-title').textContent = 'Unable to open this page';
   document.getElementById('status-message').textContent = error.message || String(error);
   retry.hidden = false;
+}
+
+function showProgress(message) {
+  status.hidden = false;
+  document.getElementById('status-title').textContent = 'Opening page';
+  document.getElementById('status-message').textContent = message;
+  retry.hidden = true;
 }
 
 function nodeId(node) {
@@ -156,7 +166,10 @@ async function command(method, params) {
     case 'navigate': {
       const target = httpUrl(params.url);
       if (!config || config.shellOrigins.includes(new URL(target).origin) || new URL(target).origin === location.origin) throw new Error('App pages cannot be opened as proxy destinations.');
-      return await navigate(target);
+      await navigate(target);
+      // A failed connection is handled in this host's retry notice. Preserve
+      // its current page instead of asking the shell to destroy it and retry.
+      return !disposed;
     }
     case 'reconnect': await network?.connect({ force: true }); return null;
     default: throw new Error('Unsupported browser command.');
@@ -197,11 +210,21 @@ function decodedPageUrl() {
   return httpUrl(__uv$config.decodeUrl(url.href.slice(location.origin.length + __uv$config.prefix.length)));
 }
 
-frame.addEventListener('load', () => {
+function stopDocumentWatch() {
+  clearTimeout(documentWatchTimer);
+  documentWatchTimer = undefined;
+  observedDocument?.removeEventListener('DOMContentLoaded', readyListener);
+  observedDocument = readyListener = undefined;
+}
+
+function connectDocument() {
+  if (disposed) return false;
   let doc;
   try {
     doc = frame.contentDocument;
-    if (!doc?.documentElement || frame.contentWindow.location.href === 'about:blank') return;
+    if (!doc?.documentElement || frame.contentWindow.location.href === 'about:blank') return false;
+    if (runtime?.document === doc) return true;
+    stopDocumentWatch();
     const generation = ++documentGeneration;
     activeRequests.clear();
     runtime?.dispose();
@@ -214,22 +237,61 @@ frame.addEventListener('load', () => {
       onPickEnd: () => send('pickEnd', {}),
       onNavigate: () => {
         if (generation !== documentGeneration) return;
+        documentGeneration++;
+        activeRequests.clear();
         runtime = null; latestPage = null;
         send('pagehide', {});
+        showProgress('The page is loading. You can use content as it appears.');
+        watchDocument(doc);
       }
     });
     const isError = Boolean(doc.getElementById('errorTrace') && doc.getElementById('errorTitle'));
-    latestPage = { url: decodedPageUrl(), title: String(doc.title).slice(0, 300), isError, tree: treeSnapshot() };
+    // Build the bounded DOM snapshot only when Inspect requests it. Large
+    // pages become usable without waiting for an inspector traversal.
+    latestPage = { url: decodedPageUrl(), title: String(doc.title).slice(0, 300), isError };
     status.hidden = true;
     send('page', latestPage);
     if (isError) network?.reportFailure().catch(() => {});
+    return true;
   } catch (error) {
     runtime?.dispose(); runtime = null;
     send('pagehide', {});
     // A site may navigate directly to a different origin; the page can remain
     // visible, but it cannot expose tools through this origin's bridge.
     if (doc) showError(error);
+    return false;
   }
+}
+
+function watchDocument(previousDocument) {
+  stopDocumentWatch();
+  let attempts = 0;
+  function check() {
+    documentWatchTimer = undefined;
+    if (disposed) return;
+    try {
+      const doc = frame.contentDocument;
+      if (doc && doc !== previousDocument && doc.documentElement && frame.contentWindow.location.href !== 'about:blank') {
+        if (doc.readyState !== 'loading') { connectDocument(); return; }
+        observedDocument = doc;
+        readyListener = () => { if (frame.contentDocument === doc && !disposed) connectDocument(); };
+        doc.addEventListener('DOMContentLoaded', readyListener, { once: true });
+        return;
+      }
+    } catch { /* Direct cross-origin navigation stays visible without tools. */ }
+    // Expiry never stops or replaces a slow page. Native load remains the
+    // fallback if its document does not become accessible during this watch.
+    if (++attempts <= 120) documentWatchTimer = setTimeout(check, attempts < 20 ? 100 : 500);
+  }
+  documentWatchTimer = setTimeout(check, 100);
+}
+
+frame.addEventListener('load', () => {
+  if (disposed) return;
+  try { if (frame.contentWindow.location.href === 'about:blank') return; } catch { /* Cross-origin pages remain visible without tools. */ }
+  stopDocumentWatch();
+  if (connectDocument()) status.hidden = true;
+  else if (!frame.contentDocument) status.hidden = true;
 });
 
 function deadline(promise, label, milliseconds = 15000) {
@@ -260,15 +322,14 @@ async function start() {
     if (!config) {
       const loadedConfig = await globalThis.MonkehConfig.fetchConfig();
       if (!Array.isArray(loadedConfig.shellOrigins) || loadedConfig.proxyOrigin !== location.origin ||
-          !Array.isArray(loadedConfig.wispEndpoints) || loadedConfig.wispEndpoints.length < 1 || loadedConfig.wispEndpoints.length > 15) throw new Error('The isolated proxy origin is misconfigured.');
+          !Array.isArray(loadedConfig.wispEndpoints) || loadedConfig.wispEndpoints.length < 1 || loadedConfig.wispEndpoints.length > 32) throw new Error('The isolated proxy origin is misconfigured.');
       config = loadedConfig;
       // Ask the shell to retry its init message now that allowed origins loaded.
       for (const origin of config.shellOrigins) window.parent.postMessage({ type: 'monkeh-proxy:ready' }, origin);
     }
-    await controlledWorker();
     if (disposed) throw new Error('This browser view was closed.');
     if (!network) {
-      if (!Array.isArray(config.wispEndpoints) || config.wispEndpoints.length < 1 || config.wispEndpoints.length > 15) throw new Error('Invalid server list.');
+      if (!Array.isArray(config.wispEndpoints) || config.wispEndpoints.length < 1 || config.wispEndpoints.length > 32) throw new Error('Invalid server list.');
       const endpoints = config.wispEndpoints.map(entry => {
         const url = new URL(entry.url, location.href);
         if (url.protocol === 'http:') url.protocol = 'ws:';
@@ -276,7 +337,8 @@ async function start() {
         return url.href;
       });
       transport = new BareMux.BareMuxConnection('/bearmux/worker.js');
-      network = createProxyNetwork({ endpoints,
+      const fallbackEndpoints = endpoints.filter((_, index) => config.wispEndpoints[index].fallback === true);
+      network = createProxyNetwork({ endpoints, fallbackEndpoints,
         // Preserve the actual promise: a timeout wrapper cannot cancel the
         // SharedWorker mutation and could let a stale activation win later.
         activate: url => transport.setTransport('/bearmux/epoxy/index.mjs', [{ wisp: url }]),
@@ -284,7 +346,8 @@ async function start() {
       });
       if (navigator.onLine === false) await network.setOnline(false);
     }
-    await network.connect();
+    // Start independent setup together; navigation still waits for both.
+    await Promise.all([controlledWorker(), network.connect()]);
   })().finally(() => { starting = null; });
   return starting;
 }
@@ -293,25 +356,33 @@ async function navigate(url = null) {
   const generation = ++navigationGeneration;
   try {
     if (disposed) return false;
-    status.hidden = false;
-    retry.hidden = true;
+    showProgress('Connecting to the fastest available proxy…');
     const targetUrl = httpUrl(url ?? requestedUrl ?? decodeURIComponent(location.hash.slice(1)));
     requestedUrl = targetUrl;
     await start();
     if (disposed || generation !== navigationGeneration) return false;
     if (url !== null) window.history?.replaceState(null, '', '#' + encodeURIComponent(targetUrl));
+    const previousDocument = frame.contentDocument;
     frame.src = __uv$config.prefix + __uv$config.encodeUrl(targetUrl);
+    showProgress('The page is loading. You can use content as it appears.');
+    watchDocument(previousDocument);
     return true;
   } catch (error) {
-    if (!disposed && generation === navigationGeneration) showError(error);
+    if (!disposed && generation === navigationGeneration) {
+      showError(error);
+      // The shell paused its controls when requesting navigation. Restore
+      // the still-visible document's metadata when preparation fails.
+      if (runtime && latestPage) send('page', latestPage);
+    }
     return false;
   }
 }
 
 retry.addEventListener('click', () => navigate());
+document.getElementById('dismiss-status').addEventListener('click', () => { status.hidden = true; });
 window.addEventListener('hashchange', () => { requestedUrl = null; void navigate(); });
 window.addEventListener('offline', () => network?.setOnline(false).catch(() => {}));
 window.addEventListener('online', () => network?.setOnline(true).catch(() => {}));
-window.addEventListener('pagehide', () => { disposed = true; navigationGeneration++; runtime?.dispose(); network?.dispose(); port?.close(); });
+window.addEventListener('pagehide', () => { disposed = true; navigationGeneration++; stopDocumentWatch(); runtime?.dispose(); network?.dispose(); port?.close(); });
 window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
 void navigate();

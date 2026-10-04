@@ -188,7 +188,7 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
           break;
         case 'network':
           callbacks.onNetwork?.({ status: text(event.status, 40), activeEndpoint: text(event.activeEndpoint, 8192),
-            configuredCount: Number.isSafeInteger(event.configuredCount) ? Math.max(0, Math.min(15, event.configuredCount)) : 0,
+            configuredCount: Number.isSafeInteger(event.configuredCount) ? Math.max(0, Math.min(32, event.configuredCount)) : 0,
             error: text(event.error, 1000) });
           break;
         // Unknown events are inert. No page message can navigate the shell,

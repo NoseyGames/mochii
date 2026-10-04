@@ -5,9 +5,40 @@
     shellOrigin: 'https://testingproductionubgdontgo.pages.dev',
     proxyOrigin: 'https://monkeh.1234-imwatchingyouopenthedoor.workers.dev',
     wispEndpoints: Object.freeze([
-      // Original Monkeh endpoint, also published by the Anura project.
+      // Supplied by the site owner with production-use permission. Preserve
+      // exact paths: a WebSocket URL need not end in a slash. The client races
+      // valid Wisp greetings, so unavailable or unrelated relays are skipped.
+      Object.freeze({ name: 'Mercury', url: 'wss://wisp.mercurywork.shop/' }),
+      Object.freeze({ name: 'GL Series', url: 'wss://glseries.net/wisp/' }),
+      Object.freeze({ name: 'Wispserver.dev', url: 'wss://wispserver.dev/wisp' }),
+      Object.freeze({ name: 'Homebrewer', url: 'wss://seminar.drama.english.assignment.literature.homebrewer.org/wisp/' }),
+      Object.freeze({ name: 'Hydrovolter', url: 'wss://admin.proxy.hydrovolter.com/scramjet/wisp/' }),
+      Object.freeze({ name: 'Owoellen', url: 'wss://scram.owoellen.rocks/wisp/' }),
+      Object.freeze({ name: 'America History', url: 'wss://math.americahistory.online/wisp/' }),
+      Object.freeze({ name: 'Lichology', url: 'wss://lichology.com/wisp/' }),
+      Object.freeze({ name: 'Mages', url: 'wss://mages.io/wisp/' }),
+      Object.freeze({ name: 'Onlinegames', url: 'wss://onlinegames.ro/wisp/' }),
+      Object.freeze({ name: 'RHW', url: 'wss://wisp.rhw.one/ws/' }),
+      Object.freeze({ name: 'Wisp-server.com', url: 'wss://wisp-server.com/wisp/' }),
+      Object.freeze({ name: 'Classroom', url: 'wss://wisp.classroom.lat/' }),
+      Object.freeze({ name: 'Radius', url: 'wss://radiusproxy.app/wisp/' }),
+      Object.freeze({ name: 'Anura root', url: 'wss://anura.pro/' }),
+      Object.freeze({ name: 'Phantom', url: 'wss://phantom.lol/wisp/' }),
+      Object.freeze({ name: 'Axis Education', url: 'wss://geometry.axiseducation.one/' }),
+      Object.freeze({ name: 'OnlineOS', url: 'wss://onlineosdev.nl/' }),
+      Object.freeze({ name: 'Webmath', url: 'wss://webmath.help/wisp/' }),
+      Object.freeze({ name: 'Explore Chemistry', url: 'wss://explorechemistry.online/wisp/' }),
+      Object.freeze({ name: 'Quantum Chemistry', url: 'wss://quantumchemistry.club/wisp/' }),
+      Object.freeze({ name: 'Henhouse', url: 'wss://henhouse.social/relay' }),
+      Object.freeze({ name: 'Dragon Orange', url: 'wss://dragon-orange.exe.xyz/' }),
+      Object.freeze({ name: 'Ymir', url: 'wss://strfry.ymir.cloud/' }),
+      Object.freeze({ name: 'Antiprimal', url: 'wss://antiprimal.net/' }),
+      Object.freeze({ name: 'Nostr', url: 'wss://nostr.me/relay' }),
+      Object.freeze({ name: 'Crostr', url: 'wss://relay.crostr.com/' }),
+      Object.freeze({ name: 'Solife', url: 'wss://wisp.solife.me/' }),
+      // Keep the original working path too; it is an alias, not another server.
       Object.freeze({ name: 'Anura', url: 'wss://anura.pro/wisp/' }),
-      Object.freeze({ name: 'Monkeh backup (limited)', url: 'wss://monkeh.1234-imwatchingyouopenthedoor.workers.dev/wisp/' }),
+      Object.freeze({ name: 'Monkeh backup (limited)', url: 'wss://monkeh.1234-imwatchingyouopenthedoor.workers.dev/wisp/', fallback: true }),
     ]),
     windowsVm: null,
   });
@@ -27,7 +58,7 @@
     }
     return Object.freeze({
       mode: 'static', proxyOrigin, shellOrigins: Object.freeze([shellOrigin]),
-      wispEndpoints: deployment.wispEndpoints, maxWispBackups: 14,
+      wispEndpoints: deployment.wispEndpoints, maxWispBackups: 31,
       requiresAuthentication: false, windowsVm: deployment.windowsVm,
     });
   }

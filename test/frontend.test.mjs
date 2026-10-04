@@ -27,7 +27,7 @@ function createPage({ protocol = 'http:', storageUnavailable = false } = {}) {
   function makeElement() {
     const classes = new Set();
     return {
-      value: '', innerHTML: '', textContent: '', src: '', srcdoc: '', children: [],
+      value: '', innerHTML: '', textContent: '', src: 'about:blank', srcdoc: '', children: [],
       classList: {
         add(name) { classes.add(name); },
         remove(name) { classes.delete(name); },
@@ -137,9 +137,48 @@ test('search waits for isolated origin configuration and then navigates the remo
   const navigation = page.openViewer('Search', 'Web', 'https://example.com/', true);
   await nextTurn();
   assert.equal(element('viewer-frame').src, 'about:blank');
+  assert.equal(element('viewer-frame').srcdoc, '', 'opening a page must not insert a full-page loading document');
+  assert.equal(element('viewer-progress').hidden, false);
   config.resolve(configResponse({ proxyOrigin: 'https://proxy.example.org', wispEndpoints: [{ name: 'Primary', url: '/wisp/' }] }));
   await navigation;
   assert.equal(element('viewer-frame').src, 'https://proxy.example.org/proxy-host.html#https%3A%2F%2Fexample.com%2F');
+});
+
+test('preparing a new proxy page leaves the current local app interactive until navigation is ready', async () => {
+  const { page, element } = createPage();
+  const prepared = [];
+  page.MonkehTools = { prepareNavigation: url => prepared.push(url), expectDocument() {} };
+  await page.openViewer('Auk', '', '/apps/auk.html');
+  const response = deferred();
+  page.fetch = () => response.promise;
+  const pending = page.openViewer('Web', '', 'https://example.com/', true);
+  await nextTurn();
+  assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/auk.html');
+  assert.equal(element('viewer-frame').srcdoc, '');
+  assert.deepEqual(prepared, ['/apps/auk.html'], 'current tools stay attached during preparation');
+  response.resolve(configResponse({ proxyOrigin: 'http://localhost:3001', wispEndpoints: [{ url: '/wisp/' }] }));
+  await pending;
+  assert.equal(element('viewer-frame').src, 'http://localhost:3001/proxy-host.html#https%3A%2F%2Fexample.com%2F');
+  assert.equal(element('viewer-progress').hidden, true);
+});
+
+test('a failed or timed-out catalog request preserves the current page and offers a retry', async () => {
+  const { page, element } = createPage();
+  const prepared = [];
+  page.MonkehTools = { prepareNavigation: url => prepared.push(url), expectDocument() {} };
+  await page.openViewer('Auk', '', '/apps/auk.html');
+  const request = deferred();
+  page.fetch = () => request.promise;
+  const pending = page.openViewer('Slow game', '', 'https://cdn.example/game.html');
+  assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/auk.html');
+  request.resolve({ ok: false, status: 504 });
+  await pending;
+  assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/auk.html');
+  assert.equal(element('viewer-frame').srcdoc, '');
+  assert.deepEqual(prepared, ['/apps/auk.html']);
+  assert.equal(element('viewer-progress').hidden, false);
+  assert.equal(element('viewer-progress-retry').hidden, false);
+  assert.match(element('viewer-progress-text').textContent, /504/);
 });
 
 test('accepted warm proxy navigation preserves the outer iframe and its document', async () => {

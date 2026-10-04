@@ -103,7 +103,7 @@ test('selection descriptions and network metadata are bounded and numeric dimens
   assert.equal(described.attributes.length, 100);
   assert.equal(described.attributes[0].name.length, 128);
   await app.send('network', { status: 'connected', activeEndpoint: 'x'.repeat(9000), configuredCount: 1000, error: '<b>text</b>' });
-  assert.equal(app.events.networks[0].configuredCount, 15);
+  assert.equal(app.events.networks[0].configuredCount, 32);
   assert.equal(app.events.networks[0].activeEndpoint.length, 8192);
 });
 

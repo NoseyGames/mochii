@@ -35,25 +35,34 @@ required for isolation; the public server still needs an internet connection.
 
 ## Servers and failover
 
-Edit `deployment.wispEndpoints` in `browser-tools/config.js`. It contains the
-original Anura endpoint, `wss://anura.pro/wisp/`, and the owned Monkeh Worker
-at `/wisp/` as a limited backup. The old Lunar hostname no longer resolved during
-verification and is excluded. Only include servers offered for public use or
-which you control; do not add arbitrary endpoints just to fill slots.
+Edit `deployment.wispEndpoints` in `browser-tools/config.js`. The list includes
+all 28 unique addresses supplied by the site owner with production-use permission,
+the original Anura `/wisp/` path, and the owned Monkeh Worker as a limited fallback.
+Exact endpoint paths are retained; a Wisp address does not need a trailing slash.
 
-The client supports a primary plus fourteen backups, validates a Wisp greeting,
-serializes transport changes, checks availability every 30 seconds and switches
-after two failures. **Retry** immediately rechecks the connection. It pauses
+The client supports 32 addresses and races eligible public endpoints concurrently.
+The first valid Wisp greeting whose transport activates wins; failed, timed-out,
+and non-Wisp connections are skipped. Unused probes are closed immediately.
+The limited Worker is tried only when no public endpoint can activate, because
+it cannot reach Cloudflare IP destinations. Transport changes are serialized.
+The client checks availability every 30 seconds and switches after two failures.
+**Retry** immediately races the connection again. It pauses
 while offline and resumes when the network returns. Switching connections cannot
 preserve TCP sessions; reload is manual so forms and uploads are not replayed.
 
 The owned backup cannot reach Cloudflare IP ranges and has bounded session,
 transfer and connection limits. It is suitable only for destinations that those
-limits permit. Fifteen available configuration slots do not mean fifteen live
-servers. Public operators can impose limits, block destinations or stop service.
+limits permit. Configured addresses are candidates, not a promise that every
+server is currently online or compatible. Public operators can impose limits,
+block destinations or stop service. See `docs/WISP-HOSTING.md` for probe results.
 Their policies govern outgoing traffic; the optional Node gateway's restrictions
 do not apply to those servers. The proxy host must be reachable as well as the
 server. The list is public code and must never contain credentials.
+
+Pages render and accept input while resources are still loading. A small status
+indicator replaces the full-page loading cover; a slow resource does not blank
+the page or replay navigation. Navigations reuse the existing proxy host when
+permissions allow. Console output stays bounded and avoids hidden DOM updates.
 
 ## Browser tools
 
@@ -69,7 +78,7 @@ Open a page, then select **Tools**. The right dock resizes with a drag or arrow 
   by claiming another URL. No `GM_*` extension APIs are provided.
 
 Tools operate on proxied pages, not shell apps or opaque catalog frames. Capture
-starts after page load, so early startup logs and nested cross-origin frames
+starts when the page document becomes available, so early startup logs and nested cross-origin frames
 are not included. These are embedded page tools, not native browser DevTools.
 
 ## Privacy and coding help

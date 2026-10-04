@@ -20,7 +20,7 @@ function node() {
 function port() {
   return { messages: [], starts: 0, closes: 0, postMessage(message) { this.messages.push(message); }, start() { this.starts++; }, close() { this.closes++; }, async request(message) { await this.onmessage?.({ data: message }); await flush(); } };
 }
-async function harness({ config: extraConfig = {}, evaluate = async code => `result: ${code}`, startup, fetchConfig } = {}) {
+async function harness({ config: extraConfig = {}, evaluate = async code => `result: ${code}`, startup, fetchConfig, workerReady = Promise.resolve() } = {}) {
   const allNodes = new Map();
   const get = id => {
     if (!allNodes.has(id)) allNodes.set(id, node());
@@ -33,7 +33,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   contextWindow.SharedWorker = class {};
   contextWindow.parent = { sent: [], postMessage(data, origin) { this.sent.push({ data, origin }); } };
   const location = { origin: proxyOrigin, href: proxyOrigin + '/proxy-host.html#' + encodeURIComponent('https://example.com/'), hash: '#' + encodeURIComponent('https://example.com/') };
-  const pageDoc = { title: 'Example', getElementById: () => null };
+  const pageDoc = { ...node(), title: 'Example', readyState: 'complete', getElementById: () => null };
   const root = { nodeType: 1, localName: 'html', id: '', className: '', children: [], ownerDocument: pageDoc };
   pageDoc.documentElement = root;
   pageDoc.querySelector = () => root;
@@ -47,6 +47,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   const runtimes = [];
   let activated = 0;
   let registrations = 0;
+  let treeReads = 0;
   let networkOptions;
   const network = { connects: 0, failures: 0, disposed: 0,
     async connect() { this.connects++; if (this.connects === 1) await networkOptions.activate('ws://127.0.0.1:3101/wisp/'); networkOptions.onStatus({ status: 'connected', activeEndpoint: 'ws://127.0.0.1:3101/wisp/', configuredCount: 1 }); return 'ws://127.0.0.1:3101/wisp/'; },
@@ -55,7 +56,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   const sandbox = {
     MonkehUseBackendConfig: true,
     window: contextWindow, document: doc, location, isSecureContext: true,
-    navigator: { onLine: true, serviceWorker: { async register() { registrations++; }, ready: Promise.resolve(), controller: {}, addEventListener() {}, removeEventListener() {} } },
+    navigator: { onLine: true, serviceWorker: { async register() { registrations++; }, ready: workerReady, controller: {}, addEventListener() {}, removeEventListener() {} } },
     URL, AbortSignal, AbortController, TextEncoder, TextDecoder, Map, WeakMap, Set, decodeURIComponent, encodeURIComponent,
     fetch: fetchConfig || (async () => new Response(JSON.stringify({ shellOrigins: [shellOrigin], proxyOrigin, wispEndpoints: [{ name: 'Primary', url: '/wisp/' }], ...extraConfig }), { headers: { 'Content-Type': 'application/json' } })),
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn, ms }); return id; }, clearTimeout(id) { timers.delete(id); },
@@ -69,7 +70,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
         async evaluate(code) { evaluated.push(code); return evaluate(code); },
         describe() { return { tag: 'html', attributes: [], styles: [], rect: { width: 10, height: 20 }, text: '', html: '' }; },
         select(element) { callbacks.onSelect(element); },
-        getChildren(element) { return element.children; },
+        getChildren(element) { treeReads++; return element.children; },
         setStyle() {}, startPicking() {}, stopPicking() {}, dispose() { this.disposed = true; },
       };
       runtimes.push(runtime);
@@ -85,7 +86,21 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
     return connection;
   }
   function loadPage() { frame.fire('load'); }
-  return { contextWindow, doc, get, frame, pageWindow, pageDoc, root, network, timers, evaluated, runtimes, init, loadPage, location, navigations, get activated() { return activated; }, get registrations() { return registrations; } };
+  function replaceDocument(readyState = 'complete') {
+    const next = { ...node(), title: 'Next', readyState, getElementById: () => null };
+    next.documentElement = { nodeType: 1, localName: 'html', id: '', className: '', children: [], ownerDocument: next };
+    next.querySelector = () => next.documentElement;
+    frame.contentDocument = pageWindow.document = next;
+    return next;
+  }
+  function tickWatch() {
+    const match = [...timers].find(([, timer]) => timer.ms <= 500);
+    if (!match) return false;
+    const [id, timer] = match;
+    timers.delete(id); timer.fn();
+    return true;
+  }
+  return { contextWindow, doc, get, frame, pageWindow, pageDoc, root, network, timers, evaluated, runtimes, init, loadPage, replaceDocument, tickWatch, location, navigations, get networkOptions() { return networkOptions; }, get treeReads() { return treeReads; }, get activated() { return activated; }, get registrations() { return registrations; } };
 }
 
 test('proxy host accepts bridge transfer only from the allowed shell window and origin', async () => {
@@ -144,8 +159,12 @@ test('proxy host bounds returned console values, document metadata, and tree nod
   app.loadPage();
   const page = connection.messages.find(message => message.event === 'page').data;
   assert.equal(page.title.length, 300);
-  assert(page.tree.nodes.length <= 800);
-  assert(page.tree.nodes.every(record => record.elementId.length <= 500));
+  assert.equal(page.tree, undefined, 'initial page readiness does not traverse the DOM');
+  assert.equal(app.treeReads, 0);
+  await connection.request({ id: 1, method: 'tree' });
+  const tree = connection.messages.find(message => message.id === 1).result;
+  assert(tree.nodes.length <= 800);
+  assert(tree.nodes.every(record => record.elementId.length <= 500));
   app.runtimes[0].callbacks.onConsole({ level: 'log', args: Array(100).fill('x'.repeat(13000)), time: Date.now() });
   const event = connection.messages.find(message => message.event === 'console').data;
   assert.equal(event.args.length, 50);
@@ -161,7 +180,8 @@ test('picking an element outside the initial tree reserves its full ancestor pat
   parent.children.push(picked);
   const connection = app.init();
   app.loadPage();
-  assert(!connection.messages.find(message => message.event === 'page').data.tree.nodes.some(record => record.elementId === 'picked'));
+  await connection.request({ id: 1, method: 'tree' });
+  assert(!connection.messages.find(message => message.id === 1).result.nodes.some(record => record.elementId === 'picked'));
   app.runtimes[0].callbacks.onSelect(picked);
   const selection = connection.messages.find(message => message.event === 'select').data;
   assert(selection.tree.nodes.length <= 800);
@@ -212,8 +232,8 @@ test('warm navigation RPC reuses the active proxy transport and service worker',
   app.contextWindow.fire('pagehide');
 });
 
-test('proxy configuration permits fifteen endpoints and rejects larger pools', async () => {
-  const endpoints = Array.from({ length: 15 }, (_, index) => ({ url: `wss://proxy-${index}.example/wisp/` }));
+test('proxy configuration permits thirty-two endpoints and rejects larger pools', async () => {
+  const endpoints = Array.from({ length: 32 }, (_, index) => ({ url: `wss://proxy-${index}.example/wisp/` }));
   const app = await harness({ config: { wispEndpoints: endpoints } });
   assert.equal(app.activated, 1);
   app.contextWindow.fire('pagehide');
@@ -223,6 +243,98 @@ test('proxy configuration permits fifteen endpoints and rejects larger pools', a
   tooMany.contextWindow.fire('pagehide');
 });
 
+test('host passes the marked fallback subset without changing relay paths', async () => {
+  const app = await harness({ config: { wispEndpoints: [
+    { url: 'wss://first.example/wisp' }, { url: 'wss://second.example/relay' },
+    { url: 'wss://third.example/' }, { url: '/wisp/', fallback: true },
+  ] } });
+  assert.deepEqual(Array.from(app.networkOptions.endpoints), [
+    'wss://first.example/wisp', 'wss://second.example/relay', 'wss://third.example/', 'ws://127.0.0.1:3101/wisp/',
+  ]);
+  assert.deepEqual(Array.from(app.networkOptions.fallbackEndpoints), ['ws://127.0.0.1:3101/wisp/']);
+  app.contextWindow.fire('pagehide');
+});
+
+test('DOM readiness connects tools before slow subresources load and full load preserves the runtime', async () => {
+  const app = await harness();
+  const connection = app.init();
+  const next = app.replaceDocument('loading');
+  assert.equal(app.tickWatch(), true);
+  assert.equal(app.runtimes.length, 0);
+  assert.equal(next.listeners.get('DOMContentLoaded').size, 1);
+  next.readyState = 'interactive';
+  next.fire('DOMContentLoaded');
+  assert.equal(app.runtimes.length, 1);
+  assert.equal(app.get('status').hidden, true);
+  assert.equal(app.treeReads, 0);
+  await connection.request({ id: 1, method: 'evaluate', params: { code: 'pageIsUsable()' } });
+  assert.equal(connection.messages.find(message => message.id === 1).result, 'result: pageIsUsable()');
+  assert.equal(app.timers.size, 0);
+  next.readyState = 'complete';
+  app.loadPage();
+  assert.equal(app.runtimes.length, 1, 'late image load must not reset inspector edits or console capture');
+  assert.equal(app.runtimes[0].disposed, false);
+  assert.equal(connection.messages.filter(message => message.event === 'page').length, 1);
+  app.contextWindow.fire('pagehide');
+});
+
+test('readiness watch expiry never replaces or stops a slow page', async () => {
+  const app = await harness();
+  const source = app.frame.src;
+  let ticks = 0;
+  while (app.tickWatch()) { ticks++; assert(ticks < 150, 'document discovery must be bounded'); }
+  assert(ticks > 100);
+  assert.deepEqual(app.navigations, [source]);
+  assert.equal(app.frame.srcdoc, undefined);
+  assert.equal(app.get('retry').hidden, true, 'slow content is not treated as an error');
+  app.replaceDocument(); app.loadPage();
+  assert.equal(app.runtimes.length, 1, 'native load remains a fallback after discovery expires');
+  app.contextWindow.fire('pagehide');
+});
+
+test('closing the host cancels document observation and ignores late readiness or load', async () => {
+  const app = await harness();
+  const next = app.replaceDocument('loading');
+  app.tickWatch();
+  app.contextWindow.fire('pagehide');
+  assert.equal(next.listeners.get('DOMContentLoaded').size, 0);
+  assert.equal(app.timers.size, 0);
+  next.fire('DOMContentLoaded'); app.loadPage();
+  assert.equal(app.runtimes.length, 0);
+});
+
+test('a failed warm connection preserves the current page and acknowledges its retry notice', async () => {
+  const app = await harness();
+  const connection = app.init(); app.loadPage();
+  const source = app.frame.src;
+  const connect = app.network.connect;
+  app.network.connect = async () => { throw new Error('No proxy is available'); };
+  await connection.request({ id: 1, method: 'navigate', params: { url: 'https://next.example/' } });
+  assert.equal(connection.messages.find(message => message.id === 1).result, true);
+  assert.equal(app.frame.src, source);
+  assert.equal(app.runtimes[0].disposed, false);
+  assert.match(app.get('status-message').textContent, /No proxy/);
+  assert.equal(connection.messages.filter(message => message.event === 'page').length, 2, 'restore shell controls for the preserved page');
+  assert.equal(connection.messages.filter(message => message.event === 'page').at(-1).data.url, 'https://example.com/');
+  assert.equal(app.get('retry').hidden, false);
+  app.network.connect = connect;
+  app.get('retry').fire('click'); await flush();
+  assert.equal(app.frame.src, '/service/' + encodeURIComponent('https://next.example/'));
+  assert.equal(app.get('status-title').textContent, 'Opening page');
+  assert.equal(app.get('retry').hidden, true);
+  app.contextWindow.fire('pagehide');
+});
+
+test('endpoint selection starts while the service worker activates, but navigation waits for both', async () => {
+  let ready;
+  const app = await harness({ workerReady: new Promise(resolve => { ready = resolve; }) });
+  assert.equal(app.activated, 1);
+  assert.equal(app.navigations.length, 0);
+  ready(); await flush();
+  assert.equal(app.navigations.length, 1);
+  app.contextWindow.fire('pagehide');
+});
+
 test('element edit and undo RPCs mutate only a node from the viewed document and return a fresh selection', async () => {
   const app = await harness();
   const connection = app.init();
@@ -230,7 +342,8 @@ test('element edit and undo RPCs mutate only a node from the viewed document and
   const calls = [];
   app.runtimes[0].editNode = (element, change) => { calls.push({ element, kind: change.kind, value: change.value }); return element; };
   app.runtimes[0].undo = () => app.root;
-  const id = connection.messages.find(message => message.event === 'page').data.tree.rootId;
+  await connection.request({ id: 0, method: 'tree' });
+  const id = connection.messages.find(message => message.id === 0).result.rootId;
   await connection.request({ id: 1, method: 'edit', params: { id, kind: 'attribute', name: 'class', value: 'updated' } });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].element, app.root);
@@ -296,6 +409,7 @@ test('proxy host releases the previous runtime when the viewed document changes'
   app.init();
   app.loadPage();
   const first = app.runtimes[0];
+  app.replaceDocument();
   app.loadPage();
   assert.equal(first.disposed, true);
   assert.equal(app.runtimes.length, 2);
@@ -329,6 +443,7 @@ test('a new document frees old command slots and ignores late replies', async ()
   app.loadPage();
   const requests = Array.from({ length: 32 }, (_, id) => connection.onmessage({ data: { id, method: 'evaluate', params: { code: 'hang' } } }));
   await flush();
+  app.replaceDocument();
   app.loadPage();
   await connection.request({ id: 33, method: 'evaluate', params: { code: 'working' } });
   assert.equal(connection.messages.find(message => message.id === 33).result, 'new document');

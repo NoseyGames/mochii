@@ -21,6 +21,13 @@
   <!-- Stylesheet -->
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="/browser-tools/tools.css" />
+  <style>
+    .viewer-body { position: relative; }
+    .viewer-progress { position: absolute; bottom: 12px; left: 12px; z-index: 2; display: flex; align-items: center; gap: 10px; max-width: min(520px, calc(100% - 48px)); padding: 10px 12px; border: 1px solid #514765; border-radius: 10px; background: #19171ff0; color: #d3ccdf; font-size: 12px; line-height: 1.5; pointer-events: none; }
+    .viewer-progress[hidden] { display: none; }
+    .viewer-progress span { overflow-wrap: anywhere; }
+    .viewer-progress button { pointer-events: auto; flex-shrink: 0; }
+  </style>
   <script src="/browser-tools/config.js"></script>
   <script src="/browser-tools/shell-entry.js"></script>
   <script type="module" src="/browser-tools/privacy.js"></script>
@@ -180,6 +187,7 @@
     <div id="network-notice" class="network-notice" role="status" hidden><span id="network-notice-text"></span><button type="button" onclick="document.getElementById('browser-reload').click()">Reload page</button><button type="button" aria-label="Dismiss network notice" onclick="this.parentElement.hidden = true">×</button></div>
     <div class="viewer-body">
       <iframe class="viewer-frame" id="viewer-frame" title="Game or app viewer" referrerpolicy="no-referrer" src="about:blank" allowfullscreen></iframe>
+      <div id="viewer-progress" class="viewer-progress" role="status" hidden><span id="viewer-progress-text"></span><button id="viewer-progress-retry" class="viewer-btn" type="button" onclick="retryViewerNavigation()" hidden>Retry</button><button class="viewer-btn" type="button" aria-label="Dismiss page status" onclick="this.parentElement.hidden = true">×</button></div>
     </div>
       <aside id="browser-tools" class="browser-tools" aria-label="Browser developer tools" hidden>
     <div id="tools-resize" class="bt-resize" role="separator" aria-label="Resize browser tools" aria-orientation="vertical" aria-valuemin="280" aria-valuemax="900" aria-valuenow="420" tabindex="0"><span></span></div>
@@ -318,7 +326,7 @@
       updateStatus('Checking browser configuration…', '#f59e0b');
       networkPromise = (async () => {
         const config = await globalThis.MonkehConfig.fetchConfig();
-        if (!Array.isArray(config.wispEndpoints) || !config.wispEndpoints.length || config.wispEndpoints.length > 15) throw new Error('Invalid proxy server configuration.');
+        if (!Array.isArray(config.wispEndpoints) || !config.wispEndpoints.length || config.wispEndpoints.length > 32) throw new Error('Invalid proxy server configuration.');
         const origin = new URL(config.proxyOrigin);
         if (origin.origin !== config.proxyOrigin || origin.origin === location.origin || origin.username || origin.password || !['http:', 'https:'].includes(origin.protocol)) throw new Error('The proxy must use a separate browser origin.');
         if (location.protocol === 'https:' && origin.protocol !== 'https:') throw new Error('The isolated proxy requires HTTPS.');
@@ -696,6 +704,13 @@
     let viewerNavigation = 0;
     let viewerRequest = null;
     let viewerTarget = null;
+    let viewerHasContent = false;
+
+    function showViewerProgress(message, failed = false) {
+      document.getElementById('viewer-progress-text').textContent = message;
+      document.getElementById('viewer-progress-retry').hidden = !failed;
+      document.getElementById('viewer-progress').hidden = !message;
+    }
 
     function showViewerMessage(message) {
       const frame = document.getElementById('viewer-frame');
@@ -704,6 +719,7 @@
     }
 
     async function openViewer(title, author, url, isProxied = false) {
+      const previousIsProxied = viewerIsProxied;
       const canReuseProxy = isProxied && viewerIsProxied;
       viewerTarget = { title, author, url, isProxied };
       viewerIsProxied = isProxied;
@@ -723,6 +739,7 @@
       document.getElementById('viewer-author').textContent = author ? 'by ' + author : '';
 
       viewer.classList.add('active');
+      showViewerProgress(isProxied ? 'Connecting to the proxy…' : 'Opening page…');
 
       try {
         if (!url) throw new Error('This catalog entry has no playable URL.');
@@ -736,18 +753,15 @@
           if (canReuseProxy && frame.getAttribute?.('sandbox') === sandbox) {
             const reused = await window.MonkehTools?.navigateRemote?.(target.href);
             if (navigation !== viewerNavigation) return;
-            if (reused) return;
+            if (reused) { showViewerProgress(''); return; }
           }
         }
-        window.MonkehTools?.prepareNavigation(url, isProxied);
-        frame.removeAttribute('srcdoc');
-        frame.src = 'about:blank';
-        showViewerMessage(isProxied ? 'Connecting to the proxy...' : 'Loading...');
 
         if (isProxied) {
           const ready = await initializeNetwork();
           if (navigation !== viewerNavigation) return;
           if (!ready) throw new Error(networkErrorMessage);
+          window.MonkehTools?.prepareNavigation(url, true);
           window.MonkehTools?.expectDocument(target.href, true);
           frame.removeAttribute('srcdoc');
           // The origin is different from the shell. Retain browser capabilities
@@ -757,8 +771,10 @@
         } else if (target.origin === window.location.origin) {
           if (!['/apps/auk.html', '/apps/vox.html', '/apps/desktop.html', '/flyflix.html'].includes(target.pathname)) throw new Error('This local app is not in the trusted app list.');
           // Native navigation preserves local apps' relative script and asset URLs.
+          window.MonkehTools?.prepareNavigation(url, false);
           window.MonkehTools?.expectDocument(target.href, false);
           frame.removeAttribute('srcdoc');
+          frame.removeAttribute('sandbox');
           frame.src = target.href;
         } else {
           // Catalog CDNs may serve HTML as text/plain, so render it as a document.
@@ -773,16 +789,28 @@
           const sourceUrl = response.url || target.href;
           base.href = new URL(base.getAttribute('href') || sourceUrl, sourceUrl).href;
           doc.head.prepend(base);
+          window.MonkehTools?.prepareNavigation(url, false);
           window.MonkehTools?.expectDocument(sourceUrl, false);
           frame.setAttribute('sandbox', window.MonkehPrivacy?.sandbox(false) || 'allow-scripts allow-forms allow-pointer-lock');
           frame.setAttribute('referrerpolicy', 'no-referrer');
           frame.srcdoc = '<!doctype html>' + doc.documentElement.outerHTML;
         }
+        viewerHasContent = true;
+        showViewerProgress('');
       } catch (error) {
         if (navigation !== viewerNavigation || error.name === 'AbortError') return;
-        window.MonkehTools?.prepareNavigation(url, isProxied);
-        frame.src = 'about:blank';
-        showViewerMessage(`Unable to load this page: ${error.message}`);
+        const message = `Unable to load this page: ${error.message}`;
+        if (viewerHasContent) {
+          // Keep the current document usable when a new fetch or connection
+          // fails. The user can retry without losing a partially loaded page.
+          viewerIsProxied = previousIsProxied;
+          showViewerProgress(message, true);
+        } else {
+          window.MonkehTools?.prepareNavigation(url, isProxied);
+          frame.src = 'about:blank';
+          showViewerMessage(message);
+          showViewerProgress('');
+        }
       } finally {
         if (navigation === viewerNavigation) viewerRequest = null;
       }
@@ -796,6 +824,8 @@
 
     function closeViewer() {
       viewerTarget = null;
+      viewerHasContent = false;
+      showViewerProgress('');
       viewerIsProxied = false;
       lastEndpoint = null;
       if (window.MonkehProxyOrigin) updateStatus('Isolated browser ready', '#22c55e');

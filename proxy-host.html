@@ -4,16 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Monkeh browser</title>
-  <script src="/bearmux/index.js"></script>
-  <script src="/ultrav/uv.bundle.js"></script>
-  <script src="/ultrav/uv.config.js"></script>
+  <script defer src="/bearmux/index.js"></script>
+  <script defer src="/ultrav/uv.bundle.js"></script>
+  <script defer src="/ultrav/uv.config.js"></script>
   <style>
-    :root{color-scheme:dark;font:14px system-ui,sans-serif;background:#101116;color:#eceaf3}body{margin:0}iframe{position:fixed;inset:0;width:100%;height:100%;border:0;background:#fff}#status{position:fixed;inset:0;display:grid;place-content:center;text-align:center;padding:32px;background:#101116;z-index:2}#status[hidden]{display:none}#status p{max-width:560px;line-height:1.6;color:#aaa6ba}button{font:inherit;padding:10px 20px;border:1px solid #62557e;border-radius:10px;background:#30273f;color:#f1e8ff;cursor:pointer}
+    :root{color-scheme:dark;font:14px system-ui,sans-serif;background:#101116;color:#eceaf3}
+    body{margin:0}
+    iframe{position:fixed;inset:0;width:100%;height:100%;border:0;background:#fff}
+    #status{position:fixed;bottom:12px;left:12px;max-width:min(520px,calc(100vw - 56px));padding:12px 16px;border:1px solid #514765;border-radius:12px;background:#19171ff0;box-shadow:0 6px 24px #0004;z-index:2;pointer-events:none}
+    #status[hidden]{display:none}
+    #status h2{font-size:13px;margin:0 24px 4px 0;font-weight:600}
+    #status p{font-size:12px;margin:0;line-height:1.5;color:#c0bacd;overflow-wrap:anywhere}
+    button{font:inherit;padding:6px 12px;margin-top:8px;border:1px solid #62557e;border-radius:8px;background:#30273f;color:#f1e8ff;cursor:pointer;pointer-events:auto}
+    #dismiss-status{position:absolute;right:8px;top:4px;border:0;background:none;margin:0;padding:4px 6px;color:#bbb;font-size:18px}
   </style>
   <script type="module" src="/browser-tools/proxy-host.js"></script>
 </head>
 <body>
   <iframe id="page" title="Viewed web page" allowfullscreen referrerpolicy="no-referrer"></iframe>
-  <div id="status" role="status"><h2 id="status-title">Connecting your browser</h2><p id="status-message">Starting the isolated proxy…</p><button id="retry" hidden>Try again</button></div>
+  <div id="status" role="status"><h2 id="status-title">Connecting your browser</h2><p id="status-message">Starting the isolated proxy…</p><button id="retry" hidden>Try again</button><button id="dismiss-status" type="button" aria-label="Dismiss page status">×</button></div>
 </body>
 </html>

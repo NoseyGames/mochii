@@ -107,23 +107,26 @@ test('the isolated proxy serves its engine but cannot expose the app shell, save
   assert.equal((await fetch(shell.origin + '/flyflix-provider.html')).status, 404, 'third-party provider code must never execute on the shell origin');
 });
 
-test('fourteen real administrator backup URLs are supported, validated, deduplicated, and exposed without secrets', async t => {
-  const backups = Array.from({ length: 14 }, (_, i) => ({ name: `Backup ${i + 1}`, url: `wss://backup${i + 1}.example/wisp/` }));
+test('thirty-one real administrator backup URLs are supported, validated, deduplicated, and exposed without secrets', async t => {
+  const backups = Array.from({ length: 31 }, (_, i) => ({ name: `Backup ${i + 1}`, url: `wss://backup${i + 1}.example/wisp/` }));
   const config = loadServerConfig({ WISP_BACKUPS_JSON: JSON.stringify(backups) });
-  assert.equal(config.publicConfig.wispEndpoints.length, 15);
+  assert.equal(config.publicConfig.wispEndpoints.length, 32);
   assert.deepEqual(config.publicConfig.wispEndpoints[0], { name: 'Primary', url: '/wisp/' });
-  assert.equal(config.publicConfig.maxWispBackups, 14);
+  assert.equal(config.publicConfig.maxWispBackups, 31);
   assert.equal(loadServerConfig({ WISP_BACKUPS_JSON: JSON.stringify([backups[0], backups[0]]) }).publicConfig.wispEndpoints.length, 2);
-  assert.throws(() => loadServerConfig({ WISP_BACKUPS_JSON: JSON.stringify([...backups, backups[0]]) }), /up to 14/);
-  for (const url of ['ws://remote.example/wisp/', 'wss://user:secret@remote.example/wisp/', 'wss://remote.example/wisp/?token=secret', 'wss://remote.example/wisp/#secret', 'https://remote.example/wisp/', 'wss://remote.example/wisp']) {
+  assert.throws(() => loadServerConfig({ WISP_BACKUPS_JSON: JSON.stringify([...backups, backups[0]]) }), /up to 31/);
+  for (const url of ['ws://remote.example/wisp/', 'wss://user:secret@remote.example/wisp/', 'wss://remote.example/wisp/?token=secret', 'wss://remote.example/wisp/#secret', 'https://remote.example/wisp/']) {
     assert.throws(() => loadServerConfig({ WISP_BACKUPS_JSON: JSON.stringify([{ url }]) }), undefined, url);
   }
   assert.equal(loadServerConfig({ WISP_BACKUPS_JSON: '[{"url":"ws://localhost:3002/wisp/"}]' }).publicConfig.wispEndpoints.length, 2);
+  for (const url of ['wss://remote.example/wisp', 'wss://remote.example/relay', 'wss://remote.example/']) {
+    assert.equal(loadServerConfig({ WISP_BACKUPS_JSON: JSON.stringify([{ url }]) }).publicConfig.wispEndpoints[1].url, url);
+  }
   const f = await fixture(t, { env: { WISP_BACKUPS_JSON: JSON.stringify(backups), WINDOWS_VM_URL: 'https://desktop.example/guacamole/#/', WINDOWS_VM_NAME: 'Work PC' } });
   const response = await fetch(`${f.origin}/api/config`);
   assert.equal(response.headers.get('cache-control'), 'no-store');
   const json = await response.json();
-  assert.equal(json.wispEndpoints.length, 15);
+  assert.equal(json.wispEndpoints.length, 32);
   assert.deepEqual(json.windowsVm, { url: 'https://desktop.example/guacamole/#/', label: 'Work PC' });
   assert.equal('authDigest' in json, false);
   assert.equal(json.requiresAuthentication, false);

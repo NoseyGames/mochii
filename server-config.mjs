@@ -19,7 +19,6 @@ function publicUrl(value, kind) {
     if (url.hash || url.search || (url.protocol !== 'wss:' && !(url.protocol === 'ws:' && isLoopbackHost(url.hostname)))) {
       throw new Error('Backup endpoints require wss:// (ws:// is allowed only for localhost), without query strings or fragments.');
     }
-    if (!url.pathname.endsWith('/')) throw new Error('Backup endpoint paths must end with / for the Wisp protocol.');
   } else if (url.protocol !== 'https:' || url.search) {
     throw new Error(`${kind} requires HTTPS without query strings or credentials.`);
   }
@@ -64,7 +63,7 @@ export function loadServerConfig(env = process.env) {
   if (env.WISP_BACKUPS_JSON) {
     try { backups = JSON.parse(env.WISP_BACKUPS_JSON); } catch { throw new Error('WISP_BACKUPS_JSON must be a JSON array.'); }
   }
-  if (!Array.isArray(backups) || backups.length > 14) throw new Error('WISP_BACKUPS_JSON accepts up to 14 backup endpoints.');
+  if (!Array.isArray(backups) || backups.length > 31) throw new Error('WISP_BACKUPS_JSON accepts up to 31 backup endpoints.');
   const seen = new Set();
   const endpoints = [{ name: 'Primary', url: '/wisp/' }];
   for (const [index, backup] of backups.entries()) {
@@ -95,7 +94,7 @@ export function loadServerConfig(env = process.env) {
     maxConnections: integer(env.WISP_MAX_CONNECTIONS, 64, 1, 512, 'WISP_MAX_CONNECTIONS'),
     maxConnectionsPerIp: integer(env.WISP_MAX_CONNECTIONS_PER_IP, 16, 1, 128, 'WISP_MAX_CONNECTIONS_PER_IP'),
     allowedPorts: new Set(ports),
-    publicConfig: { wispEndpoints: endpoints, maxWispBackups: 14, windowsVm, proxyOrigin: proxyOrigin.origin, shellOrigins, requiresAuthentication: Boolean(authToken) },
+    publicConfig: { wispEndpoints: endpoints, maxWispBackups: 31, windowsVm, proxyOrigin: proxyOrigin.origin, shellOrigins, requiresAuthentication: Boolean(authToken) },
   };
 }
 

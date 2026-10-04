@@ -23,6 +23,10 @@ let commandHistory = [];
 let historyPosition = 0;
 let generation = 0;
 let consoleRenderPending = false;
+const consoleRows = new Map();
+let renderedQuery = '';
+let renderedLevel = '';
+let treeRefresh = null;
 let readyRetries = 0;
 let editing = false;
 let remoteNavigation = 0;
@@ -70,11 +74,19 @@ function setConnection(text, connected = false) {
 }
 
 function showPanel(open = true) {
+  const wasHidden = panel.hidden;
   panel.hidden = !open;
   toggle.setAttribute('aria-expanded', String(open));
   toggle.classList.toggle('bt-is-active', open);
   if (!open) stopPicking();
+  if (open && wasHidden) renderActiveTab();
   if (open && activeTab === 'console') $('console-input').focus();
+}
+
+function renderActiveTab() {
+  if (panel.hidden) return;
+  if (activeTab === 'console') renderConsole();
+  if (activeTab === 'inspector') void renderTree(!runtime?.document.documentElement);
 }
 
 function selectTab(name) {
@@ -86,17 +98,19 @@ function selectTab(name) {
     $(`tool-${button.dataset.toolTab}`).hidden = !selected;
   });
   if (name !== 'inspector') stopPicking();
+  renderActiveTab();
 }
 
 function addEntry(level, args, time = Date.now()) {
   if (level === 'clear') {
-    if (!$('console-preserve').checked) entries = [];
-    renderConsole();
+    if (!$('console-preserve').checked) resetConsoleEntries();
     return;
   }
   const text = args.map(value => formatValue(value)).join(' ').slice(0, 12000);
   entries.push({ level, text, time });
   if (entries.length > 500) entries.shift();
+  // Capture stays bounded while hidden, without doing layout or building rows.
+  if (panel.hidden || activeTab !== 'console') return;
   // Busy pages can log hundreds of messages in a single frame.
   if (!window.requestAnimationFrame) { renderConsole(); return; }
   if (!consoleRenderPending) {
@@ -106,32 +120,56 @@ function addEntry(level, args, time = Date.now()) {
 }
 
 function renderConsole() {
+  if (panel.hidden || activeTab !== 'console') return;
   const output = $('console-output');
   const atBottom = output.scrollHeight - output.scrollTop - output.clientHeight < 50;
   const query = $('console-filter').value.toLowerCase();
   const level = $('console-level').value;
   const visible = entries.filter(entry => (!query || entry.text.toLowerCase().includes(query)) &&
     (level === 'all' || entry.level === level || (level === 'log' && ['info', 'debug', 'result', 'command'].includes(entry.level))));
+  if (query !== renderedQuery || level !== renderedLevel) {
+    consoleRows.clear();
+    output.replaceChildren();
+    renderedQuery = query;
+    renderedLevel = level;
+  }
+  const visibleEntries = new Set(visible);
+  for (const [entry, row] of consoleRows) {
+    if (!visibleEntries.has(entry)) { row.remove(); consoleRows.delete(entry); }
+  }
+  if (!visible.length) {
+    output.replaceChildren(element('div', 'bt-empty-state', entries.length ? 'No messages match this filter.' : 'Console is listening. Run JavaScript in the current page.'));
+    return;
+  }
+  if (!consoleRows.size) output.replaceChildren();
   const content = document.createDocumentFragment();
-  if (!visible.length) content.append(element('div', 'bt-empty-state', entries.length ? 'No messages match this filter.' : 'Console is listening. Run JavaScript in the current page.'));
   for (const entry of visible) {
+    if (consoleRows.has(entry)) continue;
     const row = element('div', 'bt-console-entry');
     row.dataset.level = entry.level;
     row.append(element('span', 'bt-log-time', new Date(entry.time).toLocaleTimeString([], { hour12: false })));
     row.append(element('span', 'bt-log-level', entry.level === 'command' ? '›' : entry.level === 'result' ? '←' : entry.level));
     row.append(element('pre', 'bt-log-text', entry.text));
+    consoleRows.set(entry, row);
     content.append(row);
   }
-  output.replaceChildren(content);
+  output.append(content);
   if (atBottom) output.scrollTop = output.scrollHeight;
 }
 
-function clearConsole() {
+function resetConsoleEntries() {
   entries = [];
+  consoleRows.clear();
+  // Privacy clears must remove rendered text even while the dock is hidden.
+  $('console-output').replaceChildren();
+  renderConsole();
+}
+
+function clearConsole() {
   commandHistory = [];
   historyPosition = 0;
   $('console-input').value = '';
-  renderConsole();
+  resetConsoleEntries();
 }
 
 function stopPicking() {
@@ -197,12 +235,19 @@ async function describeSelection(node) {
 
 async function renderTree(refresh = true) {
   const tree = $('inspector-tree');
-  if (!runtime) return;
+  if (!runtime || panel.hidden || activeTab !== 'inspector') return;
   const target = runtime;
   const session = generation;
   try {
-    if (refresh) await target.refreshTree(selectedElement);
-    if (target !== runtime || session !== generation) return;
+    if (refresh) {
+      if (treeRefresh?.target !== target || treeRefresh.session !== session) {
+        treeRefresh = { target, session, promise: target.refreshTree(selectedElement) };
+      }
+      const pending = treeRefresh;
+      try { await pending.promise; }
+      finally { if (treeRefresh === pending) treeRefresh = null; }
+    }
+    if (target !== runtime || session !== generation || panel.hidden || activeTab !== 'inspector') return;
   } catch (error) {
     if (target === runtime && session === generation) tree.replaceChildren(element('div', 'bt-empty-state', error.message));
     return;
@@ -313,7 +358,8 @@ async function connectFrame(force = false) {
         $('inspector-text').value = '';
         $('inspector-edit-status').textContent = '';
         setConnection(page.isError ? 'Proxy error · tools connected' : 'Connected · isolated page', true);
-        void renderTree(false);
+        $('inspector-tree').replaceChildren(element('div', 'bt-empty-state', 'Open Inspect to load this page’s elements.'));
+        renderActiveTab();
         addEntry('info', ['Page connected. Console capture starts here.']);
         // The host shares the untrusted page's origin, so even its URL metadata
         // cannot authorize disclosure of saved scripts to that page.
@@ -334,7 +380,7 @@ async function connectFrame(force = false) {
         selectedElement = null;
         editing = false;
         setConnection('Loading isolated page');
-        if (!$('console-preserve').checked) { entries = []; renderConsole(); }
+        if (!$('console-preserve').checked) resetConsoleEntries();
       },
       onNetwork: state => { if (runtime === target && typeof window.networkStatusChanged === 'function') window.networkStatusChanged(state); },
       onError: error => { if (runtime === target) addEntry('warn', [error.message]); },
@@ -650,7 +696,7 @@ window.MonkehTools = {
     $('inspector-styles').replaceChildren();
     $('inspector-text').value = '';
     $('inspector-edit-status').textContent = '';
-    if (!$('console-preserve').checked) { entries = []; renderConsole(); }
+    if (!$('console-preserve').checked) resetConsoleEntries();
     setConnection('Loading isolated page');
     try {
       const accepted = await target.navigate(destination.href);
@@ -668,7 +714,7 @@ window.MonkehTools = {
     currentUrl = publicUrl(url);
     $('browser-url').value = currentUrl;
     $('browser-url').focus();
-    if (!$('console-preserve').checked) { entries = []; renderConsole(); }
+    if (!$('console-preserve').checked) resetConsoleEntries();
     setConnection('Loading page');
   },
   expectDocument(url) { expectedUrl = url; expectingDocument = true; },

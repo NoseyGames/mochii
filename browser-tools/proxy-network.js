@@ -117,8 +117,9 @@ export function probeWisp(url, {
 }
 
 /**
- * Serializes transport replacement and health checks for an administrator-owned
- * primary plus up to fourteen backups. It never navigates or reloads a page.
+ * Races valid Wisp handshakes while serializing transport replacement and health
+ * checks for up to 32 endpoints. Optional fallback endpoints are tried only
+ * after the ordinary endpoint race is exhausted. It never reloads a page.
  *
  * connect({ force: true }) probes and replaces the active transport, and bypasses
  * cooldown for an explicit Retry action.
@@ -127,6 +128,7 @@ export function probeWisp(url, {
  */
 export function createProxyNetwork({
   endpoints,
+  fallbackEndpoints = [],
   probe = probeWisp,
   activate,
   onStatus = () => {},
@@ -142,10 +144,13 @@ export function createProxyNetwork({
   probeTimeoutMs = 5000,
   online: initiallyOnline = true,
 } = {}) {
-  if (!Array.isArray(endpoints) || !endpoints.length || endpoints.length > 15) {
-    throw new TypeError('Configure one primary proxy and at most fourteen backups.');
+  if (!Array.isArray(endpoints) || !endpoints.length || endpoints.length > 32) {
+    throw new TypeError('Configure between one and 32 proxy endpoints.');
   }
   const urls = [...new Set(endpoints.map(endpointUrl))];
+  if (!Array.isArray(fallbackEndpoints) || fallbackEndpoints.length > 32) throw new TypeError('Fallback endpoints must be a subset of configured proxies.');
+  const fallbackUrls = new Set(fallbackEndpoints.map(endpointUrl));
+  if ([...fallbackUrls].some(url => !urls.includes(url))) throw new TypeError('Fallback endpoints must be a subset of configured proxies.');
   if (typeof activate !== 'function' || typeof probe !== 'function') throw new TypeError('Proxy activation and probe callbacks are required.');
   for (const [name, value] of Object.entries({ monitorIntervalMs, failureThreshold, cooldownMs, maxCooldownMs, retryMs, maxRetryMs, probeTimeoutMs })) positiveNumber(value, name);
   if (!Number.isInteger(failureThreshold)) throw new TypeError('failureThreshold must be an integer.');
@@ -212,39 +217,88 @@ export function createProxyNetwork({
     return pending;
   }
   async function chooseEndpoint(signal, force = false) {
-    let attempted = 0;
     const startIndex = nextIndex;
+    const candidates = [];
     for (let step = 0; step < urls.length; step += 1) {
       assertCurrent(signal);
       const index = (startIndex + step) % urls.length;
       const url = urls[index];
       if (!force && failures.get(url).until > now()) continue;
-      attempted += 1;
-      publish('connecting', { endpoint: url, attempt: attempted });
-      try {
-        await probe(url, { signal, timeoutMs: probeTimeoutMs, setTimer, clearTimer });
-        assertCurrent(signal);
-        // Keep this operation pending until setTransport finishes, even on
-        // cancellation; a late activation must never overwrite a newer one.
-        await activate(url, { signal });
-        assertCurrent(signal);
-        active = url;
-        nextIndex = (index + 1) % urls.length;
-        healthFailures = 0;
-        exhaustedCount = 0;
-        failures.set(url, { count: 0, until: 0 });
-        publish('connected');
-        return url;
-      } catch (error) {
-        assertCurrent(signal);
-        failed(url);
-      }
+      candidates.push({ index, url });
+    }
+    // A limited relay (for example Workers TCP) must not outrun a general-purpose
+    // proxy just because its handshake is faster.
+    for (const group of [candidates.filter(item => !fallbackUrls.has(item.url)), candidates.filter(item => fallbackUrls.has(item.url))]) {
+      const winner = await raceCandidates(group, signal);
+      if (winner) return winner;
     }
     assertCurrent(signal);
     exhaustedCount += 1;
     const error = new Error('None of the configured proxy servers is available.');
     publish('unavailable', { error: error.message });
     throw error;
+  }
+  async function raceCandidates(candidates, signal) {
+    if (!candidates.length) return null;
+    assertCurrent(signal);
+    let remaining = candidates.length;
+    let finished = false;
+    let wake = null;
+    let attempted = 0;
+    const ready = [];
+    const entries = candidates.map(candidate => ({ ...candidate, controller: new AbortController() }));
+    const notify = () => { const resolve = wake; wake = null; resolve?.(); };
+    const cancel = () => { for (const entry of entries) entry.controller.abort(); notify(); };
+    signal.addEventListener('abort', cancel, { once: true });
+    try {
+      publish('connecting', { attempt: 0, candidates: candidates.length });
+      assertCurrent(signal);
+      for (const entry of entries) {
+        // Every rejection gets a handler immediately. Late results from canceled
+        // probes cannot mutate cooldowns, queue a stale activation, or block a
+        // replacement race even if a custom probe ignores AbortSignal.
+        Promise.resolve().then(() => {
+          if (finished || entry.controller.signal.aborted) throw aborted();
+          return probe(entry.url, { signal: entry.controller.signal, timeoutMs: probeTimeoutMs, setTimer, clearTimer });
+        }).then(() => {
+          if (!finished && !entry.controller.signal.aborted) ready.push(entry);
+        }, () => {
+          if (!finished && !entry.controller.signal.aborted) failed(entry.url);
+        }).then(() => { remaining -= 1; notify(); });
+      }
+      while (true) {
+        assertCurrent(signal);
+        if (!ready.length) {
+          if (!remaining) return null;
+          await new Promise(resolve => { wake = resolve; });
+          continue;
+        }
+        const { url, index } = ready.shift();
+        publish('connecting', { endpoint: url, attempt: ++attempted, candidates: candidates.length });
+        assertCurrent(signal);
+        try {
+          // Keep the operation pending until activation settles, including on
+          // cancellation: a late setTransport must never overwrite a new one.
+          await activate(url, { signal });
+          assertCurrent(signal);
+          active = url;
+          nextIndex = (index + 1) % urls.length;
+          healthFailures = 0;
+          exhaustedCount = 0;
+          failures.set(url, { count: 0, until: 0 });
+          publish('connected');
+          assertCurrent(signal);
+          return url;
+        } catch {
+          assertCurrent(signal);
+          failed(url);
+        }
+      }
+    } finally {
+      finished = true;
+      signal.removeEventListener('abort', cancel);
+      cancel();
+    }
   }
   function existingOrCancelled(options, next) {
     if (!pending) return null;
@@ -265,8 +319,8 @@ export function createProxyNetwork({
     if (inFlight) return inFlight;
     if (active) {
       if (!force) return Promise.resolve(active);
-      // Rebuild a broken transport even if a fresh handshake is healthy. Keep
-      // the current endpoint first, then immediately try backups if it fails.
+      // Rebuild a broken transport even if a fresh handshake is healthy. The
+      // current endpoint wins equal-time ties; faster valid peers may replace it.
       nextIndex = urls.indexOf(active);
       active = null;
     }

@@ -1,19 +1,45 @@
 # Wisp endpoints and hosting verification
 
-Checked October 3, 2026 (Pacific time). Public endpoint availability is a snapshot, not an uptime guarantee. The application supports **15 total endpoint slots: one primary and fourteen backups**. The shipped list currently contains Anura and the separately implemented Monkeh Worker backup; it does not claim fifteen independent live servers.
+Checked October 3, 2026 (Pacific time). The site owner supplied 28 unique addresses and explicitly confirmed permission to use all of them in production, including Mercury. All are configured with their exact paths. The original Anura `/wisp/` alias and owned Worker remain, for 30 configured URLs; aliases are not separate servers. Capacity is 32 URLs.
 
 ## Endpoint evidence
 
-| Endpoint | Publication/use evidence | Verification | Decision |
-| --- | --- | --- | --- |
-| `wss://anura.pro/wisp/` | Present in the original Monkeh archive. The [Anura project](https://github.com/MercuryWorkshop/anuraOS) identifies anura.pro as its hosted instance, and the operator's [Scramjet build workflow](https://github.com/MercuryWorkshop/scramjet/blob/main/.github/workflows/main.yml) configures Anura as its Wisp service. No Anura-specific restriction was found. | Valid Wisp CONTINUE, followed by an actual TCP HTTP request to example.com: `HTTP/1.1 200 OK`, Example Domain content, 930 bytes. | Primary. Root and `/wisp/` aliases are not counted as independent backups. |
-| `wss://monkeh.1234-imwatchingyouopenthedoor.workers.dev/wisp/` | Owned Monkeh deployment, using `workers/wisp/index.mjs`. | Local native Workers runtime: v1 HTTP and v2 HTTP/HTTPS through www.google.com returned 200. HTTPS certificate validation stayed enabled. Cloud deployment must be checked after publishing. | Limited backup, integrated with the same deployment that serves the isolated proxy assets. |
-| `wss://lunarrr.eminescusm.ro/w/` | Second endpoint in original Monkeh archive. | DNS `ENOTFOUND`. | Excluded. |
-| `wss://wispserver.dev/wisp/` | [Operator homepage](https://wispserver.dev/) advertises a free service allowed in production. Its adblocking path uses the same host and is not a separate server. | DNS `ENOTFOUND`, also outside the local network sandbox. | Excluded while unavailable. |
-| `wss://glseries.net/wisp/` | Publicly listed by a third-party client. [Operator profile](https://github.com/Endlessguyin) links glseries.net and its [Wisp deployment repository](https://github.com/Endlessguyin/scramjet). | One Wisp connection attempt timed out during WebSocket handshake after seven seconds. | Excluded. |
-| `wss://incog.works/wisp/` | Publicly listed by a third-party client. The [Incognito repository](https://github.com/titaniumnetwork-dev/Incognito) links the operator's incog.works site. | DNS `ENOTFOUND`. | Excluded. |
+Each URL below received one bounded Wisp-handshake probe with a five-second deadline, the production proxy Origin, and TLS certificate validation enabled. No destination TCP stream was opened by this check. Eight configured URLs completed Wisp negotiation, including both Anura aliases and the owned Worker. Mercury responded first in this snapshot. Results vary with location, load, and time; a successful handshake does not guarantee all websites will work.
 
-The Mercury demo endpoint with a known restriction against production/public-facing use was deliberately neither queried nor configured. The [AnyProxy operator description](https://anyproxy.site/blog/wisp-protocol/) requires a live session, so its endpoint is not an anonymous backup. Illustrative `example`/documentation URLs and aliases are not counted as working services. These checks found no additional usable, unrestricted operator-published service to add honestly.
+Every eligible public endpoint is raced concurrently at connection time, and the first valid greeting whose transport activates is selected. Failed, timed-out, malformed, or non-Wisp responses are skipped. Remaining probes close after selection. Failure cooldown and bounded automatic retry prevent tight reconnect loops. The Worker is fallback-only because of its destination restrictions. Availability checks do not automatically replay forms or reload pages.
+
+| Exact endpoint | Snapshot result | Elapsed |
+| --- | --- | --- |
+| `wss://wisp.mercurywork.shop/` | Valid Wisp v1 | 321 ms |
+| `wss://glseries.net/wisp/` | Timed out; skipped | 5001 ms |
+| `wss://wispserver.dev/wisp` | DNS unavailable; skipped | 131 ms |
+| `wss://seminar.drama.english.assignment.literature.homebrewer.org/wisp/` | Timed out; skipped | 5015 ms |
+| `wss://admin.proxy.hydrovolter.com/scramjet/wisp/` | Valid Wisp v1 | 644 ms |
+| `wss://scram.owoellen.rocks/wisp/` | DNS unavailable; skipped | 294 ms |
+| `wss://math.americahistory.online/wisp/` | HTTP 200 instead of WebSocket; skipped | 565 ms |
+| `wss://lichology.com/wisp/` | Valid Wisp v1 | 555 ms |
+| `wss://mages.io/wisp/` | Valid Wisp v1 | 642 ms |
+| `wss://onlinegames.ro/wisp/` | HTTP 200 instead of WebSocket; skipped | 616 ms |
+| `wss://wisp.rhw.one/ws/` | TLS failed; skipped | 624 ms |
+| `wss://wisp-server.com/wisp/` | DNS unavailable; skipped | 553 ms |
+| `wss://wisp.classroom.lat/` | DNS unavailable; skipped | 582 ms |
+| `wss://radiusproxy.app/wisp/` | DNS unavailable; skipped | 612 ms |
+| `wss://anura.pro/` | Valid Wisp v1 | 831 ms |
+| `wss://phantom.lol/wisp/` | Valid Wisp v1 | 843 ms |
+| `wss://geometry.axiseducation.one/` | HTTP 301 instead of WebSocket; skipped | 853 ms |
+| `wss://onlineosdev.nl/` | DNS unavailable; skipped | 779 ms |
+| `wss://webmath.help/wisp/` | DNS unavailable; skipped | 820 ms |
+| `wss://explorechemistry.online/wisp/` | HTTP 200 instead of WebSocket; skipped | 1092 ms |
+| `wss://quantumchemistry.club/wisp/` | HTTP 200 instead of WebSocket; skipped | 1148 ms |
+| `wss://henhouse.social/relay` | DNS unavailable; skipped | 961 ms |
+| `wss://dragon-orange.exe.xyz/` | No valid Wisp greeting; skipped | 1305 ms |
+| `wss://strfry.ymir.cloud/` | Timed out; skipped | 5004 ms |
+| `wss://antiprimal.net/` | DNS unavailable; skipped | 1089 ms |
+| `wss://nostr.me/relay` | Timed out; skipped | 5004 ms |
+| `wss://relay.crostr.com/` | Timed out; skipped | 5004 ms |
+| `wss://wisp.solife.me/` | Timed out; skipped | 5004 ms |
+| `wss://anura.pro/wisp/` | Valid Wisp v1 | 1414 ms |
+| `wss://monkeh.1234-imwatchingyouopenthedoor.workers.dev/wisp/` | Valid Wisp v1 | 1377 ms |
 
 ## Native Cloudflare Worker backup
 
@@ -36,7 +62,7 @@ The implementation validates hostnames and checks a fixed DNS-over-HTTPS resolve
 
 Per WebSocket session, limits are four concurrent streams, twenty total stream openings, a one MiB frame, two MiB pending input, sixteen MiB transferred data, a ten-second connection deadline, and a five-minute lifetime. The total stream cap also bounds DNS/TCP operations. These are deliberate application limits, not claims about Cloudflare's maximum service capacity.
 
-Cloudflare explicitly [blocks outbound TCP to Cloudflare IP ranges](https://developers.cloudflare.com/workers/runtime-apis/tcp-sockets/#considerations). This excludes many websites, including example.com at the time of testing. It cannot be worked around by relabeling the destination or replacing a TCP stream with `fetch()`. The owned Worker therefore remains a limited fallback; Anura is the general-purpose primary. The [Workers limits documentation](https://developers.cloudflare.com/workers/platform/limits/) also lists free-plan subrequest and CPU limits. Local success does not prove unlimited capacity or production availability.
+Cloudflare explicitly [blocks outbound TCP to Cloudflare IP ranges](https://developers.cloudflare.com/workers/runtime-apis/tcp-sockets/#considerations). This excludes many websites, including example.com at the time of testing. It cannot be worked around by relabeling the destination or replacing a TCP stream with `fetch()`. The owned Worker therefore remains a limited fallback after the public endpoint race. The [Workers limits documentation](https://developers.cloudflare.com/workers/platform/limits/) also lists free-plan subrequest and CPU limits. Production HTTP and certificate-validated HTTPS checks passed on October 3; these checks do not prove unlimited capacity or availability.
 
 The adapter uses the documented [WebSocketPair API](https://developers.cloudflare.com/workers/runtime-apis/websockets/) and [outbound TCP API](https://developers.cloudflare.com/workers/runtime-apis/tcp-sockets/). It is an independent implementation, not the Mercury Worker demo intended only for small API clients.
 

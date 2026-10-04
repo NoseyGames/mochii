@@ -169,22 +169,25 @@ test('Wisp probe handles pre-aborted signals, unavailable API, and constructor e
 });
 
 test('network validates admin endpoint configuration and deduplicates URLs', async () => {
-  for (const endpoints of [[], Array(16).fill(primary), ['https://wrong.example/'], ['wss://user:secret@example.com/'], ['wss://example.com/#fragment'], ['wss://example.com/\n']]) {
+  for (const endpoints of [[], Array(33).fill(primary), ['https://wrong.example/'], ['wss://user:secret@example.com/'], ['wss://example.com/#fragment'], ['wss://example.com/\n']]) {
     assert.throws(() => network({ endpoints }), TypeError);
   }
   const { manager } = network({ endpoints: [primary, primary] });
   assert.equal(manager.state.configuredCount, 1);
   assert(Object.isFrozen(manager.state));
   manager.dispose();
+  for (const fallbackEndpoints of [null, ['wss://not-configured.example/'], Array(33).fill(primary)]) {
+    assert.throws(() => network({ fallbackEndpoints }), /subset/);
+  }
 });
 
-test('network exhaustively tries primary plus fourteen backups and activates only a proven endpoint', async () => {
-  const endpoints = Array.from({ length: 15 }, (_, index) => `wss://proxy-${index}.example/wisp/`);
+test('network races all 32 endpoint slots and activates only a proven endpoint', async () => {
+  const endpoints = Array.from({ length: 32 }, (_, index) => `wss://proxy-${index}.example/wisp/`);
   const attempted = [];
-  const app = network({ endpoints, probe: async url => { attempted.push(url); if (url !== endpoints[14]) throw new Error('failed'); } });
-  assert.equal(await app.manager.connect(), endpoints[14]);
+  const app = network({ endpoints, probe: async url => { attempted.push(url); if (url !== endpoints[31]) throw new Error('failed'); } });
+  assert.equal(await app.manager.connect(), endpoints[31]);
   assert.deepEqual(attempted, endpoints);
-  assert.deepEqual(app.activated, [endpoints[14]]);
+  assert.deepEqual(app.activated, [endpoints[31]]);
   assert.equal(app.manager.state.status, 'connected');
   assert.equal(app.time.count, 1);
   app.manager.dispose();
@@ -200,11 +203,11 @@ test('simultaneous connects coalesce and await transport activation', async () =
   await flush();
   assert.equal(app.manager.activeEndpoint, null);
   assert.equal(app.time.count, 0);
-  assert.equal(app.probed.length, 1);
+  assert.equal(app.probed.length, 2);
   gate.resolve();
   assert.equal(await first, primary);
   assert.equal(await app.manager.connect(), primary);
-  assert.equal(app.probed.length, 1);
+  assert.equal(app.probed.length, 2);
   assert.equal(app.time.count, 1);
   app.manager.dispose();
 });
@@ -228,7 +231,7 @@ test('health monitoring switches only after two consecutive failures', async () 
   assert.equal(app.manager.state.status, 'degraded');
   await app.time.advance(100);
   assert.equal(app.manager.activeEndpoint, backup);
-  assert.deepEqual(attempts, [primary, primary, primary, backup]);
+  assert.deepEqual(attempts, [primary, backup, primary, primary, backup]);
   assert.deepEqual(app.activated, [primary, backup]);
   assert.equal(app.time.count, 1);
   app.manager.dispose();
@@ -287,7 +290,7 @@ test('all endpoints down uses one bounded backoff timer and automatically recove
   await app.time.advance(2000);
   assert.equal(app.manager.activeEndpoint, primary);
   assert.equal(app.time.count, 1);
-  assert.equal(attempts, 3);
+  assert.equal(attempts, 4);
   app.manager.dispose();
 });
 
@@ -311,7 +314,7 @@ test('explicit retry immediately replaces a dead active endpoint without waiting
   await app.manager.connect();
   primaryDown = true;
   assert.equal(await app.manager.connect({ force: true }), backup);
-  assert.deepEqual(attempts, [primary, primary, backup]);
+  assert.deepEqual(attempts, [primary, backup, primary, backup]);
   assert.deepEqual(app.activated, [primary, backup]);
   assert.equal(app.manager.state.status, 'connected');
   assert.equal(app.time.count, 1);
@@ -330,7 +333,7 @@ test('explicit retry rebuilds a healthy endpoint transport and simultaneous retr
   const repeatedRetry = app.manager.connect({ force: true });
   assert.equal(retry, repeatedRetry);
   await flush();
-  assert.deepEqual(app.probed, [primary, primary]);
+  assert.deepEqual(app.probed, [primary, backup, primary, backup]);
   assert.deepEqual(activated, [primary, primary]);
   assert.equal(app.manager.activeEndpoint, null);
   gate.resolve();
@@ -345,7 +348,7 @@ test('explicit retry queued during a health check still reconnects after its fir
   let primaryDown = false;
   const app = network({ probe: async url => {
     attempts.push(url);
-    if (attempts.length === 2) return gate.promise;
+    if (attempts.length === 3) return gate.promise;
     if (primaryDown && url === primary) throw new Error('down');
   } });
   await app.manager.connect();
@@ -358,7 +361,7 @@ test('explicit retry queued during a health check still reconnects after its fir
   await monitor;
   assert.equal(await retry, backup);
   assert.equal(await repeatedRetry, backup);
-  assert.deepEqual(attempts, [primary, primary, primary, backup]);
+  assert.deepEqual(attempts, [primary, backup, primary, primary, backup]);
   assert.deepEqual(app.activated, [primary, backup]);
   assert.equal(app.time.count, 1);
   app.manager.dispose();
@@ -374,7 +377,7 @@ test('offline pauses probes and online resumes after a connection failure', asyn
   assert.equal(app.manager.activeEndpoint, null);
   assert.equal(app.time.count, 0);
   await app.time.advance(10000);
-  assert.equal(app.probed.length, 1);
+  assert.equal(app.probed.length, 2);
   assert.equal(await app.manager.setOnline(true), backup);
   assert.equal(app.time.count, 1);
   app.manager.dispose();
@@ -454,19 +457,160 @@ test('disposing from a retry status subscriber cannot leave a reconnect timer', 
   assert.equal(app.time.count, 0);
 });
 
-test('a real handshake timeout selects a working backup without leaked sockets', async () => {
+test('a fast valid backup beats a stalled primary and cancels every losing handshake', async () => {
   const time = clock();
   const { Socket, instances } = sockets();
   const manager = createProxyNetwork({ endpoints: [primary, backup], activate: async () => {}, probe: (url, options) => probeWisp(url, { ...options, WebSocketCtor: Socket }), probeTimeoutMs: 20, now: time.now, setTimer: time.setTimer, clearTimer: time.clearTimer });
   const pending = manager.connect();
   await flush();
   instances[0].fire('open');
-  await time.advance(20);
   assert.equal(instances.length, 2);
+  await time.advance(5);
   instances[1].fire('message', greeting());
   assert.equal(await pending, backup);
   assert(instances.every(socket => socket.closed === 1 && socket.listenerCount === 0));
   assert.equal(time.count, 1, 'only periodic health timer remains');
+  manager.dispose();
+  assert.equal(time.count, 0);
+});
+
+test('a JSON WebSocket relay cannot win before a slower valid Wisp handshake', async () => {
+  const time = clock();
+  const { Socket, instances } = sockets();
+  const activated = [];
+  const manager = createProxyNetwork({ endpoints: [primary, backup], activate: async url => activated.push(url),
+    probe: (url, options) => probeWisp(url, { ...options, WebSocketCtor: Socket }),
+    now: time.now, setTimer: time.setTimer, clearTimer: time.clearTimer });
+  const pending = manager.connect();
+  await flush();
+  instances[0].fire('open');
+  instances[0].fire('message', '["NOTICE","Welcome to this relay"]');
+  await flush();
+  assert.deepEqual(activated, []);
+  instances[1].fire('message', greeting());
+  assert.equal(await pending, backup);
+  assert.deepEqual(activated, [backup]);
+  assert(instances.every(socket => socket.closed === 1 && socket.listenerCount === 0));
+  manager.dispose();
+  assert.equal(time.count, 0);
+});
+
+test('failed activation continues through verified candidates while slower probes remain pending', async () => {
+  const third = 'wss://third.example/relay';
+  const probes = new Map([primary, backup, third].map(url => [url, deferred()]));
+  const activation = deferred(), activated = [], signals = new Map();
+  let running = 0;
+  const app = network({ endpoints: [primary, backup, third],
+    probe(url, { signal }) { signals.set(url, signal); return probes.get(url).promise; },
+    async activate(url) {
+      assert.equal(++running, 1);
+      activated.push(url);
+      try { if (url === primary) await activation.promise; }
+      finally { running--; }
+    },
+  });
+  const pending = app.manager.connect();
+  await flush();
+  probes.get(primary).resolve();
+  await flush();
+  probes.get(backup).resolve();
+  await flush();
+  assert.deepEqual(activated, [primary], 'verified candidates must wait for prior activation');
+  activation.reject(new Error('Activation failed'));
+  assert.equal(await pending, backup);
+  assert.deepEqual(activated, [primary, backup]);
+  assert(signals.get(third).aborted, 'pending slow probe must be canceled after successful activation');
+  probes.get(third).reject(new Error('late losing failure'));
+  await flush();
+  assert.equal(app.manager.activeEndpoint, backup);
+  app.manager.dispose();
+});
+
+test('a failed fast activation waits for a slower valid probe instead of exhausting early', async () => {
+  const slow = deferred();
+  const activated = [];
+  const app = network({ probe: url => url === backup ? slow.promise : Promise.resolve(),
+    activate: async url => { activated.push(url); if (url === primary) throw new Error('bad transport'); } });
+  const pending = app.manager.connect();
+  await flush();
+  assert.deepEqual(activated, [primary]);
+  assert.equal(app.manager.activeEndpoint, null);
+  slow.resolve();
+  assert.equal(await pending, backup);
+  assert.deepEqual(activated, [primary, backup]);
+  app.manager.dispose();
+});
+
+test('limited fallbacks never outrun a pending ordinary endpoint', async () => {
+  const ordinary = deferred();
+  const attempted = [];
+  const app = network({ fallbackEndpoints: [backup], probe: url => { attempted.push(url); return url === primary ? ordinary.promise : Promise.resolve(); } });
+  const pending = app.manager.connect();
+  await flush();
+  assert.deepEqual(attempted, [primary]);
+  ordinary.resolve();
+  assert.equal(await pending, primary);
+  assert.deepEqual(attempted, [primary], 'fallback has no handshake traffic while an ordinary server succeeds');
+  app.manager.dispose();
+});
+
+test('limited fallback runs after every ordinary activation fails and preserves exact endpoint paths', async () => {
+  const endpoints = ['wss://first.example/wisp', 'wss://second.example/relay', 'wss://fallback.example/'];
+  const attempted = [], activated = [];
+  const app = network({ endpoints, fallbackEndpoints: [endpoints[2]],
+    probe: async url => attempted.push(url),
+    activate: async url => { activated.push(url); if (url !== endpoints[2]) throw new Error('unavailable'); },
+  });
+  assert.equal(await app.manager.connect(), endpoints[2]);
+  assert.deepEqual(attempted, endpoints);
+  assert.deepEqual(activated, endpoints);
+  app.manager.dispose();
+});
+
+for (const action of ['dispose', 'offline']) {
+  test(`${action} cancels all in-flight real handshakes and releases timers without waiting for timeouts`, async () => {
+    const time = clock();
+    const { Socket, instances } = sockets();
+    const manager = createProxyNetwork({ endpoints: [primary, backup], activate: async () => { assert.fail('late activation'); },
+      probe: (url, options) => probeWisp(url, { ...options, WebSocketCtor: Socket }),
+      now: time.now, setTimer: time.setTimer, clearTimer: time.clearTimer });
+    const assertion = assert.rejects(manager.connect(), { name: 'AbortError' });
+    await flush();
+    assert.equal(instances.length, 2);
+    if (action === 'dispose') manager.dispose(); else await manager.setOnline(false);
+    await assertion;
+    assert.equal(time.count, 0);
+    assert(instances.every(socket => socket.closed === 1 && socket.listenerCount === 0));
+    manager.dispose();
+  });
+}
+
+test('cancellation ignores probes that never settle so reconnect does not wait for dead promises', async () => {
+  let recover = false;
+  const app = network({ probe: () => recover ? Promise.resolve() : new Promise(() => {}) });
+  const assertion = assert.rejects(app.manager.connect(), { name: 'AbortError' });
+  await flush();
+  await app.manager.setOnline(false);
+  recover = true;
+  const retry = app.manager.setOnline(true);
+  await assertion;
+  assert.equal(await retry, primary);
+  assert.equal(app.time.count, 1);
+  app.manager.dispose();
+});
+
+test('all simultaneous real handshake timeouts produce one retry timer', async () => {
+  const time = clock();
+  const { Socket, instances } = sockets();
+  const manager = createProxyNetwork({ endpoints: [primary, backup], activate: async () => { assert.fail('no valid greeting'); },
+    probe: (url, options) => probeWisp(url, { ...options, WebSocketCtor: Socket }), probeTimeoutMs: 20,
+    now: time.now, setTimer: time.setTimer, clearTimer: time.clearTimer });
+  const assertion = assert.rejects(manager.connect(), /None of the configured/);
+  await flush();
+  await time.advance(20);
+  await assertion;
+  assert(instances.every(socket => socket.closed === 1 && socket.listenerCount === 0));
+  assert.equal(time.count, 1);
   manager.dispose();
   assert.equal(time.count, 0);
 });
