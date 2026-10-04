@@ -12,6 +12,7 @@ export const staticFiles = Object.freeze([
   'apps/auk.html', 'apps/auk.js', 'apps/auk.css', 'apps/vox.html',
   'apps/desktop.html', 'apps/desktop.js', 'apps/desktop.css',
   'apps/mochii-cloud.html', 'apps/mochii-cloud.css', 'apps/mochii-cloud.js', 'apps/mochii-cloud.data.js',
+  'apps/mochii-inbox.js',
   'browser-tools/config.js', 'browser-tools/shell-entry.js', 'browser-tools/tools.js', 'browser-tools/tools.css',
   'browser-tools/runtime.js', 'browser-tools/remote-runtime.js',
   'browser-tools/proxy-network.js', 'browser-tools/proxy-host.js',

@@ -1,4 +1,5 @@
 import { GAMES } from './mochii-cloud.data.js';
+import { mountInbox } from './mochii-inbox.js';
 
 export const STORAGE_KEY = 'mochii.cloud.v1';
 export const PLAYER_SANDBOX = 'allow-scripts allow-forms allow-same-origin allow-pointer-lock allow-presentation';
@@ -733,4 +734,7 @@ export function mountMochii(doc = document, win = window) {
   return { store, tracker, showView, openDetails, openGameTab, launchEmbedded, closePlayer };
 }
 
-if (typeof document !== 'undefined' && document.getElementById('view-discover')) mountMochii();
+if (typeof document !== 'undefined' && document.getElementById('view-discover')) {
+  mountMochii();
+  mountInbox();
+}

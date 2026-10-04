@@ -19,6 +19,13 @@ provider identified in the original catalog. The catalog does not include the
 games themselves or grant ownership of them. Provider availability, access,
 accounts and usage requirements are controlled by those providers.
 
+## Temporary inbox
+
+The temporary inbox is independently implemented against the documented
+[Maildrop API](https://docs.maildrop.cc/api-reference/overview). Maildrop provides
+the address domain and message storage; the browser calls its public GraphQL
+endpoint directly. No Figure client or server implementation is bundled.
+
 ## Proxy dependencies
 
 BareMux and Epoxy are pinned npm dependencies; the build retains the BareMux

@@ -135,6 +135,16 @@ does not create accounts or verify a provider session. Embedded playback has a
 direct-tab fallback for browser or provider restrictions. Source provenance is
 recorded in [third-party sources](docs/THIRD-PARTY-SOURCES.md).
 
+Setup includes a free temporary inbox using Maildrop's documented API. A random
+address is generated locally for each new tab session and retained across reloads
+for up to 24 hours. Opening Setup checks mail directly with Maildrop; polling
+pauses when Setup or the page is hidden. Messages are displayed as text, without
+executing email HTML or loading remote images. Anyone who knows the mailbox
+address can read it through Maildrop, so it is unsuitable for passwords or
+lasting account recovery. The inbox does not create third-party game accounts.
+Figure's public client delegates signup to a server whose source has not been
+provided; a supported signup and session-handoff API is still required for that.
+
 Desktops launches the official v86 Windows 2000/98 browser emulators through
 Monkeh. These require no account, but are not modern Windows cloud VMs. Save the
 guest state before leaving. Guest networking is disabled and is separate from
