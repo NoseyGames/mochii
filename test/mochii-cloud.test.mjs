@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GAMES } from '../apps/mochii-cloud.data.js';
+import { getFigureLaunchUrl } from '../apps/mochii-figure.js';
 import { STORAGE_KEY, PLAYER_SANDBOX, validateLaunchUrl, normalizeState, createStore, createSessionTracker, buildEmbedCode, mountMochii } from '../apps/mochii-cloud.js';
 
 function memoryStorage(initial = null) {
@@ -241,6 +242,75 @@ test('new-tab launch removes the opener and stays attached to its own game when 
   for (const pulse of [...app.intervals.values()]) pulse();
   assert.equal(app.mounted.tracker.active, null);
   assert.equal(app.intervals.size, 0);
+});
+
+test('Figure handoff uses the mapped game and removes its opener without claiming game readiness', async () => {
+  const app = harness();
+  const game = GAMES.find(game => game.id === '117');
+  app.mounted.openDetails(game.id);
+  assert.equal(app.get('launch-figure').hidden, false);
+  assert.equal(app.get('launch-figure').disabled, false);
+  assert.match(app.get('detail-provider').textContent, /Figure.*setup and queues/);
+  assert.equal(app.popups.length, 0);
+  await app.get('launch-figure').click();
+  assert.equal(app.popups[0].url, getFigureLaunchUrl(game.id));
+  assert.equal(app.popups[0].opener, null);
+  assert.equal(app.frames.length, 0);
+  assert.equal(app.mounted.store.value.setupConfirmed, false);
+  assert.match(app.get('toast').textContent, /including loading and queues/);
+  app.mounted.openDetails(GAMES.find(other => other.id !== game.id).id);
+  await app.get('session-return').click();
+  assert.equal(app.popups[0].focused, true);
+  assert.equal(app.mounted.tracker.active.id, game.id);
+});
+
+test('Figure popup blocking preserves details, an active original tab, and existing activity', async () => {
+  const app = harness();
+  const game = GAMES.find(game => game.id === '117');
+  app.mounted.openGameTab(game);
+  const before = JSON.stringify(app.mounted.store.value.records);
+  app.win.open = () => null;
+  app.mounted.openDetails('209');
+  await app.get('launch-figure').click();
+  assert.equal(app.get('details-dialog').open, true);
+  assert.equal(app.mounted.tracker.active.id, game.id);
+  assert.equal(JSON.stringify(app.mounted.store.value.records), before);
+  assert.match(app.get('toast').textContent, /blocked/i);
+});
+
+test('unmapped games retain original launch actions and never open a guessed Figure link', async () => {
+  const app = harness();
+  const game = GAMES.find(game => game.id === 'MC120');
+  app.mounted.openDetails('117');
+  app.mounted.openDetails(game.id);
+  assert.equal(app.get('launch-figure').hidden, true);
+  assert.equal(app.get('launch-figure').disabled, true);
+  assert.equal(app.get('launch-tab').className, 'button primary');
+  app.mounted.openFigureTab(game);
+  assert.equal(app.popups.length, 0);
+  await app.get('launch-tab').click();
+  assert.equal(app.popups[0].url, game.url);
+});
+
+test('Figure navigation ignores supplied URL metadata and rejects unknown game identities', () => {
+  const app = harness();
+  for (const game of [null, {}, { id: 'unknown' }, { id: 117 }, { id: '__proto__' }]) app.mounted.openFigureTab(game);
+  assert.equal(app.popups.length, 0);
+  app.mounted.openFigureTab({ id: '117', url: 'https://evil.example/', n: 'wrong game' });
+  assert.equal(app.popups[0].url, getFigureLaunchUrl('117'));
+  assert.equal(app.get('session-name').textContent, 'Cyberpunk 2077');
+});
+
+test('failed Figure navigation closes only its empty popup and does not start tracking', () => {
+  const app = harness();
+  let closed = false;
+  app.win.open = () => ({ opener: app.win, location: { replace() { throw new Error('Navigation failed'); } }, close() { closed = true; } });
+  app.mounted.openDetails('117');
+  app.mounted.openFigureTab(GAMES.find(game => game.id === '117'));
+  assert.equal(closed, true);
+  assert.equal(app.mounted.tracker.active, null);
+  assert.equal(app.get('details-dialog').open, true);
+  assert.deepEqual(app.mounted.store.value.records, {});
 });
 
 test('closing an embedded player before load removes its frame and prevents delayed resurrection', async () => {

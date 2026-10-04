@@ -1,4 +1,5 @@
 import { GAMES } from './mochii-cloud.data.js';
+import { getFigureLaunchUrl } from './mochii-figure.js';
 import { mountInbox } from './mochii-inbox.js';
 
 export const STORAGE_KEY = 'mochii.cloud.v1';
@@ -354,7 +355,15 @@ export function mountMochii(doc = document, win = window) {
     $('detail-time').textContent = formatDuration(record?.seconds || 0);
     $('detail-last').textContent = record?.last ? new Date(record.last).toLocaleDateString() : 'Not yet';
     $('detail-achievements').textContent = String(game.ach);
-    $('detail-provider').textContent = game.url.includes('raccoongame.com') ? 'Opens with Raccoon. Its account requirements, availability, and pricing apply.' : 'Opens with the original browser-game provider.';
+    const figureUrl = getFigureLaunchUrl(game.id);
+    $('launch-figure').hidden = !figureUrl;
+    $('launch-figure').disabled = !figureUrl;
+    $('launch-tab').className = figureUrl ? 'button' : 'button primary';
+    $('launch-tab').textContent = figureUrl ? 'Original provider ↗' : 'Play in new tab ↗';
+    $('launch-embed').textContent = figureUrl ? 'Play original here' : 'Play here';
+    $('detail-provider').textContent = figureUrl
+      ? 'Figure opens this game in a new tab and handles session setup and queues. Its availability and terms apply. The original provider is also available below.'
+      : game.url.includes('raccoongame.com') ? 'Opens with Raccoon. Its account requirements, availability, and pricing apply.' : 'Opens with the original browser-game provider.';
     const specs = [];
     for (const [title, requirement] of [['Minimum', game.rm], ['Recommended', game.rr]]) {
       const group = element('div');
@@ -407,6 +416,17 @@ export function mountMochii(doc = document, win = window) {
   function openGameTab(game) {
     const url = validateLaunchUrl(game?.url, win.location.origin);
     if (!url) return toast('This game has an unsupported provider address.');
+    return openProviderTab(game, url);
+  }
+
+  function openFigureTab(game) {
+    const knownGame = byId.get(game?.id);
+    const url = getFigureLaunchUrl(knownGame?.id);
+    if (!url) return toast('This game has no verified Figure link. Use the original provider instead.');
+    return openProviderTab(knownGame, url, 'Figure');
+  }
+
+  function openProviderTab(game, url, provider = 'the provider') {
     let popup;
     try {
       popup = win.open('about:blank', '_blank');
@@ -415,12 +435,12 @@ export function mountMochii(doc = document, win = window) {
       popup.location.replace(url);
     } catch {
       try { popup?.close(); } catch {}
-      return toast('The game tab could not open. Try the provider sign-in link in Setup.');
+      return toast('The game tab could not open. Try again or choose the original provider.');
     }
     closePlayer();
     if (details.open) details.close();
     startSession(game, 'tab', popup);
-    toast('Opened with the provider. Session time is an estimate while the tab stays open.');
+    toast(`Opened with ${provider}. Session time estimates how long its tab stays open, including loading and queues.`);
   }
 
   function launchEmbedded(game) {
@@ -641,6 +661,7 @@ export function mountMochii(doc = document, win = window) {
     refreshCards();
   });
   $('launch-tab').addEventListener('click', () => { if (selected) openGameTab(selected); });
+  $('launch-figure').addEventListener('click', () => { if (selected) openFigureTab(selected); });
   $('launch-embed').addEventListener('click', () => { if (selected) launchEmbedded(selected); });
   $('copy-link').addEventListener('click', () => { if (selected) copy(gameLink(selected)); });
   $('copy-embed').addEventListener('click', () => copy($('embed-code').value, $('embed-code')));
@@ -731,7 +752,7 @@ export function mountMochii(doc = document, win = window) {
     if (byId.has(deepLink)) openDetails(deepLink);
     else toast('That game is not in this collection.');
   }
-  return { store, tracker, showView, openDetails, openGameTab, launchEmbedded, closePlayer };
+  return { store, tracker, showView, openDetails, openGameTab, openFigureTab, launchEmbedded, closePlayer };
 }
 
 if (typeof document !== 'undefined' && document.getElementById('view-discover')) {
