@@ -123,3 +123,91 @@ test('cross-tab preference sync replaces state without writing another storage e
   assert.equal(privacy.get().cloak, defaults.cloak);
   assert.equal(writes.length, 1);
 });
+
+async function preferenceController() {
+  const source = await readFile(new URL('../browser-tools/privacy.js', import.meta.url), 'utf8');
+  const writes = []; const changes = []; const timers = new Map(); const listeners = new Map(); const inputs = [];
+  const status = { textContent: '' }; let nextTimer = 0; let failWrites = false; let games = 0; let apps = 0;
+  const win = {
+    dispatchEvent: event => changes.push(event.detail),
+    addEventListener: (name, listener) => listeners.set(name, listener),
+    setTimeout: callback => { const id = ++nextTimer; timers.set(id, callback); return id; },
+    clearTimeout: id => timers.delete(id),
+    renderGames() { games++; }, renderApps() { apps++; }
+  };
+  for (const key of ['allowPopups', 'showCovers']) {
+    const input = { type: 'checkbox', dataset: { privacy: key }, addEventListener(_name, listener) { this.change = listener; } };
+    inputs.push(input);
+  }
+  const doc = { readyState: 'complete', hidden: false, getElementById: () => status, querySelectorAll: () => inputs, addEventListener: (name, listener) => listeners.set(name, listener) };
+  const context = {
+    window: win, document: doc, URL, CustomEvent,
+    localStorage: { getItem: () => null, setItem(key, value) { if (failWrites) throw new Error('Storage blocked'); writes.push({ key, value }); } }
+  };
+  vm.runInNewContext(source.replace(/^export /gm, ''), context);
+  return { privacy: win.MonkehPrivacy, writes, changes, timers, status, doc, inputs, listeners, set failWrites(value) { failWrites = value; }, get games() { return games; }, get apps() { return apps; }, flushTimer() { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(callback => callback()); } };
+}
+
+test('appearance previews update immediately and coalesce disk writes without duplicate no-op events', async () => {
+  const f = await preferenceController();
+  for (const accent of ['#112233', '#223344', '#334455']) f.privacy.update({ accent }, { deferSave: true });
+  assert.equal(f.privacy.get().accent, '#334455');
+  assert.equal(f.changes.length, 3);
+  assert.equal(f.writes.length, 0);
+  assert.equal(f.timers.size, 1);
+  f.flushTimer();
+  assert.equal(f.writes.length, 1);
+  assert.equal(JSON.parse(f.writes[0].value).accent, '#334455');
+  f.privacy.update({ accent: '#334455' });
+  assert.equal(f.changes.length, 3);
+  assert.equal(f.writes.length, 1);
+  f.privacy.update({ glassBlur: 18 }, { deferSave: true });
+  f.privacy.update({ allowPopups: true });
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.writes.length, 2);
+  assert.equal(JSON.parse(f.writes[1].value).glassBlur, 18);
+  assert.equal(JSON.parse(f.writes[1].value).allowPopups, true);
+});
+
+test('pending previews flush on page hide and storage failures keep the live settings usable', async () => {
+  const f = await preferenceController();
+  f.privacy.update({ backgroundBlur: 8 }, { deferSave: true });
+  f.listeners.get('pagehide')();
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.writes.length, 1);
+  f.failWrites = true;
+  f.privacy.update({ backgroundBlur: 9 }, { deferSave: true });
+  f.doc.hidden = true; f.listeners.get('visibilitychange')();
+  assert.equal(f.privacy.get().backgroundBlur, 9);
+  assert.equal(f.timers.size, 0);
+  assert.match(f.status.textContent, /blocked saving/);
+  f.failWrites = false;
+  f.privacy.update({ backgroundBlur: 10 });
+  assert.equal(f.writes.length, 2);
+  assert.match(f.status.textContent, /Saved/);
+});
+
+test('incoming cross-tab preferences cancel stale local debounce writes', async () => {
+  const f = await preferenceController();
+  f.privacy.update({ accent: '#112233' }, { deferSave: true });
+  f.privacy.sync({ accent: '#556677', mode: 'light' });
+  assert.equal(f.timers.size, 0);
+  f.flushTimer(); f.privacy.flush();
+  assert.equal(f.writes.length, 0);
+  assert.equal(f.privacy.get().accent, '#556677');
+  assert.equal(f.privacy.get().mode, 'light');
+});
+
+test('changing unrelated privacy controls does not rerender game or app catalogs', async () => {
+  const f = await preferenceController();
+  const popups = f.inputs.find(input => input.dataset.privacy === 'allowPopups');
+  popups.checked = true; popups.change();
+  assert.equal(f.games, 0); assert.equal(f.apps, 0);
+  const covers = f.inputs.find(input => input.dataset.privacy === 'showCovers');
+  covers.checked = false; covers.change(); covers.change();
+  assert.equal(f.games, 1); assert.equal(f.apps, 1);
+  f.privacy.update({ showCovers: true });
+  assert.equal(f.games, 2); assert.equal(f.apps, 2);
+  f.privacy.sync({ showCovers: false });
+  assert.equal(f.games, 3); assert.equal(f.apps, 3);
+});

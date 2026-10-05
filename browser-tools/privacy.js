@@ -53,18 +53,51 @@ if (typeof window !== 'undefined') {
   let settings;
   try { settings = normalizePrivacy(JSON.parse(localStorage.getItem(KEY))); }
   catch { settings = { ...defaults }; }
-  function update(patch, { persist = true, replace = false } = {}) {
-    settings = normalizePrivacy(replace ? patch : { ...settings, ...patch });
-    let saved = true;
-    if (persist) { try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch { saved = false; } }
+  let savedValue = JSON.stringify(settings);
+  let pendingSave = false;
+  let saveTimer;
+  function status(message) {
     const status = document.getElementById('privacy-status');
-    if (status) status.textContent = !persist ? 'Preferences updated from another tab.' : saved ? 'Saved in this browser.' : 'Applied for this visit. Your browser blocked saving preferences.';
-    window.dispatchEvent(new CustomEvent('monkeh:privacy', { detail: { ...settings } }));
+    if (status && status.textContent !== message) status.textContent = message;
+  }
+  function flush() {
+    if (!pendingSave) return;
+    if (saveTimer !== undefined) window.clearTimeout(saveTimer);
+    saveTimer = undefined;
+    pendingSave = false;
+    const value = JSON.stringify(settings);
+    try {
+      if (value !== savedValue) localStorage.setItem(KEY, value);
+      savedValue = value;
+      status('Saved in this browser.');
+    } catch { status('Applied for this visit. Your browser blocked saving preferences.'); }
+  }
+  function update(patch, { persist = true, replace = false, deferSave = false } = {}) {
+    const next = normalizePrivacy(replace ? patch : { ...settings, ...patch });
+    const changed = Object.keys(defaults).some(key => next[key] !== settings[key]);
+    const coversChanged = next.showCovers !== settings.showCovers;
+    settings = next;
+    if (!persist) {
+      if (pendingSave) window.clearTimeout(saveTimer);
+      pendingSave = false;
+      savedValue = JSON.stringify(settings);
+      if (changed) status('Preferences updated from another tab.');
+    } else if (changed || pendingSave) {
+      if (deferSave) {
+        if (pendingSave) window.clearTimeout(saveTimer);
+        else status('Preview updated. Saving…');
+        pendingSave = true;
+        saveTimer = window.setTimeout(flush, 180);
+      } else { pendingSave = true; flush(); }
+    }
+    if (changed) window.dispatchEvent(new CustomEvent('monkeh:privacy', { detail: { ...settings } }));
+    if (coversChanged) { window.renderGames?.(); window.renderApps?.(); }
     return { ...settings };
   }
   window.MonkehPrivacy = Object.freeze({
     get: () => ({ ...settings }),
     update,
+    flush,
     sync: value => update(value, { persist: false, replace: true }),
     sandbox: proxied => frameSandbox(settings, proxied),
     search: query => searchEngines[settings.searchEngine] + encodeURIComponent(query)
@@ -77,11 +110,11 @@ if (typeof window !== 'undefined') {
       else input.value = settings[key];
       input.addEventListener('change', () => {
         update({ [key]: input.type === 'checkbox' ? input.checked : input.value });
-        window.renderGames?.();
-        window.renderApps?.();
       });
     }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind, { once: true });
   else bind();
+  window.addEventListener?.('pagehide', flush);
+  document.addEventListener?.('visibilitychange', () => { if (document.hidden) flush(); });
 }

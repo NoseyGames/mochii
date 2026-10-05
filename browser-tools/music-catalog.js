@@ -312,6 +312,17 @@ export function mountMusicCatalog(win = window, doc = document, { fetcher = win.
   const catalog = createMusicCatalog({ fetchJson: async (path, options) => fetchMusicJson(fetcher, await apiUrl(path), options), onChange(snapshot) { data = snapshot; render(); } });
   const persistPlayer = () => { try { const state = player.snapshot(); win.localStorage.setItem(PLAYER_KEY, JSON.stringify({ volume: audio.volume, shuffle: state.shuffle, repeat: state.repeat })); } catch {} };
   let displayedTrack;
+  let visibleTracks = [];
+  const rows = new Map();
+  const coverObserver = typeof win.IntersectionObserver === 'function' ? new win.IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (entry.isIntersecting && dialog.open && !doc.hidden && !suspended && entry.target.dataset.src) {
+        entry.target.src = entry.target.dataset.src;
+        delete entry.target.dataset.src;
+        coverObserver.unobserve(entry.target);
+      }
+    }
+  }, { root: list, rootMargin: '0px' }) : null;
   const player = createMusicPlayer({ audio, resolveUrl: track => apiUrl(musicStreamPath(track)), onChange(state) {
     nowPlaying.textContent = state.current?.title || 'Choose a track';
     artist.textContent = state.variant ? state.variant.artist + ' · ' + SOURCE_LABELS.get(state.variant.source) : '';
@@ -334,24 +345,64 @@ export function mountMusicCatalog(win = window, doc = document, { fetcher = win.
     return tracks.filter(track => source.value === 'all' || track.variants.some(variant => variant.source === source.value)).map(track => preferMusicSource(track, source.value));
   }
   function render() {
+    const focusedRow = doc.activeElement?.closest?.('.music-track');
+    const focusedIndex = focusedRow ? Array.from(list.children).indexOf(focusedRow) : -1;
     const tracks = filtered();
+    visibleTracks = tracks;
     const pages = Math.max(1, Math.ceil(tracks.length / 40)); page = Math.max(1, Math.min(pages, page));
-    list.replaceChildren();
     const current = player?.snapshot();
+    const keep = new Set();
+    let position = 0;
     for (const track of tracks.slice((page - 1) * 40, page * 40)) {
-      const row = element('div', 'music-track'); row.dataset.key = track.key;
+      keep.add(track.key);
+      let entry = rows.get(track.key);
+      if (!entry) {
+        const row = element('div', 'music-track'); row.dataset.key = track.key;
+        entry = { row, track };
+        entry.launch = button('', () => void player.play(entry.track, visibleTracks)); entry.launch.className = 'music-track-play';
+        entry.info = element('span', 'music-track-info'); entry.title = element('strong'); entry.meta = element('small');
+        entry.info.append(entry.title, entry.meta); entry.launch.append(entry.info);
+        entry.favorite = button('', () => {
+          const item = entry.track;
+          if (favorites.has(item.key)) favorites.delete(item.key);
+          else { if (favorites.size >= 200) favorites.delete(favorites.keys().next().value); favorites.set(item.key, item); }
+          saveFavorites(); render();
+        }); entry.favorite.classList.add('music-favorite');
+        row.append(entry.launch, entry.favorite); rows.set(track.key, entry);
+      }
+      entry.track = track;
+      const { row, launch, favorite } = entry;
       row.toggleAttribute('data-playing', track.key === current?.current?.key && current.playing);
-      const launch = button('', () => void player.play(track, tracks), 'Play ' + track.title + ' by ' + track.artist); launch.className = 'music-track-play';
-      if (track.artwork && showCovers) { const image = element('img', 'music-art'); image.src = track.artwork; image.alt = ''; image.loading = 'lazy'; image.referrerPolicy = 'no-referrer'; image.addEventListener('error', () => image.remove(), { once: true }); launch.append(image); }
-      const info = element('span', 'music-track-info'); info.append(element('strong', '', track.title), element('small', '', track.artist + (track.explicit ? ' · Explicit' : '') + ' · ' + [...new Set(track.variants.map(variant => SOURCE_LABELS.get(variant.source)))].join(', '))); launch.append(info);
-      const favorite = button(favorites.has(track.key) ? '★' : '☆', () => {
-        if (favorites.has(track.key)) favorites.delete(track.key);
-        else { if (favorites.size >= 200) favorites.delete(favorites.keys().next().value); favorites.set(track.key, track); }
-        saveFavorites(); render();
-      }, (favorites.has(track.key) ? 'Unfavorite ' : 'Favorite ') + track.title); favorite.classList.add('music-favorite'); favorite.setAttribute('aria-pressed', String(favorites.has(track.key)));
-      row.append(launch, favorite); list.append(row);
+      launch.setAttribute('aria-label', 'Play ' + track.title + ' by ' + track.artist);
+      entry.title.textContent = track.title;
+      entry.meta.textContent = track.artist + (track.explicit ? ' · Explicit' : '') + ' · ' + [...new Set(track.variants.map(variant => SOURCE_LABELS.get(variant.source)))].join(', ');
+      const artwork = showCovers ? track.artwork : '';
+      if (entry.artwork !== artwork) {
+        if (entry.image) { coverObserver?.unobserve(entry.image); entry.image.remove(); }
+        entry.artwork = artwork; entry.image = null;
+        if (artwork) {
+          const image = element('img', 'music-art'); image.alt = ''; image.width = image.height = 42; image.loading = 'lazy'; image.decoding = 'async'; image.referrerPolicy = 'no-referrer';
+          image.dataset.src = artwork; entry.image = image; launch.prepend(image);
+          image.addEventListener('error', () => { image.removeAttribute('src'); image.classList.add('music-art-missing'); }, { once: true });
+        }
+      }
+      favorite.textContent = favorites.has(track.key) ? '★' : '☆';
+      favorite.setAttribute('aria-label', (favorites.has(track.key) ? 'Unfavorite ' : 'Favorite ') + track.title);
+      favorite.setAttribute('aria-pressed', String(favorites.has(track.key)));
+      if (list.children[position] !== row) list.insertBefore(row, list.children[position] || null);
+      position++;
+      if (entry.image?.dataset.src && dialog.open && !doc.hidden && !suspended) {
+        if (coverObserver) coverObserver.observe(entry.image);
+        else { entry.image.src = entry.image.dataset.src; delete entry.image.dataset.src; }
+      }
     }
+    for (const [key, entry] of rows) if (!keep.has(key)) { if (entry.image) coverObserver?.unobserve(entry.image); entry.row.remove(); rows.delete(key); }
+    for (const empty of list.querySelectorAll('.music-empty')) empty.remove();
     if (!tracks.length) list.append(element('p', 'music-empty', data.pending ? 'Searching music sources…' : view.value === 'favorites' ? 'Save tracks with the star to find them here.' : 'No tracks found. Try a song or artist name.'));
+    if (focusedIndex >= 0 && !focusedRow.isConnected) {
+      const neighbor = list.children[Math.min(focusedIndex, list.children.length - 1)];
+      (neighbor?.querySelector('.music-favorite') || search).focus({ preventScroll: true });
+    }
     status.textContent = tracks.length.toLocaleString() + ' tracks' + (data.pending ? ' · ' + data.pending + ' sources loading' : '') + (data.duplicates ? ' · ' + data.duplicates + ' duplicate results combined' : '');
     issues.hidden = !data.failures.length; issuesText.textContent = data.failures.join(' · ');
     previousPage.disabled = page === 1; nextPage.disabled = page === pages; pageLabel.textContent = page + ' / ' + pages;
@@ -365,9 +416,10 @@ export function mountMusicCatalog(win = window, doc = document, { fetcher = win.
   source.addEventListener('change', () => { page = 1; render(); }); view.addEventListener('change', () => { page = 1; render(); });
   form.addEventListener('submit', event => { event.preventDefault(); page = 1; view.value = 'all'; void catalog.search(search.value); });
   dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
-  dialog.addEventListener('close', () => { catalog.cancel(); launcher.hidden = !player.snapshot().current; });
+  dialog.addEventListener('close', () => { coverObserver?.disconnect(); catalog.cancel(); launcher.hidden = !player.snapshot().current; });
   win.addEventListener('monkeh:privacy', event => { const next = event.detail?.showCovers !== false; if (showCovers !== next) { showCovers = next; render(); } });
-  win.addEventListener('pagehide', () => { suspended = true; resumeQuery = dialog.open && (data.pending || !data.tracks.length) ? data.query : null; catalog.cancel(); player.suspend(); });
+  doc.addEventListener('visibilitychange', () => { if (doc.hidden) coverObserver?.disconnect(); else if (dialog.open) render(); });
+  win.addEventListener('pagehide', () => { suspended = true; coverObserver?.disconnect(); resumeQuery = dialog.open && (data.pending || !data.tracks.length) ? data.query : null; catalog.cancel(); player.suspend(); });
   win.addEventListener('pageshow', () => { suspended = false; render(); if (dialog.open && resumeQuery !== null) void catalog.search(resumeQuery); resumeQuery = null; });
   try {
     const saved = JSON.parse(win.localStorage.getItem(PLAYER_KEY) || '{}');
@@ -375,7 +427,7 @@ export function mountMusicCatalog(win = window, doc = document, { fetcher = win.
     audio.volume = Number(volume.value); player.setShuffle(saved.shuffle); player.setRepeat(saved.repeat);
   } catch { audio.volume = .7; }
   async function open() {
-    if (!dialog.open) dialog.showModal(); search.focus();
+    if (!dialog.open) dialog.showModal(); search.focus(); render();
     if (!seeded) {
       seeded = true;
       try {
@@ -383,7 +435,7 @@ export function mountMusicCatalog(win = window, doc = document, { fetcher = win.
         catalog.seed(normalizeMusicSnapshot(snapshot));
       } catch {}
       if (dialog.open && !suspended && !data.query) void catalog.search('');
-    }
+    } else if (!data.pending && !data.tracks.length) void catalog.search(data.query);
   }
   render();
   win.MonkehMusic = { open, close: () => dialog.close(), stop: () => player.stop() };

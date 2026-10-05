@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mountPreferences, hotkeyFor, createCharacterMasker, maskCharacters, parsePreferences, serializePreferences, userAgentPresets } from '../browser-tools/preferences.js';
+import { mountPreferences, hotkeyFor, createCharacterMasker, maskCharacters, parsePreferences, serializePreferences, userAgentPresets, bindSettingsDialog } from '../browser-tools/preferences.js';
 import { normalizePrivacy } from '../browser-tools/privacy.js';
 
 function events() {
@@ -30,7 +30,7 @@ function documentFixture() {
     const item = {
       ...events(), tagName: tag.toUpperCase(), type: tag === 'select' ? 'select-one' : '', dataset: {}, children: [],
       value: '', checked: false, hidden: false, _text: '', validity: { valid: true },
-      style: { values: {}, setProperty(name, value) { this.values[name] = value; } },
+      style: { values: {}, writes: [], setProperty(name, value) { this.writes.push({ name, value }); this.values[name] = value; } },
       append(...children) { for (const child of children) { if (child.parent) child.parent.children = child.parent.children.filter(item => item !== child); child.parent = this; this.children.push(child); } },
       remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); },
       setAttribute(name, value) { this[name] = value; },
@@ -88,6 +88,7 @@ function fixture(patch = {}) {
   const revoked = [];
   const timeouts = [];
   const writes = [];
+  const updates = [];
   let settings = normalizePrivacy(patch);
   const win = {
     ...events(), document: doc, CustomEvent,
@@ -102,12 +103,12 @@ function fixture(patch = {}) {
   };
   win.MonkehPrivacy = {
     get: () => ({ ...settings }),
-    update(next) { settings = normalizePrivacy({ ...settings, ...next }); writes.push({ ...settings }); win.emit('monkeh:privacy', { detail: { ...settings } }); return { ...settings }; },
+    update(next, options) { updates.push({ next, options }); settings = normalizePrivacy({ ...settings, ...next }); writes.push({ ...settings }); win.emit('monkeh:privacy', { detail: { ...settings } }); return { ...settings }; },
     sync(next) { settings = normalizePrivacy(next); win.emit('monkeh:privacy', { detail: { ...settings } }); return { ...settings }; }
   };
   const app = mountPreferences(win);
   return {
-    win, doc, app, redirects, popups, blobs, revoked, timeouts, writes,
+    win, doc, app, redirects, popups, blobs, revoked, timeouts, writes, updates,
     update: win.MonkehPrivacy.update,
     button(label) { return doc.all.find(item => item.tagName === 'BUTTON' && item.textContent === label); },
     input(key) { return doc.all.find(item => item.dataset.preference === key); }
@@ -156,7 +157,7 @@ test('URL setting fields reject invalid input before saving and recover when cor
   const input = f.input('backgroundUrl');
   input.value = 'javascript:alert(1)';
   input.emit('change');
-  assert.equal(input.customValidity, 'Enter a complete HTTPS URL.');
+  assert.match(input.customValidity, /complete HTTPS URL/);
   assert.equal(input.reported, true);
   assert.equal(f.win.MonkehPrivacy.get().backgroundUrl, '');
   input.value = 'https://images.example/bg.png';
@@ -404,4 +405,119 @@ test('visual numeric fields reject invalid entries and reset preferences can be 
   assert.equal(f.win.MonkehPrivacy.get().mode, 'light');
   assert.equal(f.win.MonkehPrivacy.get().userAgent, 'Safe/1');
   assert.equal(f.button('Undo reset').hidden, true);
+});
+
+test('uncommitted text and partial numeric drafts survive unrelated settings and cross-tab changes', () => {
+  const f = fixture({ userAgent: 'Saved/1', backgroundBlur: 5 });
+  const agent = f.input('userAgent');
+  const background = f.input('backgroundUrl');
+  const blur = f.input('backgroundBlur');
+  agent.value = 'My unfinished'; agent.emit('input');
+  background.value = 'https://images.'; background.emit('input');
+  blur.value = ''; blur.emit('input');
+  f.update({ mode: 'light', accent: '#234567' });
+  assert.equal(agent.value, 'My unfinished');
+  assert.equal(background.value, 'https://images.');
+  assert.equal(blur.value, '');
+  assert.equal(f.win.MonkehPrivacy.get().backgroundBlur, 5);
+  f.win.MonkehPrivacy.sync({ userAgent: 'Another tab/2' });
+  assert.equal(agent.value, 'My unfinished');
+  agent.emit('change');
+  assert.equal(f.win.MonkehPrivacy.get().userAgent, 'My unfinished');
+  const select = f.doc.getElementById('user-agent-preset');
+  agent.value = 'Bad\nHeader'; agent.emit('change');
+  select.value = 'default'; select.emit('change');
+  assert.equal(agent.value, '');
+  assert.equal(agent.customValidity, '');
+});
+
+test('appearance previews apply during input while invalid numeric drafts do not mutate preferences', () => {
+  const f = fixture();
+  const color = f.input('accent');
+  color.value = '#123456'; color.emit('input');
+  assert.equal(f.doc.documentElement.style.values['--user-accent'], '#123456');
+  assert.equal(f.updates.at(-1).options.deferSave, true);
+  const blur = f.input('backgroundBlur');
+  blur.value = '12'; blur.emit('input');
+  assert.equal(f.doc.documentElement.style.values['--background-blur'], '12px');
+  assert.equal(f.updates.at(-1).options.deferSave, true);
+  const before = f.updates.length;
+  for (const value of ['', '1.5', '-1', '25']) { blur.value = value; blur.emit('input'); }
+  assert.equal(f.updates.length, before);
+  assert.equal(f.win.MonkehPrivacy.get().backgroundBlur, 12);
+  blur.value = '13'; blur.emit('change');
+  assert.equal(f.updates.at(-1).options, undefined);
+});
+
+test('unrelated preference updates do not rewrite appearance styles or reload fonts', () => {
+  const f = fixture({ font: 'outfit', userAgent: 'Saved/1' });
+  const style = f.doc.documentElement.style;
+  style.writes.length = 0;
+  const font = f.doc.head.children.find(child => child.rel === 'stylesheet');
+  const preset = f.doc.getElementById('user-agent-preset');
+  preset.value = 'custom'; preset.emit('change');
+  f.update({ allowPopups: true });
+  f.update({ allowPopups: true });
+  assert.equal(style.writes.length, 0);
+  assert.equal(preset.value, 'custom');
+  assert.equal(f.doc.head.children.find(child => child.rel === 'stylesheet'), font);
+  f.update({ accent: '#345678' });
+  assert.deepEqual(style.writes, [{ name: '--user-accent', value: '#345678' }]);
+});
+
+test('settings search retains the controls needed to use matching settings', () => {
+  const f = fixture();
+  const search = f.doc.getElementById('settings-search');
+  search.value = 'user-agent'; search.emit('input');
+  assert.equal(f.doc.getElementById('user-agent-preset').parent.hidden, false);
+  assert.equal(f.input('userAgent').parent.hidden, false);
+  search.value = 'background blur'; search.emit('input');
+  for (const key of ['background', 'backgroundUrl', 'backgroundOpacity', 'backgroundBlur']) assert.equal(f.input(key).parent.hidden, false);
+  search.value = 'particle density'; search.emit('input');
+  assert.equal(f.input('particleEffect').parent.hidden, false);
+  assert.equal(f.input('particleDensity').parent.hidden, false);
+  search.value = 'panic URL'; search.emit('input');
+  assert.equal(f.button('Capture shortcut').hidden, false);
+  assert.equal(f.button('Test panic shortcut').hidden, false);
+});
+
+test('clearing an already empty shortcut restores the native guard after capture', () => {
+  const f = fixture({ nativeDevtoolsGuard: true });
+  const enabled = [];
+  f.win.MonkehDevtoolsGuard = { setEnabled: value => enabled.push(value) };
+  f.button('Capture shortcut').emit('click');
+  f.button('Clear shortcut').emit('click');
+  assert.deepEqual(enabled, [false, true]);
+  assert.equal(f.win.MonkehPrivacy.get().panicKey, '');
+  assert(f.button('Capture shortcut'));
+});
+
+test('closing settings traps keyboard focus, restores the opener and consumes Escape before panic', () => {
+  const doc = documentFixture();
+  const modal = doc.createElement('div'); modal.id = 'settings-modal'; doc.body.append(modal);
+  const classes = new Set();
+  modal.classList = { contains: value => classes.has(value), add: value => classes.add(value), remove: value => classes.delete(value) };
+  const first = doc.createElement('button'); const last = doc.createElement('input'); const hidden = doc.createElement('input');
+  for (const control of [first, last, hidden]) { control.tabIndex = 0; control.getClientRects = () => control === hidden ? [] : [{}]; control.focus = () => { doc.activeElement = control; }; }
+  modal.append(first, last, hidden); modal.contains = item => [first, last, hidden].includes(item);
+  modal.querySelectorAll = () => [first, last, hidden];
+  const search = doc.createElement('input'); search.id = 'settings-search'; search.focus = () => { doc.activeElement = first; }; modal.append(search);
+  let restored = 0; let closed = 0;
+  doc.activeElement = { focus() { restored++; } };
+  const win = { ...events(), document: doc, openSettingsModal: () => classes.add('active'), closeSettingsModal: () => classes.delete('active') };
+  bindSettingsDialog(win, { onClose: () => { closed++; } });
+  assert.equal(modal.inert, true);
+  win.openSettingsModal();
+  assert.equal(modal.inert, false);
+  assert.equal(doc.activeElement, first);
+  assert.equal(win.emit('keydown', { key: 'Tab', shiftKey: true }).prevented, true);
+  assert.equal(doc.activeElement, last);
+  assert.equal(win.emit('keydown', { key: 'Tab' }).prevented, true);
+  assert.equal(doc.activeElement, first);
+  const escape = win.emit('keydown', { key: 'Escape' });
+  assert.equal(escape.stopped, true);
+  assert.equal(modal.inert, true);
+  assert.equal(modal['aria-hidden'], 'true');
+  assert.equal(restored, 1);
+  assert.equal(closed, 1);
 });

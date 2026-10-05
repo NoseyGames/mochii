@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { GAME_SOURCES, normalizeGameEntries, normalizeGameSnapshot, snapshotGameEntries, deduplicateGames, selectGames, gamePage, fetchGameJson, createGameCatalog } from '../browser-tools/game-catalog.js';
+import { GAME_SOURCES, normalizeGameEntries, normalizeGameSnapshot, snapshotGameEntries, deduplicateGames, selectGames, gamePage, fetchGameJson, createGameCatalog, createLazyGameCovers } from '../browser-tools/game-catalog.js';
 
 const fixture = { version: 1, sources: [
   { id: 'securly', games: [{ name: 'First game', url: '{HTML_URL}/first.html', cover: '{COVER_URL}/first.png', author: 'Creator' }, { name: 'Slope', url: '{HTML_URL}/slope.html' }] },
@@ -89,37 +89,65 @@ test('fetch rejects HTML errors and oversized streaming catalogs and cancels the
 
 function harness(fetcher, initialStorage = []) {
   const nodes = new Map();
+  const observers = [];
+  const imageRequests = [];
+  let doc;
   function element(tagName = 'div') {
     const events = new Map();
     const el = {
-      tagName, children: [], attributes: {}, value: '', textContent: '', parentNode: null, disabled: false,
+      tagName, children: [], attributes: {}, value: '', textContent: '', parentNode: null, disabled: false, scrollTop: 0,
       setAttribute(name, value) { this.attributes[name] = value; },
       addEventListener(type, listener) { events.set(type, listener); },
       fire(type) { return events.get(type)?.({ target: this }); },
       appendChild(child) {
         if (child.tagName === '#fragment') { for (const item of [...child.children]) this.appendChild(item); return child; }
+        if (child.parentNode) child.parentNode.children = child.parentNode.children.filter(item => item !== child);
         this.children.push(child); child.parentNode = this; return child;
       },
       append(...children) { children.forEach(child => this.appendChild(child)); },
-      replaceChildren(...children) { this.children = []; this.append(...children); },
-      insertBefore(child, before) { const index = this.children.indexOf(before); if (index < 0) this.appendChild(child); else { this.children.splice(index, 0, child); child.parentNode = this; } },
-      remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter(child => child !== this); },
-      scrollTo() {}
+      replaceChildren(...children) { [...this.children].forEach(child => child.remove()); this.append(...children); },
+      insertBefore(child, before) {
+        if (child === before) return;
+        if (child.parentNode) child.parentNode.children = child.parentNode.children.filter(item => item !== child);
+        const index = this.children.indexOf(before); if (index < 0) this.appendChild(child); else { this.children.splice(index, 0, child); child.parentNode = this; }
+      },
+      remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter(child => child !== this); if (this.contains(doc?.activeElement)) doc.activeElement = null; this.parentNode = null; },
+      contains(target) { return target === this || this.children.some(child => child.contains(target)); },
+      focus() { doc.activeElement = this; },
+      scrollTo({ top }) { this.scrollTop = top; }
     };
+    el.classList = { contains(name) { return (el.className || '').split(' ').includes(name); } };
     Object.defineProperty(el, 'id', { get() { return this._id; }, set(value) { this._id = value; nodes.set(value, this); } });
+    Object.defineProperty(el, 'src', { get() { return this._src; }, set(value) { this._src = value; imageRequests.push(value); } });
     Object.defineProperty(el, 'firstElementChild', { get() { return this.children[0]; } });
     Object.defineProperty(el, 'nextSibling', { get() { return this.parentNode?.children[this.parentNode.children.indexOf(this) + 1]; } });
     return el;
   }
   const panel = element();
+  const popover = element(); popover.id = 'games-popover'; popover.className = 'active'; popover.appendChild(panel);
   for (const id of ['popover-search-input', 'popover-sort-select', 'game-list']) { const item = element(); item.id = id; panel.appendChild(item); }
-  const doc = { getElementById: id => nodes.get(id), createElement: element, createDocumentFragment: () => element('#fragment') };
+  doc = { getElementById: id => nodes.get(id), createElement: element, createDocumentFragment: () => element('#fragment'), activeElement: null, hidden: false };
   const storage = new Map(initialStorage);
   const opened = [];
   const win = { localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) }, fetch: fetcher,
-    openViewer: (...args) => opened.push(args), MonkehPrivacy: { get: () => ({ showCovers: true }) } };
+    openViewer: (...args) => opened.push(args), MonkehPrivacy: { get: () => ({ showCovers: true }) },
+    IntersectionObserver: class {
+      constructor(callback, options) { this.callback = callback; this.options = options; this.targets = new Set(); observers.push(this); }
+      observe(target) { this.targets.add(target); }
+      unobserve(target) { this.targets.delete(target); }
+      disconnect() { this.targets.clear(); }
+      emit(target, isIntersecting = true) { this.callback([{ target, isIntersecting }]); }
+    }
+  };
   const catalog = createGameCatalog(win, doc);
-  return { catalog, nodes, panel, storage, opened };
+  return { catalog, nodes, panel, storage, opened, doc, win, popover, observers, imageRequests };
+}
+
+function sourceChooser(card) {
+  const menu = card.children[2];
+  menu.open = true;
+  menu.fire('toggle');
+  return menu.children[1];
 }
 
 test('saved catalogs render before a slow live source, controls are installed once, and failed refresh keeps usable games', async () => {
@@ -217,8 +245,9 @@ test('favorite and recent source IDs migrate to one canonical title and alternat
   assert.equal(app.storage.get('monkeh.games.favorites.v1'), '["game|slope"]');
   const card = app.nodes.get('game-list').children[0];
   assert.equal(card.children.length, 3);
-  card.children[2].value = oldB;
-  card.children[2].fire('change');
+  const chooser = sourceChooser(card);
+  chooser.value = oldB;
+  chooser.fire('change');
   card.children[0].fire('click');
   assert.deepEqual(app.opened[0], ['Slope', 'GN-Math', 'https://photos.tram-gallery.ru/study2/1.html', true]);
   app.nodes.get('games-source-select').value = 'securly';
@@ -237,7 +266,7 @@ test('a live source refresh retains all alternative sources and merges new dupli
   assert.equal(app.catalog.getState().variants, 3);
   assert.equal(app.catalog.getState().duplicates, 2);
   const card = app.nodes.get('game-list').children[0];
-  assert.equal(card.children[2].children.length, 3);
+  assert.equal(sourceChooser(card).children.length, 3);
   app.nodes.get('games-source-select').value = 'gn-math';
   app.nodes.get('games-source-select').fire('change');
   app.nodes.get('game-list').children[0].children[0].fire('click');
@@ -258,10 +287,135 @@ test('2048 defaults to its verified Seraph launch while keeping broken upstream 
   await app.catalog.open();
   app.catalog.launch({ id: game.id });
   assert.equal(app.opened[0][2], healthy);
-  const chooser = app.nodes.get('game-list').children[0].children[2];
+  const chooser = sourceChooser(app.nodes.get('game-list').children[0]);
   chooser.value = game.aliases[0];
   chooser.fire('change');
   app.catalog.launch({ id: game.id });
   assert.equal(app.opened[1][2], 'https://cdn.jsdelivr.net/gh/securlycdn/html@main/114-f.html');
   assert.equal(app.opened.length, 2);
+});
+
+test('a fast live response waits for the complete snapshot instead of flashing a partial catalog', async () => {
+  let finishSnapshot;
+  const snapshot = new Promise(resolve => { finishSnapshot = resolve; });
+  const app = harness(url => url.startsWith('/') ? snapshot : Promise.resolve(response(fixture.sources[0].games)));
+  const pending = app.catalog.open();
+  await flush();
+  assert.equal(app.catalog.getState().count, 0);
+  assert.equal(app.catalog.getState().ready, false);
+  assert.equal(app.nodes.get('game-list').firstElementChild.textContent, 'Loading catalog…');
+  finishSnapshot(response(fixture));
+  assert.equal(await pending, 2);
+  assert.equal(app.catalog.getState().variants, 3);
+});
+
+test('covers start only inside the visible viewport and retain a placeholder after image failure', async () => {
+  const app = harness(url => Promise.resolve(url.startsWith('/') ? response(fixture) : new Response('offline', { status: 503 })));
+  app.popover.className = '';
+  await app.catalog.open();
+  const observer = app.observers[0];
+  const [cover] = observer.targets;
+  assert(cover);
+  assert.equal(observer.options.root, app.nodes.get('game-list'));
+  assert.equal(observer.options.rootMargin, '0px');
+  assert.equal(cover.loading, 'lazy');
+  assert.equal(cover.decoding, 'async');
+  assert.equal(cover.width, 320);
+  assert.equal(cover.height, 180);
+  observer.emit(cover);
+  assert.deepEqual(app.imageRequests, []);
+  app.popover.className = 'active';
+  await app.catalog.open();
+  observer.emit(cover, false);
+  assert.deepEqual(app.imageRequests, []);
+  observer.emit(cover);
+  assert.equal(app.imageRequests.length, 1);
+  observer.emit(cover);
+  assert.equal(app.imageRequests.length, 1);
+  const frame = cover.parentNode;
+  cover.fire('error');
+  assert.equal(frame.children.length, 1);
+  assert.equal(frame.children[0].hidden, undefined);
+});
+
+test('favorite toggles and unchanged refreshes reuse cards without losing focus, scroll or loaded covers', async () => {
+  const app = harness(url => Promise.resolve(url.startsWith('/') ? response(fixture) : response(fixture.sources[0].games)));
+  await app.catalog.open();
+  const list = app.nodes.get('game-list');
+  const first = list.children[0];
+  const covered = list.children[1];
+  const [cover] = app.observers[0].targets;
+  app.observers[0].emit(cover);
+  list.scrollTop = 175;
+  first.children[1].focus();
+  first.children[1].fire('click');
+  assert.equal(list.children[0], first);
+  assert.equal(app.doc.activeElement, first.children[1]);
+  assert.equal(first.children[1].attributes['aria-pressed'], 'true');
+  assert.equal(list.scrollTop, 175);
+  await app.catalog.refresh();
+  assert.equal(list.children[0], first);
+  assert.equal(list.children[1], covered);
+  assert.equal(app.doc.activeElement, first.children[1]);
+  assert.equal(list.scrollTop, 175);
+  assert.equal(app.imageRequests.length, 1);
+});
+
+test('source controls are built only on demand and choosing a variant keeps the card and keyboard focus', async () => {
+  const app = harness(url => Promise.resolve(url.startsWith('/') ? response(fixture) : new Response('offline', { status: 503 })));
+  await app.catalog.open();
+  const first = app.nodes.get('game-list').children[0];
+  const menu = first.children[2];
+  assert.equal(menu.children.length, 1);
+  const chooser = sourceChooser(first);
+  assert.equal(app.doc.activeElement, chooser);
+  chooser.value = chooser.children[1].value;
+  chooser.fire('change');
+  assert.equal(menu.open, false);
+  assert.equal(app.doc.activeElement, menu.children[0]);
+  app.catalog.render();
+  assert.equal(app.nodes.get('game-list').children[0], first);
+  first.children[0].fire('click');
+  assert.equal(app.opened[0][1], 'GN-Math');
+});
+
+test('removing a focused favorite moves focus to the next card while search keeps its input focus', async () => {
+  const app = harness(url => Promise.resolve(url.startsWith('/') ? response(fixture) : new Response('offline', { status: 503 })));
+  await app.catalog.open();
+  const list = app.nodes.get('game-list');
+  list.children[0].children[1].fire('click');
+  list.children[1].children[1].fire('click');
+  app.nodes.get('games-view-select').value = 'favorites';
+  app.nodes.get('games-view-select').fire('change');
+  const survivor = list.children[1];
+  list.children[0].children[1].focus();
+  list.children[0].children[1].fire('click');
+  assert.equal(list.children.length, 1);
+  assert.equal(list.children[0], survivor);
+  assert.equal(app.doc.activeElement, survivor.children[1]);
+  const search = app.nodes.get('popover-search-input');
+  search.focus(); search.value = 'missing'; list.scrollTop = 200;
+  app.catalog.render(true);
+  assert.equal(app.doc.activeElement, search);
+  assert.equal(list.scrollTop, 0);
+});
+
+test('lazy image fallback checks actual viewport bounds when IntersectionObserver is unavailable', () => {
+  const frames = [];
+  let visible = false;
+  const container = { addEventListener() {}, getBoundingClientRect: () => ({ top: 100, bottom: 500, left: 0, right: 600 }) };
+  const win = { innerHeight: 400, innerWidth: 600, addEventListener() {}, requestAnimationFrame(callback) { frames.push(callback); return frames.length; } };
+  const doc = { hidden: false };
+  const inside = { getBoundingClientRect: () => ({ top: 150, bottom: 250, left: 50, right: 200, width: 150, height: 100 }) };
+  const below = { getBoundingClientRect: () => ({ top: 450, bottom: 550, left: 50, right: 200, width: 150, height: 100 }) };
+  const lazy = createLazyGameCovers(win, doc, container, () => visible);
+  lazy.add(inside, 'https://example.com/inside.png');
+  lazy.add(below, 'https://example.com/below.png');
+  assert.equal(frames.length, 0);
+  visible = true; lazy.resume(); frames.shift()();
+  assert.equal(inside.src, 'https://example.com/inside.png');
+  assert.equal(below.src, undefined);
+  below.getBoundingClientRect = inside.getBoundingClientRect;
+  lazy.resume(); frames.shift()();
+  assert.equal(below.src, 'https://example.com/below.png');
 });

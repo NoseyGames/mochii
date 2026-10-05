@@ -1,4 +1,4 @@
-.music-dialog { width: min(940px, calc(100vw - 28px)); max-height: min(900px, calc(100dvh - 32px)); padding: 0; border: 1px solid var(--border-color, #393b42); border-radius: 16px; color: var(--text-main, #eceef2); background: var(--bg-card, #17191e); box-shadow: 0 24px 100px #0008; font: 14px var(--user-font, system-ui, sans-serif); }
+.music-dialog { position: fixed; inset: 0; margin: auto; width: min(940px, calc(100vw - 28px)); max-height: min(900px, calc(100dvh - 32px)); padding: 0; border: 1px solid var(--border-color, #393b42); border-radius: 16px; color: var(--text-main, #eceef2); background: var(--bg-card, #17191e); box-shadow: 0 24px 100px #0008; font: 14px var(--user-font, system-ui, sans-serif); }
 .music-dialog::backdrop { background: #07090ebd; backdrop-filter: blur(8px); }
 .music-card { display: flex; flex-direction: column; max-height: min(896px, calc(100dvh - 36px)); }
 .music-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px 10px; }
@@ -19,7 +19,7 @@
 .music-track { display: flex; align-items: center; border-radius: 9px; border-bottom: 1px solid color-mix(in srgb, var(--border-color, #393b42) 55%, transparent); min-height: 61px; }
 .music-track:hover, .music-track[data-playing] { background: color-mix(in srgb, var(--user-accent, #b4bdca) 9%, transparent); }
 .music-track-play { display: flex; gap: 12px; align-items: center; min-width: 0; width: 100%; color: inherit; background: transparent; border: 0; padding: 9px; font: inherit; text-align: left; cursor: pointer; }
-.music-art { width: 42px; height: 42px; border-radius: 6px; object-fit: cover; flex: 0 0 42px; }
+.music-art { background: var(--border-color, #393b42); width: 42px; height: 42px; border-radius: 6px; object-fit: cover; flex: 0 0 42px; }
 .music-track-info { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .music-track-info strong, .music-track-info small { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .music-track-info strong { font-weight: 550; font-size: 13px; }
@@ -48,7 +48,7 @@
 .music-dialog [hidden], .music-mini-player[hidden] { display: none !important; }
 .music-dialog :focus-visible, .music-mini-player:focus-visible { outline: 2px solid var(--user-accent, #b4bdca); outline-offset: 2px; }
 @media(max-width: 560px) {
-  .music-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .music-dialog { position: fixed; inset: 0; margin: auto; width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
   .music-card { max-height: calc(100dvh - 20px); }
   .music-header, .music-player { padding-left: 14px; padding-right: 14px; }
   .music-search, .music-controls, .music-status, .music-footnote { padding-left: 14px; padding-right: 14px; }

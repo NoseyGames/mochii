@@ -22,6 +22,7 @@ html[data-skip-loading="true"] :is(.app-viewport, .overlay-backdrop), html[data-
 .preferences-fields { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
 .preferences-fields .setting-item { padding: 12px; }
 .preferences-fields input[type="color"] { width: 42px; height: 32px; border: 1px solid var(--border-color); border-radius: 6px; padding: 2px; background: transparent; }
+.preferences-fields input[aria-invalid="true"] { outline: 2px solid #ca7373; outline-offset: 2px; }
 .preferences-fields .setting-item > input[type="url"] { width: min(52%, 260px); }
 .preferences-fields .setting-item > input[type="text"] { width: min(52%, 300px); }
 .preferences-fields .setting-item > input[type="number"] { width: 84px; flex: 0 0 84px; min-height: 34px; padding: 7px 10px; border: 1px solid var(--border-color); border-radius: 6px; }

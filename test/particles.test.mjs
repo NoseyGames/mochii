@@ -32,6 +32,9 @@ test('effects stop when hidden, during games, for reduced motion and after dispo
   };
   const effects = mountParticles(win, doc);
   assert.equal(frames.size, 1); assert.equal(canvas.width, 2880);
+  const frameBeforeUnrelatedChange = frameId;
+  settings.accentColor = '#ff0000'; win.fire('monkeh:privacy');
+  assert.equal(frameId, frameBeforeUnrelatedChange);
   doc.hidden = true; doc.fire('visibilitychange'); assert.equal(frames.size, 0);
   doc.hidden = false; doc.fire('visibilitychange'); assert.equal(frames.size, 1);
   active = true; mutations(); assert.equal(frames.size, 0);

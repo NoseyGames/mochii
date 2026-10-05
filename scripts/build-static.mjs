@@ -21,6 +21,7 @@ export const staticFiles = Object.freeze([
   'browser-tools/game-catalog.js', 'browser-tools/game-catalog.json', 'browser-tools/game-catalog.css',
   'browser-tools/catalog-identity.js', 'browser-tools/music-catalog.js', 'browser-tools/music-catalog.css', 'browser-tools/music-catalog.json',
   'browser-tools/particles.js', 'browser-tools/particles.css', 'browser-tools/proxy-identity.js',
+  'browser-tools/mirror-report.js', 'monkeh-mirror.json', 'mirror-report.json',
   'ultrav/uv.bundle.js', 'ultrav/uv.client.js', 'ultrav/uv.handler.js',
   'ultrav/uv.sw.js', 'ultrav/uv.config.js',
 ]);

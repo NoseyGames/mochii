@@ -175,12 +175,70 @@ export async function fetchGameJson(fetcher, url, { signal } = {}) {
   } finally { reader.releaseLock(); }
 }
 
+export function createLazyGameCovers(win, doc, container, isVisible) {
+  const pending = new Map();
+  let frame = null;
+  const load = image => {
+    const url = pending.get(image);
+    if (!url || !isVisible() || doc.hidden) return;
+    pending.delete(image);
+    observer?.unobserve(image);
+    image.src = url;
+  };
+  const observer = typeof win.IntersectionObserver === 'function' ? new win.IntersectionObserver(entries => {
+    for (const entry of entries) if (entry.isIntersecting) load(entry.target);
+  }, { root: container, rootMargin: '0px', threshold: 0.01 }) : null;
+  const check = () => {
+    frame = null;
+    if (!isVisible() || doc.hidden) return;
+    const bounds = container.getBoundingClientRect?.();
+    if (!bounds) return;
+    for (const image of pending.keys()) {
+      const rect = image.getBoundingClientRect?.();
+      if (rect && rect.width > 0 && rect.height > 0 && rect.bottom > Math.max(0, bounds.top) && rect.top < Math.min(win.innerHeight || Infinity, bounds.bottom)
+        && rect.right > Math.max(0, bounds.left) && rect.left < Math.min(win.innerWidth || Infinity, bounds.right)) load(image);
+    }
+  };
+  const schedule = () => {
+    if (frame !== null || !pending.size || !isVisible() || doc.hidden) return;
+    frame = win.requestAnimationFrame ? win.requestAnimationFrame(check) : win.setTimeout(check, 16);
+  };
+  if (!observer) { container.addEventListener('scroll', schedule, { passive: true }); win.addEventListener?.('resize', schedule, { passive: true }); }
+  const api = {
+    add(image, url) { pending.set(image, url); if (observer) observer.observe(image); else schedule(); },
+    remove(image) { pending.delete(image); observer?.unobserve(image); },
+    resume() {
+      if (!isVisible() || doc.hidden) return;
+      if (observer) for (const image of pending.keys()) { observer.unobserve(image); observer.observe(image); }
+      else schedule();
+    },
+    pause() {
+      observer?.disconnect();
+      if (frame !== null) {
+        if (win.cancelAnimationFrame) win.cancelAnimationFrame(frame);
+        else win.clearTimeout?.(frame);
+        frame = null;
+      }
+    }
+  };
+  doc.addEventListener?.('visibilitychange', () => { if (doc.hidden) api.pause(); else api.resume(); });
+  win.addEventListener?.('pagehide', () => api.pause());
+  win.addEventListener?.('pageshow', () => api.resume());
+  return api;
+}
+
 export function createGameCatalog(win, doc) {
   let games = [];
   let rawGames = [];
   let gameIndex = new Map();
   let aliasIndex = new Map();
   const preferredVariants = new Map();
+  const cards = new Map();
+  let covers;
+  let catalogRevision = 0;
+  let favoritesRevision = 0;
+  let recentsRevision = 0;
+  let filterSignature = '';
   let filtered = [];
   let page = 1;
   let loading = null;
@@ -212,6 +270,7 @@ export function createGameCatalog(win, doc) {
     const known = gameIndex.get(game?.id) || gameIndex.get(aliasIndex.get(game?.id));
     if (!known) return;
     recents = [known.id, ...recents.filter(id => id !== known.id)].slice(0, 50);
+    recentsRevision++;
     saveList(RECENTS_KEY, recents);
     const variant = activeVariant(known);
     return win.openViewer?.(known.name, SOURCE_BY_ID.get(variant.source).label, variant.url, true);
@@ -219,8 +278,11 @@ export function createGameCatalog(win, doc) {
 
   function toggleFavorite(game) {
     favorites = favorites.includes(game.id) ? favorites.filter(id => id !== game.id) : [game.id, ...favorites].slice(0, 500);
+    favoritesRevision++;
     saveList(FAVORITES_KEY, favorites);
-    render();
+    const card = cards.get(game.id);
+    if (card) updateFavorite(card, favorites.includes(game.id));
+    if (node('games-view-select')?.value === 'favorites') render();
   }
 
   function element(tag, className, text) {
@@ -230,47 +292,56 @@ export function createGameCatalog(win, doc) {
     return el;
   }
 
-  function render(resetPage = false) {
-    const container = node('game-list');
-    if (!container) return;
-    if (resetPage) page = 1;
-    filtered = selectGames(games, { query: node('popover-search-input')?.value, source: node('games-source-select')?.value || 'all',
-      view: node('games-view-select')?.value || 'all', sort: node('popover-sort-select')?.value, favorites, recents });
-    const slice = gamePage(filtered, page);
-    page = slice.page;
-    const fragment = doc.createDocumentFragment();
-    if (!slice.items.length) fragment.appendChild(element('div', 'loading-text', ready ? 'No games match these filters.' : 'Loading catalog…'));
-    const saved = new Set(favorites);
-    for (const game of slice.items) {
-      const variant = activeVariant(game);
-      const item = element('div', 'game-item');
-      const launchButton = element('button', 'game-launch');
-      launchButton.type = 'button';
-      launchButton.setAttribute('aria-label', 'Play ' + game.name + ' from ' + SOURCE_BY_ID.get(variant.source).label);
-      launchButton.addEventListener('click', () => launch(game));
-      if (game.cover && win.MonkehPrivacy?.get().showCovers !== false) {
-        const cover = element('img', 'game-cover');
-        cover.src = game.cover;
-        cover.alt = '';
-        cover.loading = 'lazy';
-        cover.decoding = 'async';
-        cover.referrerPolicy = 'no-referrer';
-        cover.addEventListener('error', () => cover.remove(), { once: true });
-        launchButton.appendChild(cover);
-      }
-      const info = element('span', 'game-info');
-      info.appendChild(element('span', 'game-title', game.name));
-      info.appendChild(element('span', 'game-author', SOURCE_BY_ID.get(variant.source).label + (game.author ? ' · ' + game.author : '')));
-      launchButton.appendChild(info);
-      const star = element('button', 'game-favorite', saved.has(game.id) ? '★' : '☆');
-      star.type = 'button';
-      star.setAttribute('aria-label', (saved.has(game.id) ? 'Remove ' : 'Add ') + game.name + (saved.has(game.id) ? ' from favorites' : ' to favorites'));
-      star.setAttribute('aria-pressed', String(saved.has(game.id)));
-      star.addEventListener('click', () => toggleFavorite(game));
-      item.append(launchButton, star);
-      const sourceFilter = node('games-source-select')?.value || 'all';
-      const variants = sourceFilter === 'all' ? game.variants : game.variants.filter(entry => entry.source === sourceFilter);
-      if (variants.length > 1) {
+  function updateFavorite(card, saved) {
+    card.star.textContent = saved ? '★' : '☆';
+    card.star.setAttribute('aria-label', (saved ? 'Remove ' : 'Add ') + card.game.name + (saved ? ' from favorites' : ' to favorites'));
+    card.star.setAttribute('aria-pressed', String(saved));
+  }
+
+  function createCard(game, sourceFilter, showCovers) {
+    const variant = activeVariant(game);
+    const item = element('div', 'game-item');
+    const launchButton = element('button', 'game-launch');
+    launchButton.type = 'button';
+    launchButton.setAttribute('aria-label', 'Play ' + game.name + ' from ' + SOURCE_BY_ID.get(variant.source).label);
+    launchButton.addEventListener('click', () => launch(game));
+    const coverFrame = element('span', 'game-cover-frame');
+    coverFrame.setAttribute('aria-hidden', 'true');
+    const placeholder = element('span', 'game-cover-placeholder', game.name.split(/\s+/).slice(0, 2).map(word => Array.from(word)[0]).join('').toUpperCase());
+    coverFrame.appendChild(placeholder);
+    let cover;
+    if (game.cover && showCovers) {
+      cover = element('img', 'game-cover');
+      cover.alt = '';
+      cover.width = 320;
+      cover.height = 180;
+      cover.loading = 'lazy';
+      cover.decoding = 'async';
+      cover.referrerPolicy = 'no-referrer';
+      cover.addEventListener('load', () => { placeholder.hidden = true; cover.setAttribute('data-loaded', ''); }, { once: true });
+      cover.addEventListener('error', () => { covers?.remove(cover); cover.remove(); }, { once: true });
+      coverFrame.appendChild(cover);
+    }
+    launchButton.appendChild(coverFrame);
+    const info = element('span', 'game-info');
+    info.appendChild(element('span', 'game-title', game.name));
+    info.appendChild(element('span', 'game-author', SOURCE_BY_ID.get(variant.source).label));
+    launchButton.appendChild(info);
+    const star = element('button', 'game-favorite');
+    star.type = 'button';
+    star.addEventListener('click', () => toggleFavorite(game));
+    item.append(launchButton, star);
+    const card = { game, item, star, launchButton, cover, sourceFilter, showCovers };
+    updateFavorite(card, favorites.includes(game.id));
+    const variants = sourceFilter === 'all' ? game.variants : game.variants.filter(entry => entry.source === sourceFilter);
+    if (variants.length > 1) {
+      const menu = element('details', 'game-source-menu');
+      const summary = element('summary', '', '⋯');
+      summary.setAttribute('aria-label', 'Choose source for ' + game.name);
+      summary.title = 'Choose source';
+      menu.appendChild(summary);
+      menu.addEventListener('toggle', () => {
+        if (!menu.open || card.chooser) return;
         const chooser = element('select', 'game-source-choice');
         chooser.setAttribute('aria-label', 'Source for ' + game.name);
         const sourceCounts = new Map();
@@ -281,24 +352,94 @@ export function createGameCatalog(win, doc) {
           option.value = entry.id;
           chooser.appendChild(option);
         }
-        chooser.value = variant.id;
+        chooser.value = activeVariant(game).id;
         chooser.addEventListener('change', () => {
           preferredVariants.set(game.id, chooser.value);
           const selected = activeVariant(game);
           launchButton.setAttribute('aria-label', 'Play ' + game.name + ' from ' + SOURCE_BY_ID.get(selected.source).label);
-          info.children[1].textContent = SOURCE_BY_ID.get(selected.source).label + (game.author ? ' · ' + game.author : '');
+          info.children[1].textContent = SOURCE_BY_ID.get(selected.source).label;
+          menu.open = false;
+          summary.focus?.({ preventScroll: true });
         });
-        item.appendChild(chooser);
-      }
-      fragment.appendChild(item);
+        card.chooser = chooser;
+        menu.appendChild(chooser);
+        chooser.focus?.({ preventScroll: true });
+      });
+      item.appendChild(menu);
+      card.summary = summary;
     }
-    container.replaceChildren(fragment);
-    if (node('games-status')) node('games-status').textContent = `${filtered.length.toLocaleString()} of ${games.length.toLocaleString()} games · ${(rawGames.length - games.length).toLocaleString()} duplicate titles merged`;
+    return card;
+  }
+
+  function render(resetPage = false) {
+    const container = node('game-list');
+    if (!container) return;
+    covers ||= createLazyGameCovers(win, doc, container, () => !node('games-popover') || node('games-popover').classList.contains('active'));
+    const source = node('games-source-select')?.value || 'all';
+    const view = node('games-view-select')?.value || 'all';
+    const query = node('popover-search-input')?.value || '';
+    const sort = node('popover-sort-select')?.value || 'pop';
+    const signature = JSON.stringify([catalogRevision, query, source, view, sort, view === 'favorites' ? favoritesRevision : 0, view === 'recent' ? recentsRevision : 0]);
+    if (signature !== filterSignature) {
+      filtered = selectGames(games, { query, source, view, sort, favorites, recents });
+      filterSignature = signature;
+    }
+    if (resetPage) page = 1;
+    const slice = gamePage(filtered, page);
+    page = slice.page;
+    const showCovers = win.MonkehPrivacy?.get().showCovers !== false;
+    const desired = new Set(slice.items.map(game => game.id));
+    const saved = new Set(favorites);
+    const scrollTop = container.scrollTop || 0;
+    let focusGame;
+    let focusAction;
+    let focusIndex = 0;
+    let previousIndex = 0;
+    for (const [id, card] of cards) {
+      if (card.item.contains?.(doc.activeElement)) {
+        focusGame = id;
+        focusAction = doc.activeElement === card.star ? 'star' : doc.activeElement === card.launchButton ? 'launchButton' : 'summary';
+        focusIndex = previousIndex;
+      }
+      previousIndex++;
+      const nextGame = gameIndex.get(id);
+      if (!desired.has(id) || card.game !== nextGame || card.sourceFilter !== source || card.showCovers !== showCovers) {
+        if (card.cover) covers.remove(card.cover);
+        card.item.remove();
+        cards.delete(id);
+      }
+    }
+    if (!slice.items.length) {
+      if (container.children.length !== 1 || container.firstElementChild?.className !== 'loading-text') container.replaceChildren(element('div', 'loading-text'));
+      container.firstElementChild.textContent = ready ? 'No games match these filters.' : 'Loading catalog…';
+    } else {
+      if (container.firstElementChild?.className === 'loading-text') container.replaceChildren();
+      slice.items.forEach((game, index) => {
+        let card = cards.get(game.id);
+        if (!card) { card = createCard(game, source, showCovers); cards.set(game.id, card); }
+        updateFavorite(card, saved.has(game.id));
+        if (container.children[index] !== card.item) container.insertBefore(card.item, container.children[index] || null);
+        if (card.cover && !card.coverQueued) { covers.add(card.cover, game.cover); card.coverQueued = true; }
+      });
+    }
+    container.scrollTop = resetPage ? 0 : scrollTop;
+    if (focusGame && !container.contains?.(doc.activeElement)) {
+      const fallback = slice.items[Math.min(focusIndex, slice.items.length - 1)];
+      const card = cards.get(focusGame) || (fallback && cards.get(fallback.id));
+      (card?.[focusAction] || card?.launchButton || node('popover-search-input'))?.focus?.({ preventScroll: true });
+    }
+    updateStatus();
     if (node('games-page')) node('games-page').textContent = `Page ${page} of ${slice.pages}`;
     if (node('games-prev')) node('games-prev').disabled = page <= 1;
     if (node('games-next')) node('games-next').disabled = page >= slice.pages;
     if (node('games-random')) node('games-random').disabled = !filtered.length;
-    if (node('games-clear')) node('games-clear').disabled = !['favorites', 'recent'].includes(node('games-view-select')?.value);
+    if (node('games-clear')) node('games-clear').disabled = !['favorites', 'recent'].includes(view);
+  }
+
+  function updateStatus() {
+    if (node('games-status')) node('games-status').textContent = ready
+      ? `${filtered.length.toLocaleString()} of ${games.length.toLocaleString()} games`
+      : 'Loading catalog…';
   }
 
   function installControls() {
@@ -356,10 +497,11 @@ export function createGameCatalog(win, doc) {
     node('games-refresh')?.addEventListener('click', () => refresh());
     node('games-clear')?.addEventListener('click', () => {
       const view = node('games-view-select')?.value;
-      if (view === 'favorites') { favorites = []; saveList(FAVORITES_KEY, favorites); }
-      if (view === 'recent') { recents = []; saveList(RECENTS_KEY, recents); }
+      if (view === 'favorites') { favorites = []; favoritesRevision++; saveList(FAVORITES_KEY, favorites); }
+      if (view === 'recent') { recents = []; recentsRevision++; saveList(RECENTS_KEY, recents); }
       render(true);
     });
+    win.addEventListener?.('monkeh:privacy', () => render());
   }
 
   async function refresh() {
@@ -367,24 +509,41 @@ export function createGameCatalog(win, doc) {
     loading = (async () => {
       if (node('games-status')) node('games-status').textContent = 'Loading catalogs…';
       let base = rawGames;
+      let snapshotSettled = false;
       const live = new Map();
       const publish = () => {
-        const next = new Map(base.map(game => [game.id, game]));
-        for (const [source, entries] of live) {
-          for (const [id, game] of next) if (game.source === source) next.delete(id);
-          for (const game of entries) next.set(game.id, game);
+        if (!snapshotSettled) return;
+        const groups = new Map();
+        for (const game of base) {
+          if (!groups.has(game.source)) groups.set(game.source, []);
+          groups.get(game.source).push(game);
         }
-        rawGames = [...next.values()];
-        games = deduplicateGames(rawGames);
+        for (const [source, entries] of live) groups.set(source, entries);
+        const next = GAME_SOURCES.flatMap(source => groups.get(source.id) || []);
+        const unchanged = (before, after) => before.length === after.length && before.every((entry, index) => {
+          const other = after[index];
+          return entry.id === other.id && entry.name === other.name && entry.cover === other.cover && entry.author === other.author;
+        });
+        if (unchanged(rawGames, next)) { updateStatus(); return; }
+        rawGames = next;
+        games = deduplicateGames(rawGames).map(game => {
+          const previous = gameIndex.get(game.id);
+          return previous && previous.name === game.name && previous.cover === game.cover && unchanged(previous.variants, game.variants) ? previous : game;
+        });
         gameIndex = new Map(games.map(game => [game.id, game]));
         aliasIndex = new Map(games.flatMap(game => game.aliases.map(id => [id, game.id])));
         for (const [key, values] of [[FAVORITES_KEY, favorites], [RECENTS_KEY, recents]]) {
           const migrated = [...new Set(values.map(id => aliasIndex.get(id) || id))];
-          if (migrated.length !== values.length || migrated.some((id, index) => id !== values[index])) saveList(key, migrated);
+          if (migrated.length !== values.length || migrated.some((id, index) => id !== values[index])) {
+            saveList(key, migrated);
+            if (key === FAVORITES_KEY) favoritesRevision++;
+            else recentsRevision++;
+          }
           if (key === FAVORITES_KEY) favorites = migrated;
           else recents = migrated;
         }
         ready = games.length > 0;
+        catalogRevision++;
         render();
       };
       const outcomes = await Promise.allSettled([
@@ -392,8 +551,7 @@ export function createGameCatalog(win, doc) {
           const snapshot = snapshotGameEntries(data);
           if (!snapshot.length) throw new Error('Saved catalogs are empty.');
           base = snapshot;
-          publish();
-        }),
+        }).finally(() => { snapshotSettled = true; publish(); }),
         ...GAME_SOURCES.filter(source => source.live).map(source => fetchGameJson(win.fetch.bind(win), source.manifest, { signal: AbortSignal.timeout(8000) }).then(entries => {
           const normalized = normalizeGameEntries(entries, source.id);
           if (!normalized.length) throw new Error('Source catalog is empty.');
@@ -402,6 +560,7 @@ export function createGameCatalog(win, doc) {
         }))
       ]);
       if (!ready) render();
+      else updateStatus();
       if (!ready && node('games-status')) node('games-status').textContent = 'Catalogs could not be loaded. Use Refresh to try again.';
       else if (outcomes[0].status === 'rejected' && node('games-status')) node('games-status').textContent += ' · Some sources are temporarily unavailable.';
       return games.length;
@@ -412,6 +571,7 @@ export function createGameCatalog(win, doc) {
   function open() {
     bind();
     render();
+    covers?.resume();
     return ready ? Promise.resolve(games.length) : refresh();
   }
 

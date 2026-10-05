@@ -1,0 +1,22 @@
+{
+  "name": "monkeh-link-watch",
+  "main": "workers/link-watch.mjs",
+  "compatibility_date": "2026-10-04",
+  "workers_dev": true,
+  "vars": {
+    "ALLOWED_HOST_SUFFIXES": "pages.dev,workers.dev,netlify.app,vercel.app,onrender.com,github.io",
+    "ALLOWED_CUSTOM_HOSTS": ""
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "MIRROR_LEDGER", "class_name": "MirrorLedger" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["MirrorLedger"] }
+  ],
+  "ratelimits": [
+    { "name": "REPORT_RATE", "namespace_id": "106041", "simple": { "limit": 60, "period": 60 } }
+  ],
+  "observability": { "enabled": false }
+}

@@ -59,6 +59,42 @@ export function hotkeyFor(event) {
   return [event.ctrlKey && 'Ctrl', event.altKey && 'Alt', event.shiftKey && 'Shift', event.metaKey && 'Meta', key].filter(Boolean).join('+');
 }
 
+export function bindSettingsDialog(win, { onClose = () => {}, isCapturing = () => false } = {}) {
+  const doc = win.document;
+  const modal = doc.getElementById('settings-modal');
+  if (!modal || typeof win.openSettingsModal !== 'function' || typeof win.closeSettingsModal !== 'function') return null;
+  const open = win.openSettingsModal;
+  const close = win.closeSettingsModal;
+  let opener;
+  const isOpen = () => modal.classList.contains('active');
+  function sync() { const active = isOpen(); modal.inert = !active; modal.setAttribute('aria-hidden', String(!active)); }
+  win.openSettingsModal = (...args) => {
+    if (!isOpen()) opener = doc.activeElement;
+    const result = open(...args); sync();
+    doc.getElementById('settings-search')?.focus({ preventScroll: true });
+    return result;
+  };
+  win.closeSettingsModal = (...args) => {
+    const active = isOpen();
+    const result = close(...args); sync(); onClose();
+    if (active && opener?.isConnected !== false) opener?.focus?.({ preventScroll: true });
+    return result;
+  };
+  modal.addEventListener('click', event => { if (event.target === modal) win.closeSettingsModal(); });
+  win.addEventListener('keydown', event => {
+    if (!isOpen() || isCapturing()) return;
+    if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); win.closeSettingsModal(); return; }
+    if (event.key !== 'Tab') return;
+    const controls = [...modal.querySelectorAll('button, [href], input, select, textarea, summary, [tabindex]')].filter(input => !input.disabled && input.tabIndex >= 0 && input.getClientRects().length > 0);
+    const first = controls[0]; const last = controls.at(-1);
+    if (!first) { event.preventDefault(); return; }
+    if (event.shiftKey && (doc.activeElement === first || !modal.contains(doc.activeElement))) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && (doc.activeElement === last || !modal.contains(doc.activeElement))) { event.preventDefault(); first.focus(); }
+  }, true);
+  sync();
+  return { isOpen };
+}
+
 export function mountPreferences(win = window) {
   const doc = win.document;
   const privacy = win.MonkehPrivacy;
@@ -76,9 +112,19 @@ export function mountPreferences(win = window) {
   const settingsRoot = doc.getElementById('general-preferences');
   const groups = [];
   const searchMetadata = new WeakMap();
+  const dirtyInputs = new WeakSet();
+  let controls = [];
+  let applied;
+  function setPreferences(patch) {
+    for (const input of controls) if (Object.hasOwn(patch, input.dataset.preference || input.dataset.privacy)) { dirtyInputs.delete(input); input.setCustomValidity?.(''); input.removeAttribute('aria-invalid'); }
+    privacy.update(patch);
+    syncControls(privacy.get(), new Set(Object.keys(patch)));
+  }
+  const relatedFields = { font: 'font', accent: 'accent', background: 'background', backgroundUrl: 'background', backgroundOpacity: 'background', backgroundBlur: 'background', glassMode: 'glass', glassOpacity: 'glass', glassBlur: 'glass', userAgent: 'identity', particleEffect: 'particles', particleDensity: 'particles', panicUrl: 'panic' };
   function option(value, label) { const el = doc.createElement('option'); el.value = value; el.textContent = label; return el; }
   function field(parent, title, key, choices, description = '') {
     const row = doc.createElement('label'); row.className = 'setting-item';
+    row.dataset.preferenceGroup = relatedFields[key] || key;
     const info = doc.createElement('span'); info.className = 'setting-info';
     const text = doc.createElement('span'); text.className = 'setting-title'; text.textContent = title; info.append(text);
     if (description) { const desc = doc.createElement('span'); desc.className = 'setting-desc'; desc.textContent = description; info.append(desc); }
@@ -86,14 +132,31 @@ export function mountPreferences(win = window) {
     if (Array.isArray(choices)) choices.forEach(([value, name]) => input.append(option(value, name)));
     else input.type = choices;
     input.dataset.preference = key; input.setAttribute('aria-label', title);
-    input.addEventListener('change', () => {
-      if (input.type === 'url' && input.value && (!input.validity.valid || !input.value.startsWith('https://'))) { input.setCustomValidity('Enter a complete HTTPS URL.'); input.reportValidity(); return; }
+    function valid(report) {
       input.setCustomValidity('');
-      if (input.type === 'number' && (input.value === '' || !Number.isInteger(Number(input.value)) || Number(input.value) < Number(input.min) || Number(input.value) > Number(input.max))) { input.setCustomValidity('Enter a whole number from ' + input.min + ' to ' + input.max + '.'); input.reportValidity(); return; }
-      if (key === 'userAgent' && (input.value.length > 512 || !/^[\x20-\x7e]*$/.test(input.value))) { input.setCustomValidity('Use up to 512 printable ASCII characters, without line breaks.'); input.reportValidity(); return; }
-      privacy.update({ [key]: input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value });
+      let error = '';
+      if (input.type === 'url' && input.value) {
+        try { const url = new URL(input.value); if (url.protocol !== 'https:' || url.username || url.password || input.value.length > 2048) error = 'Enter a complete HTTPS URL without login details.'; }
+        catch { error = 'Enter a complete HTTPS URL.'; }
+      }
+      if (input.type === 'number' && (input.value === '' || !Number.isInteger(Number(input.value)) || Number(input.value) < Number(input.min) || Number(input.value) > Number(input.max))) error = 'Enter a whole number from ' + input.min + ' to ' + input.max + '.';
+      if (key === 'userAgent' && (input.value.length > 512 || !/^[\x20-\x7e]*$/.test(input.value))) error = 'Use up to 512 printable ASCII characters, without line breaks.';
+      if (error) { if (report) { input.setCustomValidity(error); input.setAttribute('aria-invalid', 'true'); input.reportValidity(); } return false; }
+      input.removeAttribute('aria-invalid');
+      return true;
+    }
+    const inputValue = () => input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
+    input.addEventListener('change', () => {
+      if (!valid(true)) { dirtyInputs.add(input); return; }
+      dirtyInputs.delete(input);
+      const settings = privacy.update({ [key]: inputValue() });
+      if (input.type !== 'checkbox' && String(input.value) !== String(settings[key])) input.value = settings[key];
     });
-    input.addEventListener('input', () => input.setCustomValidity(''));
+    input.addEventListener('input', () => {
+      dirtyInputs.add(input); input.setCustomValidity(''); input.removeAttribute('aria-invalid');
+      if (['color', 'number'].includes(input.type) && valid(false)) privacy.update({ [key]: inputValue() }, { deferSave: true });
+    });
+    input.addEventListener('blur', () => privacy.flush?.());
     row.append(info, input); parent.append(row); return input;
   }
   function section(name, open = false) {
@@ -141,10 +204,10 @@ export function mountPreferences(win = window) {
     const appearance = section('Appearance', true);
     field(appearance, 'Mode', 'mode', [['dark', 'Dark'], ['light', 'Light']]);
     const fontSelect = field(appearance, 'Font', 'font', Object.entries(fonts).map(([key, [name]]) => [key, name]));
-    const search = doc.createElement('input'); search.type = 'search'; search.placeholder = 'Find a font'; search.setAttribute('aria-label', 'Find a font'); search.className = 'preference-search';
+    const search = doc.createElement('input'); search.type = 'search'; search.placeholder = 'Find a font'; search.setAttribute('aria-label', 'Find a font'); search.className = 'preference-search'; search.dataset.preferenceGroup = 'font';
     search.addEventListener('input', () => { for (const item of fontSelect.options) item.hidden = !item.textContent.toLowerCase().includes(search.value.trim().toLowerCase()); }); appearance.append(search);
-    const themes = doc.createElement('div'); themes.className = 'preference-actions'; themes.setAttribute('aria-label', 'Color themes');
-    for (const [name, color] of [['Amber', '#d99b28'], ['Cyan', '#269db5'], ['Emerald', '#36a079'], ['Rose', '#d66a82'], ['Slate', '#a6abb1']]) button(themes, name, () => privacy.update({ accent: color }));
+    const themes = doc.createElement('div'); themes.className = 'preference-actions'; themes.setAttribute('aria-label', 'Color themes'); themes.dataset.preferenceGroup = 'accent';
+    for (const [name, color] of [['Amber', '#d99b28'], ['Cyan', '#269db5'], ['Emerald', '#36a079'], ['Rose', '#d66a82'], ['Slate', '#a6abb1']]) button(themes, name, () => setPreferences({ accent: color }));
     appearance.append(themes);
     field(appearance, 'Custom accent color', 'accent', 'color');
     field(appearance, 'Background', 'background', [['none', 'None'], ['hive', 'Hive'], ['grid', 'Grid'], ['synthwave', 'Synthwave'], ['cat', 'Cat'], ['doubleu', 'Doubleu'], ['custom', 'Custom image']]);
@@ -161,13 +224,13 @@ export function mountPreferences(win = window) {
     const browser = section('Browser and proxy');
     const network = doc.getElementById('proxy-network-setting'); if (network) browser.append(network);
     moveLegacy(browser, 'searchEngine');
-    const uaRow = doc.createElement('label'); uaRow.className = 'setting-item';
+    const uaRow = doc.createElement('label'); uaRow.className = 'setting-item'; uaRow.dataset.preferenceGroup = 'identity';
     const uaInfo = doc.createElement('span'); uaInfo.className = 'setting-info';
     const uaTitle = doc.createElement('span'); uaTitle.className = 'setting-title'; uaTitle.textContent = 'Browser identity'; uaInfo.append(uaTitle);
     const uaDescription = doc.createElement('span'); uaDescription.className = 'setting-desc'; uaDescription.textContent = 'Choose a user-agent string for proxied pages. Reload the viewed page to apply it. This does not emulate device hardware or provide anonymity.'; uaInfo.append(uaDescription);
     uaPresetSelect = doc.createElement('select'); uaPresetSelect.id = 'user-agent-preset'; uaPresetSelect.setAttribute('aria-label', 'Browser identity');
     userAgentPresets.forEach(([id, label]) => uaPresetSelect.append(option(id, label))); uaPresetSelect.append(option('custom', 'Custom'));
-    uaPresetSelect.addEventListener('change', () => { if (uaPresetSelect.value === 'custom') { uaCustom?.focus?.(); return; } const preset = userAgentPresets.find(([id]) => id === uaPresetSelect.value); if (preset) privacy.update({ userAgent: preset[2] }); });
+    uaPresetSelect.addEventListener('change', () => { if (uaPresetSelect.value === 'custom') { uaCustom?.focus?.(); return; } const preset = userAgentPresets.find(([id]) => id === uaPresetSelect.value); if (preset) setPreferences({ userAgent: preset[2] }); });
     uaRow.append(uaInfo, uaPresetSelect); browser.append(uaRow);
     uaCustom = field(browser, 'Custom user agent', 'userAgent', 'text', 'Leave empty to use this browser’s default. Printable ASCII only, up to 512 characters.'); uaCustom.maxLength = 512; uaCustom.spellcheck = false; uaCustom.autocomplete = 'off';
     const permissions = section('Privacy and permissions');
@@ -179,13 +242,14 @@ export function mountPreferences(win = window) {
     button(cloaking, 'Open cloaked window', openCloaked);
     field(cloaking, 'Character masking', 'characterMasking', 'checkbox', 'Use lookalike letters in interface headings and setting labels. Reversible; screen readers, search, game names, and viewed pages keep the original text.');
     const safety = section('Shortcuts and behavior');
-    const hotkey = doc.createElement('p'); hotkey.id = 'panic-key-label'; hotkey.className = 'setting-desc'; safety.append(hotkey);
+    const hotkey = doc.createElement('p'); hotkey.id = 'panic-key-label'; hotkey.className = 'setting-desc'; hotkey.dataset.preferenceGroup = 'panic'; safety.append(hotkey);
     const capture = button(safety, 'Capture shortcut', () => { capturing = true; win.MonkehDevtoolsGuard?.setEnabled(false); capture.textContent = 'Press a key combination…'; });
-    button(safety, 'Clear shortcut', () => { capturing = false; capture.textContent = 'Capture shortcut'; privacy.update({ panicKey: '' }); });
+    capture.dataset.preferenceGroup = 'panic';
+    button(safety, 'Clear shortcut', () => { stopCapture(); privacy.update({ panicKey: '' }); }).dataset.preferenceGroup = 'panic';
     field(safety, 'Panic URL', 'panicUrl', 'url', 'The shortcut immediately leaves Monkeh for this HTTPS address.');
-    const presets = doc.createElement('div'); presets.className = 'preference-actions';
-    for (const [name, url] of [['Classroom', 'https://classroom.google.com/'], ['Docs', 'https://docs.google.com/'], ['Google', 'https://www.google.com/'], ['Wikipedia', 'https://www.wikipedia.org/'], ['Gmail', 'https://mail.google.com/']]) button(presets, name, () => privacy.update({ panicUrl: url }));
-    safety.append(presets); button(safety, 'Test panic shortcut', panic);
+    const presets = doc.createElement('div'); presets.className = 'preference-actions'; presets.dataset.preferenceGroup = 'panic';
+    for (const [name, url] of [['Classroom', 'https://classroom.google.com/'], ['Docs', 'https://docs.google.com/'], ['Google', 'https://www.google.com/'], ['Wikipedia', 'https://www.wikipedia.org/'], ['Gmail', 'https://mail.google.com/']]) button(presets, name, () => setPreferences({ panicUrl: url }));
+    safety.append(presets); button(safety, 'Test panic shortcut', panic).dataset.preferenceGroup = 'panic';
     field(safety, 'Close protection', 'closeProtection', 'checkbox', 'Ask the browser to warn before you leave. Browsers may suppress this prompt.');
     field(safety, 'Skip loading animations', 'skipLoading', 'checkbox', 'Show content immediately and remove interface transitions.');
     field(safety, 'Redirect native DevTools shortcuts', 'nativeDevtoolsGuard', 'checkbox', 'Show the error page for native DevTools shortcuts. Monkeh’s own browser tools stay available.');
@@ -201,23 +265,31 @@ export function mountPreferences(win = window) {
     button(data, 'Import preferences', () => importFile.click());
     importFile.addEventListener('change', async () => {
       const file = importFile.files?.[0]; if (!file) return;
-      try { if (file.size > 65536) throw new Error('Choose a settings JSON file smaller than 64 KB.'); privacy.update(parsePreferences(await file.text())); notice('Preferences imported. Reload any open proxied page to apply browser identity changes.'); }
+      try { if (file.size > 65536) throw new Error('Choose a settings JSON file smaller than 64 KB.'); setPreferences(parsePreferences(await file.text())); notice('Preferences imported. Reload any open proxied page to apply browser identity changes.'); }
       catch (error) { notice('Could not import preferences: ' + error.message); }
       finally { importFile.value = ''; }
     });
     let beforeReset;
-    button(data, 'Reset preferences', () => { beforeReset = privacy.get(); privacy.update(defaults); undoReset.hidden = false; notice('Preferences reset. You can undo this until you leave this page.'); });
-    const undoReset = button(data, 'Undo reset', () => { if (beforeReset) privacy.update(beforeReset); beforeReset = null; undoReset.hidden = true; }); undoReset.hidden = true;
+    button(data, 'Reset preferences', () => { beforeReset = privacy.get(); setPreferences(defaults); undoReset.hidden = false; notice('Preferences reset. You can undo this until you leave this page.'); });
+    const undoReset = button(data, 'Undo reset', () => { if (beforeReset) setPreferences(beforeReset); beforeReset = null; undoReset.hidden = true; }); undoReset.hidden = true;
     const info = section('Information'); const p = doc.createElement('p'); p.className = 'setting-desc'; p.textContent = 'Game catalogs preserve their source credits. Games run from their source hosts through Monkeh. Favorites, recent games and settings stay in this browser; there is no account sync.'; info.append(p);
     const empty = doc.createElement('p'); empty.className = 'setting-desc'; empty.id = 'settings-empty'; empty.textContent = 'No settings match your search.'; empty.hidden = true; settingsRoot.append(empty);
-    for (const { body } of groups) for (const row of body.children) searchMetadata.set(row, row.textContent.toLocaleLowerCase());
+    const searchable = value => value.toLocaleLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+    for (const { body } of groups) {
+      const related = new Map();
+      for (const row of body.children) {
+        const key = row.dataset.preferenceGroup;
+        if (key) related.set(key, (related.get(key) || '') + ' ' + row.textContent);
+      }
+      for (const row of body.children) searchMetadata.set(row, searchable(related.get(row.dataset.preferenceGroup) || row.textContent));
+    }
     let searchOpenStates;
     settingsSearch.addEventListener('input', () => {
-      const query = settingsSearch.value.trim().toLocaleLowerCase().slice(0, 150);
+      const query = searchable(settingsSearch.value).slice(0, 150);
       if (query && !searchOpenStates) searchOpenStates = new Map(groups.map(({ group }) => [group, group.open]));
       let matched = 0;
       for (const { group, body, name } of groups) {
-        const groupMatch = name.toLocaleLowerCase().includes(query);
+        const groupMatch = searchable(name).includes(query);
         let visible = 0;
         for (const row of body.children) {
           if (row === importFile || row === undoReset) continue;
@@ -231,42 +303,72 @@ export function mountPreferences(win = window) {
       empty.hidden = matched > 0;
     });
   }
+  controls = [...doc.querySelectorAll('[data-preference]'), ...doc.querySelectorAll('[data-privacy]')];
   const maskLabels = createCharacterMasker(doc);
+  let currentCloak;
   function cloak() {
     const settings = privacy.get();
     const choice = settings.autoCloak && !doc.hidden ? 'monkeh' : settings.cloak;
+    if (choice === currentCloak) return;
+    currentCloak = choice;
     if (choice === 'monkeh') { doc.title = baseTitle; if (oldIcon) favicon.href = oldIcon; else favicon.removeAttribute('href'); return; }
     const [title, symbol, color] = cloakPresets[choice]; doc.title = title;
     favicon.href = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="6" fill="${color}"/><text x="16" y="23" text-anchor="middle" font-family="sans-serif" font-size="23" fill="white">${symbol}</text></svg>`);
   }
+  function syncControls(settings, changed) {
+    for (const input of controls) {
+      const key = input.dataset.preference || input.dataset.privacy;
+      if (!changed.has(key) || dirtyInputs.has(input)) continue;
+      const value = settings[key];
+      if (input.type === 'checkbox') { if (input.checked !== value) input.checked = value; }
+      else if (String(input.value) !== String(value)) input.value = value;
+    }
+  }
   function apply() {
     const settings = privacy.get(); const root = doc.documentElement;
-    root.dataset.mode = settings.mode; root.dataset.background = settings.background; root.dataset.skipLoading = String(settings.skipLoading); root.dataset.glass = String(settings.glassMode);
-    root.style.setProperty('--user-accent', settings.accent); root.style.setProperty('--user-font', fonts[settings.font][1]);
-    root.style.setProperty('--user-background', settings.background === 'custom' && settings.backgroundUrl ? `url(${JSON.stringify(settings.backgroundUrl)})` : 'none');
-    root.style.setProperty('--background-opacity', String(settings.backgroundOpacity / 100)); root.style.setProperty('--background-blur', settings.backgroundBlur + 'px');
-    root.style.setProperty('--glass-opacity', settings.glassOpacity + '%'); root.style.setProperty('--glass-blur', settings.glassBlur + 'px');
+    const changed = new Set(Object.keys(settings).filter(key => !applied || settings[key] !== applied[key]));
+    if (!changed.size) return;
+    if (changed.has('mode')) root.dataset.mode = settings.mode;
+    if (changed.has('background')) root.dataset.background = settings.background;
+    if (changed.has('skipLoading')) root.dataset.skipLoading = String(settings.skipLoading);
+    if (changed.has('glassMode')) root.dataset.glass = String(settings.glassMode);
+    if (changed.has('accent')) root.style.setProperty('--user-accent', settings.accent);
+    if (changed.has('font')) root.style.setProperty('--user-font', fonts[settings.font][1]);
+    if (changed.has('background') || changed.has('backgroundUrl')) root.style.setProperty('--user-background', settings.background === 'custom' && settings.backgroundUrl ? `url(${JSON.stringify(settings.backgroundUrl)})` : 'none');
+    if (changed.has('backgroundOpacity')) root.style.setProperty('--background-opacity', String(settings.backgroundOpacity / 100));
+    if (changed.has('backgroundBlur')) root.style.setProperty('--background-blur', settings.backgroundBlur + 'px');
+    if (changed.has('glassOpacity')) root.style.setProperty('--glass-opacity', settings.glassOpacity + '%');
+    if (changed.has('glassBlur')) root.style.setProperty('--glass-blur', settings.glassBlur + 'px');
     if (currentFont !== settings.font) {
       currentFont = settings.font; fontLink?.remove(); fontLink = null;
       if (settings.font !== 'default') { fontLink = doc.createElement('link'); fontLink.rel = 'stylesheet'; const family = settings.font === 'obscured' ? 'Libre Barcode 128 Text' : fonts[settings.font][0]; fontLink.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(family).replace(/%20/g, '+') + '&display=swap'; doc.head.append(fontLink); }
     }
-    for (const input of doc.querySelectorAll('[data-preference]')) { const value = settings[input.dataset.preference]; if (input.type === 'checkbox') input.checked = value; else input.value = value; }
-    for (const input of doc.querySelectorAll('[data-privacy]')) { const value = settings[input.dataset.privacy]; if (input.type === 'checkbox') input.checked = value; else input.value = value; }
-    if (uaPresetSelect) uaPresetSelect.value = userAgentPresets.find(preset => preset[2] === settings.userAgent)?.[0] || 'custom';
-    for (const input of doc.querySelectorAll('[data-preference="particleDensity"]')) input.disabled = settings.particleEffect === 'none';
-    const label = doc.getElementById('panic-key-label'); if (label) label.textContent = 'Current shortcut: ' + (settings.panicKey || 'Not set');
-    cloak(); maskLabels(settings.characterMasking);
+    syncControls(settings, changed);
+    if (uaPresetSelect && changed.has('userAgent')) uaPresetSelect.value = userAgentPresets.find(preset => preset[2] === settings.userAgent)?.[0] || 'custom';
+    if (changed.has('particleEffect')) for (const input of controls) if (input.dataset.preference === 'particleDensity') input.disabled = settings.particleEffect === 'none';
+    if (changed.has('panicKey')) { const label = doc.getElementById('panic-key-label'); if (label) label.textContent = 'Current shortcut: ' + (settings.panicKey || 'Not set'); }
+    if (changed.has('cloak') || changed.has('autoCloak')) cloak();
+    if (changed.has('characterMasking')) maskLabels(settings.characterMasking);
+    applied = settings;
   }
+  function stopCapture() {
+    if (!capturing) return;
+    capturing = false;
+    win.MonkehDevtoolsGuard?.setEnabled(privacy.get().nativeDevtoolsGuard);
+    const button = [...(settingsRoot?.querySelectorAll('button') || [])].find(el => el.textContent === 'Press a key combination…');
+    if (button) button.textContent = 'Capture shortcut';
+  }
+  bindSettingsDialog(win, { isCapturing: () => capturing, onClose: () => { stopCapture(); privacy.flush?.(); } });
   doc.addEventListener('visibilitychange', cloak);
   win.addEventListener('monkeh:privacy', apply);
   win.addEventListener('monkeh:leaving', () => { leaving = true; });
-  win.addEventListener('blur', () => { if (capturing) { capturing = false; win.MonkehDevtoolsGuard?.setEnabled(privacy.get().nativeDevtoolsGuard); const button = [...(settingsRoot?.querySelectorAll('button') || [])].find(el => el.textContent === 'Press a key combination…'); if (button) button.textContent = 'Capture shortcut'; } });
+  win.addEventListener('blur', () => { stopCapture(); privacy.flush?.(); });
   win.addEventListener('storage', event => { if (event.key === 'monkeh.privacy.v1' || event.key === null) { try { privacy.sync(JSON.parse(event.newValue)); } catch {} } });
   win.addEventListener('pageshow', () => { leaving = false; });
   win.addEventListener('beforeunload', event => { if (!leaving && privacy.get().closeProtection) { event.preventDefault(); event.returnValue = ''; } });
   win.addEventListener('keydown', event => {
     const key = hotkeyFor(event);
-    if (capturing) { event.preventDefault(); event.stopImmediatePropagation(); if (!key) return; capturing = false; privacy.update({ panicKey: key }); const capture = [...(settingsRoot?.querySelectorAll('button') || [])].find(el => el.textContent === 'Press a key combination…'); if (capture) capture.textContent = 'Capture shortcut'; return; }
+    if (capturing) { event.preventDefault(); event.stopImmediatePropagation(); if (!key) return; stopCapture(); privacy.update({ panicKey: key }); return; }
     if (key && key === privacy.get().panicKey && !event.repeat && !event.isComposing && !event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) { event.preventDefault(); panic(); }
   }, true);
   apply();
