@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mountPreferences, hotkeyFor } from '../browser-tools/preferences.js';
+import { mountPreferences, hotkeyFor, createCharacterMasker, maskCharacters, parsePreferences, serializePreferences, userAgentPresets } from '../browser-tools/preferences.js';
 import { normalizePrivacy } from '../browser-tools/privacy.js';
 
 function events() {
@@ -31,12 +31,17 @@ function documentFixture() {
       ...events(), tagName: tag.toUpperCase(), type: tag === 'select' ? 'select-one' : '', dataset: {}, children: [],
       value: '', checked: false, hidden: false, _text: '', validity: { valid: true },
       style: { values: {}, setProperty(name, value) { this.values[name] = value; } },
-      append(...children) { for (const child of children) { child.parent = this; this.children.push(child); } },
+      append(...children) { for (const child of children) { if (child.parent) child.parent.children = child.parent.children.filter(item => item !== child); child.parent = this; this.children.push(child); } },
       remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); },
       setAttribute(name, value) { this[name] = value; },
       removeAttribute(name) { delete this[name]; },
       setCustomValidity(value) { this.customValidity = value; },
       reportValidity() { this.reported = true; },
+      focus() { this.focused = true; },
+      closest(selector) {
+        if (selector === '.setting-item') { let item = this; while (item) { if (item.className === 'setting-item') return item; item = item.parent; } }
+        return this.excludedFromMask ? this : null;
+      },
       querySelectorAll(selector) {
         const descendants = this.children.flatMap(child => [child, ...child.querySelectorAll('*')]);
         if (selector === '*') return descendants;
@@ -56,13 +61,22 @@ function documentFixture() {
   const root = element('html');
   const settings = element('div'); settings.id = 'general-preferences'; body.append(settings);
   const status = element('p'); status.id = 'privacy-status'; body.append(status);
+  const network = element('div'); network.id = 'proxy-network-setting'; network.className = 'setting-item'; network.textContent = 'Proxy network'; body.append(network);
+  for (const key of ['searchEngine', 'httpsOnly', 'allowPopups', 'allowDownloads', 'aiEnabled', 'clearConsoleOnClose', 'showCovers']) {
+    const row = element('label'); row.className = 'setting-item';
+    const text = element('span'); text.textContent = key;
+    const input = element('input'); input.type = key === 'searchEngine' ? 'select-one' : 'checkbox'; input.dataset.privacy = key;
+    row.append(text, input); body.append(row);
+  }
   const icon = element('link'); icon.rel = 'icon'; icon.href = '/favicon.svg'; head.append(icon);
   return {
     ...events(), all, head, body, documentElement: root, title: 'Monkeh Browser', hidden: false,
     createElement: element,
     getElementById: id => all.find(item => item.id === id) || null,
-    querySelector: selector => selector === 'link[rel~="icon"]' ? icon : null,
-    querySelectorAll: selector => selector === '[data-preference]' ? all.filter(item => item.dataset.preference) : []
+    querySelector: selector => selector === 'link[rel~="icon"]' ? icon : selector.startsWith('[data-privacy=') ? all.find(item => item.dataset.privacy === selector.match(/^\[data-privacy="([^"]+)"\]$/)?.[1]) || null : null,
+    querySelectorAll: selector => selector === '[data-preference]' ? all.filter(item => item.dataset.preference)
+      : selector === '[data-privacy]' ? all.filter(item => item.dataset.privacy)
+        : selector === '[data-preference="particleDensity"]' ? all.filter(item => item.dataset.preference === 'particleDensity') : []
   };
 }
 
@@ -286,4 +300,108 @@ test('removing preferences or clearing browser storage restores defaults in the 
     assert.equal(f.input('closeProtection').checked, false);
     assert.deepEqual(f.writes, []);
   }
+});
+
+test('settings organize existing live controls inside searchable categories without replacing their nodes', () => {
+  const f = fixture();
+  const parentSection = item => { let current = item; while (current && current.tagName !== 'DETAILS') current = current.parent; return current; };
+  const sections = f.doc.all.filter(item => item.tagName === 'DETAILS');
+  assert.deepEqual(sections.map(section => section.children[0].textContent), ['Appearance', 'Background effects', 'Browser and proxy', 'Privacy and permissions', 'Tab and cloaking', 'Shortcuts and behavior', 'Data and preferences', 'Information']);
+  assert.equal(parentSection(f.doc.getElementById('proxy-network-setting')).children[0].textContent, 'Browser and proxy');
+  assert.equal(parentSection(f.doc.querySelector('[data-privacy="showCovers"]')).children[0].textContent, 'Appearance');
+  assert.equal(parentSection(f.doc.querySelector('[data-privacy="allowPopups"]')).children[0].textContent, 'Privacy and permissions');
+  assert.equal(parentSection(f.doc.querySelector('[data-privacy="clearConsoleOnClose"]')).children[0].textContent, 'Data and preferences');
+  const input = f.doc.getElementById('settings-search');
+  input.value = 'user agent'; input.emit('input');
+  assert.equal(sections.filter(section => !section.hidden).length, 1);
+  assert.equal(sections.find(section => !section.hidden).children[0].textContent, 'Browser and proxy');
+  assert.equal(sections.find(section => !section.hidden).open, true);
+  input.value = 'not-a-setting'; input.emit('input');
+  assert.equal(f.doc.getElementById('settings-empty').hidden, false);
+  input.value = ''; input.emit('input');
+  assert.equal(sections[0].open, true);
+  assert.equal(sections[1].open, false);
+  assert.equal(sections.every(section => !section.hidden), true);
+});
+
+test('user-agent presets and custom input save validated strings while particle controls use agreed keys', () => {
+  const f = fixture();
+  const select = f.doc.getElementById('user-agent-preset');
+  select.value = 'android'; select.emit('change');
+  assert.equal(f.win.MonkehPrivacy.get().userAgent, userAgentPresets.find(preset => preset[0] === 'android')[2]);
+  assert.equal(f.input('userAgent').value, f.win.MonkehPrivacy.get().userAgent);
+  const input = f.input('userAgent');
+  input.value = 'Example/1.0'; input.emit('change');
+  assert.equal(select.value, 'custom');
+  assert.equal(f.win.MonkehPrivacy.get().userAgent, 'Example/1.0');
+  input.value = 'bad\r\nHeader: yes'; input.emit('change');
+  assert.match(input.customValidity, /printable ASCII/);
+  assert.equal(f.win.MonkehPrivacy.get().userAgent, 'Example/1.0');
+  select.value = 'default'; select.emit('change');
+  assert.equal(f.win.MonkehPrivacy.get().userAgent, '');
+  assert.equal(f.input('particleDensity').disabled, true);
+  f.update({ particleEffect: 'bubbles', particleDensity: 'low' });
+  assert.equal(f.input('particleEffect').value, 'bubbles');
+  assert.equal(f.input('particleDensity').disabled, false);
+  assert.equal(f.input('particleDensity').value, 'low');
+});
+
+test('character masking touches only supplied safe leaf labels and always restores the original text', () => {
+  const doc = documentFixture();
+  const heading = doc.createElement('h2'); heading.textContent = 'Appearance and Games';
+  const input = doc.createElement('input'); input.textContent = 'User secret'; input.value = 'user input'; input.excludedFromMask = true;
+  const editor = doc.createElement('span'); editor.textContent = 'const myCode = 1'; editor.excludedFromMask = true;
+  const composite = doc.createElement('div'); const child = doc.createElement('span'); child.textContent = 'Keep child nodes'; composite.append(child);
+  const toggle = createCharacterMasker(doc, [heading, input, editor, composite]);
+  toggle(true);
+  assert.equal(heading.children.length, 2);
+  assert.equal(heading.children[0]['aria-hidden'], 'true');
+  assert.equal(heading.children[0].textContent, maskCharacters('Appearance and Games'));
+  assert.notEqual(heading.children[0].textContent, 'Appearance and Games');
+  assert.equal(heading.children[1].textContent, 'Appearance and Games');
+  assert.equal(heading.children[1].className, 'preference-sr-only');
+  assert.equal(input.value, 'user input');
+  assert.equal(input.textContent, 'User secret');
+  assert.equal(editor.textContent, 'const myCode = 1');
+  assert.equal(composite.children[0], child);
+  toggle(true);
+  assert.equal(heading.children.length, 2);
+  toggle(false);
+  assert.equal(heading.textContent, 'Appearance and Games');
+  assert.equal(heading.children.length, 0);
+  assert.equal(maskCharacters('123 <>& ü'), '123 <>& ü');
+});
+
+test('preference import and export whitelist supported settings and never include other storage or unsafe values', () => {
+  const exported = serializePreferences({ mode: 'light', userAgent: 'Safe/1', particleEffect: 'snow', password: 'not-exported', session: 'not-exported' });
+  assert(!exported.includes('not-exported'));
+  const parsed = parsePreferences(exported);
+  assert.equal(parsed.mode, 'light');
+  assert.equal(parsed.userAgent, 'Safe/1');
+  assert.equal(parsed.particleEffect, 'snow');
+  assert.equal(parsed.password, undefined);
+  const hostile = parsePreferences(JSON.stringify({ app: 'mochii', version: 1, preferences: { userAgent: 'agent\nInjected: yes', backgroundUrl: 'javascript:alert(1)', unknown: 1 } }));
+  assert.equal(hostile.userAgent, '');
+  assert.equal(hostile.backgroundUrl, '');
+  assert.equal(hostile.unknown, undefined);
+  for (const content of ['', '{', 'null', '[]', '{}', '{"app":"other","version":1,"preferences":{}}', '{"app":"mochii","version":1,"preferences":[]}', ' '.repeat(65537)]) assert.throws(() => parsePreferences(content));
+});
+
+test('visual numeric fields reject invalid entries and reset preferences can be undone', () => {
+  const f = fixture({ mode: 'light', particleEffect: 'rain', userAgent: 'Safe/1', glassMode: true });
+  assert.equal(f.doc.documentElement.dataset.glass, 'true');
+  const blur = f.input('backgroundBlur');
+  blur.value = '100'; blur.emit('change');
+  assert.match(blur.customValidity, /0 to 24/);
+  assert.equal(f.win.MonkehPrivacy.get().backgroundBlur, 0);
+  blur.value = '12'; blur.emit('input'); blur.emit('change');
+  assert.equal(f.doc.documentElement.style.values['--background-blur'], '12px');
+  f.button('Reset preferences').emit('click');
+  assert.equal(f.win.MonkehPrivacy.get().mode, 'dark');
+  assert.equal(f.win.MonkehPrivacy.get().userAgent, '');
+  assert.equal(f.button('Undo reset').hidden, false);
+  f.button('Undo reset').emit('click');
+  assert.equal(f.win.MonkehPrivacy.get().mode, 'light');
+  assert.equal(f.win.MonkehPrivacy.get().userAgent, 'Safe/1');
+  assert.equal(f.button('Undo reset').hidden, true);
 });

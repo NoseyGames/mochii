@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve, basename } from 'node:path';
-import { GAME_SOURCES, normalizeGameEntries, fetchGameJson } from '../browser-tools/game-catalog.js';
+import { GAME_SOURCES, normalizeGameEntries, normalizeGameSnapshot, fetchGameJson } from '../browser-tools/game-catalog.js';
 
 const target = new URL('../browser-tools/game-catalog.json', import.meta.url);
 const fromIndex = process.argv.indexOf('--from-dir');
@@ -13,7 +13,7 @@ const sources = await Promise.all(GAME_SOURCES.map(async source => {
   let games;
   try {
     const raw = fromDirectory
-      ? JSON.parse(await readFile(resolve(fromDirectory, source.id === 'securly' ? 'securlycdn.json' : basename(new URL(source.manifest).pathname)), 'utf8'))
+      ? JSON.parse(await readFile(resolve(fromDirectory, source.file || (source.id === 'securly' ? 'securlycdn.json' : basename(new URL(source.manifest).pathname))), 'utf8'))
       : await fetchGameJson(fetch, source.manifest, { signal: AbortSignal.timeout(20000) });
     games = normalizeGameEntries(raw, source.id);
     if (!games.length) throw new Error('No playable entries.');
@@ -26,6 +26,8 @@ const sources = await Promise.all(GAME_SOURCES.map(async source => {
   return { id: source.id, label: source.label, manifest: source.manifest,
     games: games.map(({ name, url, cover, author }) => ({ name, url, cover, ...(author ? { author } : {}) })) };
 }));
-const snapshot = { version: 1, updatedAt: new Date().toISOString(), reference: 'https://photos.tram-gallery.ru/play', sources };
+const snapshot = { version: 1, updatedAt: new Date().toISOString(), references: ['https://photos.tram-gallery.ru/play', 'https://h35d5a9.jfs-autoelevadores.com.ar/g'], sources };
 await writeFile(target, JSON.stringify(snapshot) + '\n', 'utf8');
-console.log(JSON.stringify({ file: target.pathname, total: sources.reduce((count, source) => count + source.games.length, 0), sources: sources.map(source => ({ id: source.id, count: source.games.length })), retainedAfterErrors: errors }, null, 2));
+const total = sources.reduce((count, source) => count + source.games.length, 0);
+const unique = normalizeGameSnapshot(snapshot).length;
+console.log(JSON.stringify({ file: target.pathname, total, unique, duplicates: total - unique, sources: sources.map(source => ({ id: source.id, count: source.games.length })), retainedAfterErrors: errors }, null, 2));

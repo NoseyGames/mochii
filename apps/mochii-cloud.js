@@ -21,7 +21,7 @@ export const THEMES = {
   mint: ['Mint', '#0b1915', '#99d7bc'],
   crimson: ['Crimson', '#1c0f10', '#dd9a9d']
 };
-export const PARTICLES = ['none', 'snow', 'rain', 'stars', 'cyber', 'matrix', 'bubbles', 'fireflies', 'nexus'];
+export const PARTICLES = ['none', 'snow', 'rain', 'bubbles'];
 const gameIds = new Set(GAMES.map(game => game.id));
 const byId = new Map(GAMES.map(game => [game.id, game]));
 const boundedNumber = (value, max) => typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(0, value)) : 0;
@@ -407,7 +407,7 @@ export function mountMochii(doc = document, win = window) {
     try {
       const config = await win.MonkehConfig.fetchConfig({ signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]) });
       if (request.signal.aborted || generation !== launchGeneration || !player.open) return;
-      const proxyUrl = getFigureProxyUrl(knownGame.id, config, win.location.origin);
+      const proxyUrl = getFigureProxyUrl(knownGame.id, config, win.location.origin, win.MonkehPrivacy?.get().userAgent);
       if (!proxyUrl) throw new Error('The isolated proxy is not configured for this site.');
       const frame = element('iframe');
       frame.title = `${knownGame.n} · Figure through Monkeh`;

@@ -50,10 +50,34 @@ test('background and panic addresses reject executable schemes, credentials, and
 });
 
 test('new behavior preferences preserve typed boolean settings without coercion', () => {
-  const keys = ['autoCloak', 'blobCloak', 'closeProtection', 'skipLoading', 'nativeDevtoolsGuard', 'detectDocked'];
+  const keys = ['autoCloak', 'blobCloak', 'closeProtection', 'skipLoading', 'nativeDevtoolsGuard', 'detectDocked', 'characterMasking', 'glassMode'];
   for (const key of keys) {
     assert.equal(normalizePrivacy({ [key]: !defaults[key] })[key], !defaults[key]);
     assert.equal(normalizePrivacy({ [key]: String(!defaults[key]) })[key], defaults[key]);
+  }
+});
+
+test('user agents accept printable bounded headers without control characters or implicit coercion', () => {
+  assert.equal(normalizePrivacy({ userAgent: '  Example/1.0 (Device)  ' }).userAgent, 'Example/1.0 (Device)');
+  assert.equal(normalizePrivacy({ userAgent: 'a'.repeat(512) }).userAgent.length, 512);
+  for (const value of ['a'.repeat(513), 'test\r\nInjected: yes', 'test\n', 'test\t', 'test\0', 'test\x7f', 'tést', null, 123, ['agent'], { toString() { throw new Error('No coercion'); } }]) {
+    assert.equal(normalizePrivacy({ userAgent: value }).userAgent, '');
+  }
+});
+
+test('particles and shell visual settings reject unknown choices and clamp only finite numeric inputs', () => {
+  assert.equal(normalizePrivacy({ particleEffect: 'snow', particleDensity: 'low' }).particleEffect, 'snow');
+  assert.equal(normalizePrivacy({ particleEffect: 'rain', particleDensity: 'low' }).particleDensity, 'low');
+  for (const value of ['snow;alert(1)', 'constructor', '__proto__', 1, true, null]) {
+    assert.equal(normalizePrivacy({ particleEffect: value }).particleEffect, 'none');
+    assert.equal(normalizePrivacy({ particleDensity: value }).particleDensity, 'normal');
+  }
+  assert.equal(normalizePrivacy({ backgroundOpacity: 120 }).backgroundOpacity, 100);
+  assert.equal(normalizePrivacy({ backgroundBlur: -1 }).backgroundBlur, 0);
+  assert.equal(normalizePrivacy({ glassOpacity: 1 }).glassOpacity, 40);
+  assert.equal(normalizePrivacy({ glassBlur: 19.6 }).glassBlur, 20);
+  for (const key of ['backgroundOpacity', 'backgroundBlur', 'glassOpacity', 'glassBlur']) {
+    for (const value of [NaN, Infinity, '50', true, null]) assert.equal(normalizePrivacy({ [key]: value })[key], defaults[key]);
   }
 });
 

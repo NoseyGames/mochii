@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { Readable } from 'node:stream';
 import { createReadStream } from 'node:fs';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -7,13 +8,14 @@ import { baremuxPath } from '@mercuryworkshop/bare-mux/node';
 import { epoxyPath } from '@mercuryworkshop/epoxy-transport';
 import { loadServerConfig, isAuthorized, isAllowedHost, isAllowedOrigin } from './server-config.mjs';
 import { createWispGateway } from './server-wisp.mjs';
+import { handleMusic } from './workers/music.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicFiles = new Set([
   'index.html', 'math.html', 'history.html', 'flyflix.html', 'oops.html', 'style.css', 'sw.js',
 ]);
 const proxyFiles = new Set([
-  '/proxy-host.html', '/flyflix-provider.html', '/browser-tools/proxy-host.js',
+  '/proxy-host.html', '/proxy-bootstrap.html', '/flyflix-provider.html', '/browser-tools/proxy-host.js', '/browser-tools/proxy-bootstrap.js',
   '/browser-tools/runtime.js', '/browser-tools/proxy-network.js', '/browser-tools/config.js', '/sw.js',
 ]);
 const contentTypes = {
@@ -85,6 +87,28 @@ async function serve(req, res, config, proxyMode) {
   }
   if (!isAuthorized(req, config)) {
     reply(req, res, 401, 'Authentication required', { 'WWW-Authenticate': 'Basic realm="Monkeh", charset="UTF-8"' });
+    return;
+  }
+  if (proxyMode && /^\/api\/music\/(?:search|browse|stream)(?:\?|$)/.test(req.url || '') && ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    req.once('aborted', cancel);
+    res.once('close', cancel);
+    const headers = new Headers();
+    for (const name of ['origin', 'range', 'sec-fetch-site']) if (typeof req.headers[name] === 'string') headers.set(name, req.headers[name]);
+    const request = new Request(new URL(req.url, config.publicOrigin.origin), { method: req.method, headers, signal: controller.signal });
+    const response = await handleMusic(request, { MUSIC_ALLOWED_ORIGINS: JSON.stringify(config.publicConfig.shellOrigins) });
+    if (res.destroyed) { void response.body?.cancel().catch(() => {}); return; }
+    res.writeHead(response.status, Object.fromEntries(response.headers));
+    if (response.body && req.method !== 'HEAD') {
+      const body = Readable.fromWeb(response.body);
+      const closeBody = () => body.destroy();
+      res.once('close', closeBody);
+      body.once('close', () => res.removeListener('close', closeBody));
+      body.on('error', () => res.destroy());
+      body.pipe(res);
+    }
+    else res.end();
     return;
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') {

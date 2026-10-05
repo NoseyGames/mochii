@@ -8,17 +8,19 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
                                                                                
 export const staticFiles = Object.freeze([
   'index.html', 'math.html', 'history.html', 'flyflix.html', 'oops.html',
-  'flyflix-provider.html', 'proxy-host.html', 'style.css', 'sw.js', '_headers',
+  'flyflix-provider.html', 'proxy-host.html', 'proxy-bootstrap.html', 'style.css', 'sw.js', '_headers',
   'apps/auk.html', 'apps/auk.js', 'apps/auk.css', 'apps/vox.html',
   'apps/desktop.html', 'apps/desktop.js', 'apps/desktop.css',
   'apps/mochii-cloud.html', 'apps/mochii-cloud.css', 'apps/mochii-cloud.js', 'apps/mochii-cloud.data.js',
   'apps/mochii-inbox.js', 'apps/mochii-figure.js',
   'browser-tools/config.js', 'browser-tools/shell-entry.js', 'browser-tools/tools.js', 'browser-tools/tools.css',
   'browser-tools/runtime.js', 'browser-tools/remote-runtime.js',
-  'browser-tools/proxy-network.js', 'browser-tools/proxy-host.js',
+  'browser-tools/proxy-network.js', 'browser-tools/proxy-host.js', 'browser-tools/proxy-bootstrap.js',
   'browser-tools/userscripts.js', 'browser-tools/privacy.js', 'browser-tools/ai-help.js',
   'browser-tools/devtools-guard.js', 'browser-tools/preferences.js', 'browser-tools/preferences.css',
   'browser-tools/game-catalog.js', 'browser-tools/game-catalog.json', 'browser-tools/game-catalog.css',
+  'browser-tools/catalog-identity.js', 'browser-tools/music-catalog.js', 'browser-tools/music-catalog.css', 'browser-tools/music-catalog.json',
+  'browser-tools/particles.js', 'browser-tools/particles.css', 'browser-tools/proxy-identity.js',
   'ultrav/uv.bundle.js', 'ultrav/uv.client.js', 'ultrav/uv.handler.js',
   'ultrav/uv.sw.js', 'ultrav/uv.config.js',
 ]);

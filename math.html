@@ -32,8 +32,11 @@
   <script src="/browser-tools/shell-entry.js"></script>
   <script type="module" src="/browser-tools/preferences.js"></script>
   <script type="module" src="/browser-tools/game-catalog.js"></script>
+  <script type="module" src="/browser-tools/particles.js"></script>
+  <link rel="stylesheet" href="/browser-tools/particles.css">
   <link rel="stylesheet" href="/browser-tools/preferences.css">
   <link rel="stylesheet" href="/browser-tools/game-catalog.css">
+  <link rel="stylesheet" href="/browser-tools/music-catalog.css">
   <script type="module" src="/browser-tools/tools.js"></script>
   <script type="module" src="/browser-tools/ai-help.js"></script>
 
@@ -49,6 +52,9 @@
       </button>
       <button class="nav-icon" title="Apps & Sites" onclick="openAppsPopover()">
         <span class="material-symbols-outlined">desktop_windows</span>
+      </button>
+      <button class="nav-icon" title="Music" aria-label="Music" onclick="openMusicPopover(this)">
+        <span class="material-symbols-outlined">music_note</span>
       </button>
       <button class="nav-icon" title="Settings" onclick="openSettingsModal()">
         <span class="material-symbols-outlined">settings</span>
@@ -136,17 +142,17 @@
   </div>
 
                                  
-  <div class="overlay-backdrop" id="settings-modal">
+  <div class="overlay-backdrop" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-heading">
     <div class="modal-card">
       <div class="modal-header">
-        <h2 class="modal-title">Settings</h2>
-        <button class="close-btn" onclick="closeSettingsModal()">
+        <h2 class="modal-title" id="settings-heading">Settings</h2>
+        <button class="close-btn" onclick="closeSettingsModal()" aria-label="Close settings">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
       <div class="settings-body">
         <div id="general-preferences"></div>
-        <div class="setting-item">
+        <div class="setting-item" id="proxy-network-setting">
           <div class="setting-info">
             <span class="setting-title">Proxy network</span>
             <span class="setting-desc" id="network-detail">Checking available servers…</span>
@@ -505,6 +511,21 @@
       return match ? parseInt(match[1], 10) : null;
     }
 
+    async function openMusicPopover(button) {
+      if (button) button.disabled = true;
+      try {
+        closeGamesPopover();
+        closeAppsPopover();
+        closeSettingsModal();
+        const { mountMusicCatalog } = await import('/browser-tools/music-catalog.js');
+        await mountMusicCatalog(window, document).open();
+      } catch {
+        if (button) button.title = 'Music could not load. Click to retry.';
+      } finally {
+        if (button) button.disabled = false;
+      }
+    }
+
     function openGamesPopover() {
       closeAppsPopover();
       const popover = document.getElementById('games-popover');
@@ -681,7 +702,8 @@
           if (target.origin === window.location.origin) throw new Error('App pages cannot be opened as proxy destinations.');
           if (target.protocol === 'http:' && window.MonkehPrivacy?.get().httpsOnly !== false) throw new Error('HTTPS is required for entered addresses. Change this in Settings to open an HTTP page.');
           const sandbox = window.MonkehPrivacy?.sandbox(true) || 'allow-scripts allow-same-origin allow-forms allow-pointer-lock';
-          if (canReuseProxy && frame.getAttribute?.('sandbox') === sandbox) {
+          const currentIdentity = new URL(frame.src || 'about:blank', location.href).searchParams.get('ua') || '';
+          if (canReuseProxy && currentIdentity === (window.MonkehPrivacy?.get().userAgent || '') && frame.getAttribute?.('sandbox') === sandbox) {
             const reused = await window.MonkehTools?.navigateRemote?.(target.href);
             if (navigation !== viewerNavigation) return;
             if (reused) { showViewerProgress(''); return; }
@@ -698,7 +720,11 @@
                                                                                 
                                                                             
           frame.setAttribute('sandbox', window.MonkehPrivacy?.sandbox(true) || 'allow-scripts allow-same-origin allow-forms allow-pointer-lock');
-          frame.src = window.MonkehProxyOrigin + '/proxy-host.html#' + encodeURIComponent(target.href);
+          const hostUrl = new URL('/proxy-host.html', window.MonkehProxyOrigin);
+          const userAgent = window.MonkehPrivacy?.get().userAgent || '';
+          if (typeof userAgent === 'string' && userAgent.length <= 512 && /^[\x20-\x7e]+$/.test(userAgent)) hostUrl.searchParams.set('ua', userAgent.trim());
+          hostUrl.hash = encodeURIComponent(target.href);
+          frame.src = hostUrl.href;
         } else if (target.origin === window.location.origin) {
           if (!['/apps/auk.html', '/apps/vox.html', '/apps/desktop.html', '/apps/mochii-cloud.html', '/flyflix.html'].includes(target.pathname)) throw new Error('This local app is not in the trusted app list.');
                                                                                     

@@ -20,7 +20,7 @@ function node() {
 function port() {
   return { messages: [], starts: 0, closes: 0, postMessage(message) { this.messages.push(message); }, start() { this.starts++; }, close() { this.closes++; }, async request(message) { await this.onmessage?.({ data: message }); await flush(); } };
 }
-async function harness({ config: extraConfig = {}, evaluate = async code => `result: ${code}`, startup, fetchConfig, workerReady = Promise.resolve(), workerRegistration, workerController = {} } = {}) {
+async function harness({ config: extraConfig = {}, evaluate = async code => `result: ${code}`, startup, fetchConfig, workerReady = Promise.resolve(), workerRegistration, workerController = {}, userAgent = '' } = {}) {
   const allNodes = new Map();
   const get = id => {
     if (!allNodes.has(id)) allNodes.set(id, node());
@@ -32,7 +32,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   const contextWindow = node();
   contextWindow.SharedWorker = class {};
   contextWindow.parent = { sent: [], postMessage(data, origin) { this.sent.push({ data, origin }); } };
-  const location = { origin: proxyOrigin, href: proxyOrigin + '/proxy-host.html#' + encodeURIComponent('https://example.com/'), hash: '#' + encodeURIComponent('https://example.com/') };
+  const location = { origin: proxyOrigin, href: proxyOrigin + '/proxy-host.html' + (userAgent ? '?ua=' + encodeURIComponent(userAgent) : '') + '#' + encodeURIComponent('https://example.com/'), hash: '#' + encodeURIComponent('https://example.com/') };
   const pageDoc = { ...node(), title: 'Example', readyState: 'complete', body: { childElementCount: 1, textContent: 'Example' }, getElementById: () => null };
   const root = { nodeType: 1, localName: 'html', id: '', className: '', children: [], ownerDocument: pageDoc };
   pageDoc.documentElement = root;
@@ -50,6 +50,9 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   let registrations = 0;
   let treeReads = 0;
   let networkOptions;
+  const identityRequests = [];
+  const identityChannels = [];
+  if (workerController && !workerController.postMessage) workerController.postMessage = (data, ports) => { identityRequests.push(data); ports[0].postMessage({ ok: true }); };
   const serviceWorker = { ...node(), async register() { registrations++; return workerRegistration; }, ready: workerReady, controller: workerController };
   const network = { connects: 0, failures: 0, disposed: 0, switches: [], activeEndpoint: 'ws://127.0.0.1:3101/wisp/',
     async connect() { this.connects++; if (this.connects === 1) await networkOptions.activate('ws://127.0.0.1:3101/wisp/'); networkOptions.onStatus({ status: 'connected', activeEndpoint: 'ws://127.0.0.1:3101/wisp/', configuredCount: 1 }); return 'ws://127.0.0.1:3101/wisp/'; },
@@ -60,7 +63,14 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
     MonkehUseBackendConfig: true,
     window: contextWindow, document: doc, location, isSecureContext: true,
     navigator: { onLine: true, serviceWorker },
-    URL, AbortSignal, AbortController, TextEncoder, TextDecoder, Map, WeakMap, Set, decodeURIComponent, encodeURIComponent,
+    URL, AbortSignal, AbortController, TextEncoder, TextDecoder, Map, WeakMap, Set, decodeURIComponent, encodeURIComponent, Uint8Array, crypto,
+    MessageChannel: class {
+      constructor() {
+        this.port1 = { onmessage: null, start() {}, close() { this.closed = true; } };
+        this.port2 = { postMessage: data => this.port1.onmessage?.({ data }), close() { this.closed = true; } };
+        identityChannels.push(this);
+      }
+    },
     MutationObserver: class {
       constructor(callback) { this.callback = callback; observers.push(this); }
       observe(target) { this.target = target; }
@@ -115,8 +125,53 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
     timers.delete(id); timer.fn();
     return true;
   }
-  return { contextWindow, doc, get, frame, pageWindow, pageDoc, root, network, timers, evaluated, runtimes, observers, serviceWorker, init, loadPage, replaceDocument, tickWatch, expireReadiness, location, navigations, get networkOptions() { return networkOptions; }, get treeReads() { return treeReads; }, get activated() { return activated; }, get registrations() { return registrations; } };
+  return { contextWindow, doc, get, frame, pageWindow, pageDoc, root, network, timers, evaluated, runtimes, observers, serviceWorker, init, loadPage, replaceDocument, tickWatch, expireReadiness, location, navigations, identityRequests, identityChannels, get networkOptions() { return networkOptions; }, get treeReads() { return treeReads; }, get activated() { return activated; }, get registrations() { return registrations; } };
 }
+
+test('custom identities wait for a validated controlled child binding before target navigation', async () => {
+  const app = await harness({ userAgent: 'Chosen Browser/1' });
+  assert.equal(app.navigations.length, 1);
+  assert.match(app.navigations[0], /^\/proxy-bootstrap\.html\?nonce=[a-f0-9]{32}$/);
+  assert.doesNotMatch(app.navigations[0], /Chosen|example/);
+  app.loadPage();
+  assert.equal(app.runtimes.length, 0);
+  const nonce = new URL(app.frame.src, proxyOrigin).searchParams.get('nonce');
+  const message = { isTrusted: true, source: app.pageWindow, origin: proxyOrigin, data: { type: 'monkeh-proxy:identity-ready', nonce, clientId: 'bootstrap-child' } };
+  for (const changes of [{ isTrusted: false }, { source: {} }, { origin: shellOrigin }, { data: { ...message.data, nonce: 'a'.repeat(32) } }]) app.contextWindow.fire('message', { ...message, ...changes });
+  assert.equal(app.identityRequests.length, 0);
+  app.contextWindow.fire('message', message);
+  await flush();
+  assert.equal(app.identityRequests[0].clientId, 'bootstrap-child');
+  assert.equal(app.navigations.length, 2);
+  assert.equal(app.navigations[1], '/service/' + encodeURIComponent('https://example.com/'));
+  assert(app.identityChannels.every(channel => channel.port1.closed && channel.port2.closed));
+  assert.equal([...app.timers.values()].some(timer => timer.ms === 12000), false);
+  app.location.hash = '#' + encodeURIComponent('https://next.example/');
+  app.contextWindow.fire('hashchange'); await flush();
+  assert.equal(app.navigations.length, 3);
+  assert.equal(app.identityRequests.length, 1);
+  app.contextWindow.fire('pagehide');
+});
+
+test('identity bootstrap times out or cancels without navigating with the wrong identity', async () => {
+  for (const close of [false, true]) {
+    const app = await harness({ userAgent: 'Chosen Browser/1' });
+    if (close) app.contextWindow.fire('pagehide');
+    else [...app.timers.values()].find(timer => timer.ms === 12000).fn();
+    await flush();
+    assert.equal(app.navigations.length, 1);
+    assert.equal(app.identityRequests.length, 0);
+    assert.equal(app.timers.size, 0);
+    if (!close) {
+      assert.match(app.get('status-message').textContent, /identity setup timed out/);
+      assert.equal(app.get('retry').hidden, false);
+      app.get('retry').fire('click'); await flush();
+      assert.equal(app.navigations.length, 2);
+      assert.notEqual(app.navigations[0], app.navigations[1]);
+      app.contextWindow.fire('pagehide'); await flush();
+    }
+  }
+});
 
 test('proxy host accepts bridge transfer only from the allowed shell window and origin', async () => {
   const app = await harness();

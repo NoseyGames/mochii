@@ -628,7 +628,9 @@ $('browser-reload').addEventListener('click', async () => {
   try {
     const expectedSandbox = window.MonkehPrivacy?.sandbox?.(true);
     const changedPermissions = runtime?.isRemote && typeof expectedSandbox === 'string' && frame.getAttribute('sandbox') !== expectedSandbox;
-    if (changedPermissions) await window.retryViewerNavigation?.();
+    const expectedIdentity = window.MonkehPrivacy?.get?.()?.userAgent || '';
+    const changedIdentity = runtime?.isRemote && (new URL(frame.src || 'about:blank', location.href).searchParams.get('ua') || '') !== expectedIdentity;
+    if (changedPermissions || changedIdentity) await window.retryViewerNavigation?.();
     else if (runtime) await runtime.reload();
                                                                              
                                                                                

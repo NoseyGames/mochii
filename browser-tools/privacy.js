@@ -5,7 +5,9 @@ export const defaults = Object.freeze({
   searchEngine: 'duckduckgo', mode: 'dark', font: 'default', accent: '#a6abb1',
   background: 'none', backgroundUrl: '', cloak: 'monkeh', autoCloak: false,
   blobCloak: false, panicKey: '', panicUrl: 'https://www.google.com/',
-  closeProtection: false, skipLoading: true, nativeDevtoolsGuard: true, detectDocked: false
+  closeProtection: false, skipLoading: true, nativeDevtoolsGuard: true, detectDocked: false,
+  characterMasking: false, userAgent: '', particleEffect: 'none', particleDensity: 'normal',
+  backgroundOpacity: 40, backgroundBlur: 0, glassMode: false, glassOpacity: 88, glassBlur: 16
 });
 export const searchEngines = Object.freeze({
   duckduckgo: 'https://duckduckgo.com/?q=',
@@ -19,8 +21,12 @@ export function normalizePrivacy(value) {
     if (typeof defaults[key] === 'boolean' && typeof value[key] === 'boolean') result[key] = value[key];
   }
   if (Object.hasOwn(searchEngines, value.searchEngine)) result.searchEngine = value.searchEngine;
-  for (const [key, allowed] of Object.entries({ mode: ['dark', 'light'], font: ['default', 'outfit', 'space-mono', 'obscured', 'codystar', 'silkscreen'], background: ['none', 'hive', 'grid', 'synthwave', 'cat', 'doubleu', 'custom'], cloak: ['monkeh', 'google', 'classroom', 'clever', 'desmos', 'wikipedia', 'gmail', 'drive', 'newtab', 'bing'] })) {
+  for (const [key, allowed] of Object.entries({ mode: ['dark', 'light'], font: ['default', 'outfit', 'space-mono', 'obscured', 'codystar', 'silkscreen'], background: ['none', 'hive', 'grid', 'synthwave', 'cat', 'doubleu', 'custom'], cloak: ['monkeh', 'google', 'classroom', 'clever', 'desmos', 'wikipedia', 'gmail', 'drive', 'newtab', 'bing'], particleEffect: ['none', 'snow', 'rain', 'bubbles'], particleDensity: ['low', 'normal'] })) {
     if (allowed.includes(value[key])) result[key] = value[key];
+  }
+  if (typeof value.userAgent === 'string' && value.userAgent.length <= 512 && /^[\x20-\x7e]*$/.test(value.userAgent)) result.userAgent = value.userAgent.trim();
+  for (const [key, min, max] of [['backgroundOpacity', 0, 100], ['backgroundBlur', 0, 24], ['glassOpacity', 40, 100], ['glassBlur', 0, 32]]) {
+    if (typeof value[key] === 'number' && Number.isFinite(value[key])) result[key] = Math.max(min, Math.min(max, Math.round(value[key])));
   }
   if (/^#[0-9a-f]{6}$/i.test(value.accent)) result.accent = value.accent.toLowerCase();
   for (const key of ['backgroundUrl', 'panicUrl']) {

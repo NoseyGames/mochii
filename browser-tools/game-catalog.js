@@ -1,4 +1,8 @@
+import { normalizeCatalogTitle } from './catalog-identity.js';
+
 const REFERENCE_ORIGIN = 'https://photos.tram-gallery.ru';
+const CHERRI_ORIGIN = 'https://h35d5a9.jfs-autoelevadores.com.ar';
+const CKV_ORIGIN = 'https://wanocapy.github.io';
 const CDN_ORIGIN = 'https://cdn.jsdelivr.net';
 const HTML_BASE = CDN_ORIGIN + '/gh/securlycdn/html@main/';
 const COVER_BASE = CDN_ORIGIN + '/gh/securlycdn/covers@main/';
@@ -10,7 +14,12 @@ export const GAME_SOURCES = Object.freeze([
   { id: 'hydra', label: 'Hydra', manifest: REFERENCE_ORIGIN + '/m8f04680.json', base: REFERENCE_ORIGIN + '/', origins: [CDN_ORIGIN] },
   { id: '3kh0', label: '3kh0', manifest: REFERENCE_ORIGIN + '/mf113660.json', base: REFERENCE_ORIGIN + '/', origins: [CDN_ORIGIN] },
   { id: 'ports', label: 'Truffled', manifest: REFERENCE_ORIGIN + '/m630d80d.json', base: REFERENCE_ORIGIN + '/', origins: [REFERENCE_ORIGIN] },
-  { id: 'tglsc', label: 'TGLSC', manifest: REFERENCE_ORIGIN + '/m576e992.json', base: REFERENCE_ORIGIN + '/', origins: [REFERENCE_ORIGIN] }
+  { id: 'tglsc', label: 'TGLSC', manifest: REFERENCE_ORIGIN + '/m576e992.json', base: REFERENCE_ORIGIN + '/', origins: [REFERENCE_ORIGIN] },
+  ...[
+    ['ckv', 'CKV'], ['seraph', 'Seraph'], ['truffled', 'Truffled'], ['ugs', 'UGS'], ['gn-math', 'GN-Math']
+  ].map(([id, label]) => ({ id: 'cherri-' + id, label: 'Cherri · ' + label,
+    manifest: CHERRI_ORIGIN + '/assets/json/' + id + '.json', file: 'cherri-' + id + '.json',
+    base: CHERRI_ORIGIN + '/', origins: id === 'ckv' ? [CKV_ORIGIN] : [CHERRI_ORIGIN], cherri: true }))
 ].map(source => Object.freeze({ ...source, origins: Object.freeze(source.origins) })));
 
 const SOURCE_BY_ID = new Map(GAME_SOURCES.map(source => [source.id, source]));
@@ -19,14 +28,21 @@ const RECENTS_KEY = 'monkeh.games.recents.v1';
 const PAGE_SIZE = 60;
 const MAX_BYTES = 4 * 1024 * 1024;
 const FEATURED = ['Coffee Talk', 'A Difficult Game About Climbing', 'Basketball Stars', 'Drive Mad', 'Slope', 'Geometry Dash', 'Minecraft 1.12.2', 'Minecraft 1.8.8', 'Vex 8'];
+const FEATURED_RANK = new Map(FEATURED.map((name, index) => [normalizeCatalogTitle(name), index]));
+const BROKEN_2048_URLS = new Set([
+  HTML_BASE + '114-f.html', REFERENCE_ORIGIN + '/study2/114-f.html', CHERRI_ORIGIN + '/stores/gn-math/114-f.html'
+]);
+const VERIFIED_2048_URL = CHERRI_ORIGIN + '/stores/seraph/2048/index.html';
 
 function safeUrl(value, source, cover = false) {
   if (typeof value !== 'string' || value.length > 4096 || /[\u0000-\u001f\u007f]/.test(value)) return '';
-  const expanded = value.replaceAll('{HTML_URL}', HTML_BASE.slice(0, -1)).replaceAll('{COVER_URL}', COVER_BASE.slice(0, -1));
+  let expanded = value.replaceAll('{HTML_URL}', HTML_BASE.slice(0, -1)).replaceAll('{COVER_URL}', COVER_BASE.slice(0, -1));
+  if (source.cherri && !cover && expanded.startsWith('/') && !expanded.startsWith('/stores/')) expanded = '/stores' + expanded;
+  if (source.cherri && cover && expanded.startsWith('/img/')) expanded = '/covers/' + expanded.slice(5);
   try {
     const url = new URL(expanded, source.base);
     if (url.protocol !== 'https:' || url.username || url.password) return '';
-    if (!(cover ? [REFERENCE_ORIGIN, CDN_ORIGIN] : source.origins).includes(url.origin)) return '';
+    if (!(cover ? [REFERENCE_ORIGIN, CHERRI_ORIGIN, CKV_ORIGIN, CDN_ORIGIN] : source.origins).includes(url.origin)) return '';
     return url.href;
   } catch { return ''; }
 }
@@ -45,14 +61,15 @@ export function normalizeGameEntries(entries, sourceId) {
     seen.add(url);
     games.push({
       id: source.id + '|' + url, name, url, source: source.id,
-      cover: safeUrl(entry.cover || entry.image, source, true),
-      author: typeof entry.author === 'string' ? entry.author.trim().slice(0, 200) : ''
+      cover: safeUrl(entry.cover || entry.image || entry.img, source, true),
+      author: typeof entry.author === 'string' ? entry.author.trim().slice(0, 200) : '',
+      titleKey: normalizeCatalogTitle(name)
     });
   }
   return games;
 }
 
-export function normalizeGameSnapshot(snapshot) {
+export function snapshotGameEntries(snapshot) {
   if (!snapshot || snapshot.version !== 1 || !Array.isArray(snapshot.sources)) return [];
   const groups = new Map();
   for (const group of snapshot.sources.slice(0, GAME_SOURCES.length)) {
@@ -61,18 +78,61 @@ export function normalizeGameSnapshot(snapshot) {
   return GAME_SOURCES.flatMap(source => groups.get(source.id) || []);
 }
 
+export function deduplicateGames(entries) {
+  const unique = new Map();
+  for (const entry of entries) {
+    const titleKey = entry.titleKey || normalizeCatalogTitle(entry.name);
+    if (!titleKey) continue;
+    let game = unique.get(titleKey);
+    if (!game) {
+      game = { ...entry, id: 'game|' + titleKey, titleKey, aliases: [], variants: [], sources: [],
+        searchText: '', rank: FEATURED_RANK.get(titleKey) ?? FEATURED.length,
+        variantIds: new Set(), sourceIds: new Set(), searchParts: new Set() };
+      unique.set(titleKey, game);
+    }
+    if (game.variantIds.has(entry.id)) continue;
+    game.variantIds.add(entry.id);
+    game.aliases.push(entry.id);
+    game.variants.push(entry);
+    if (!game.sourceIds.has(entry.source)) { game.sourceIds.add(entry.source); game.sources.push(entry.source); }
+    if (!game.cover && entry.cover) game.cover = entry.cover;
+    for (const value of [entry.name, entry.author, SOURCE_BY_ID.get(entry.source)?.label || '']) if (value) game.searchParts.add(value.toLowerCase());
+  }
+  return [...unique.values()].map(game => {
+    if (game.titleKey === '2048' && game.variants.some(variant => BROKEN_2048_URLS.has(variant.url))) {
+      const index = game.variants.findIndex(variant => variant.url === VERIFIED_2048_URL);
+      if (index > 0) {
+        const [preferred] = game.variants.splice(index, 1);
+        game.variants.unshift(preferred);
+        Object.assign(game, { url: preferred.url, source: preferred.source, cover: preferred.cover || game.cover });
+      }
+    }
+    game.searchText = [...game.searchParts].join('\n');
+    delete game.variantIds;
+    delete game.sourceIds;
+    delete game.searchParts;
+    return game;
+  });
+}
+
+export function normalizeGameSnapshot(snapshot) {
+  return deduplicateGames(snapshotGameEntries(snapshot));
+}
+
 export function selectGames(games, { query = '', source = 'all', view = 'all', sort = 'pop', favorites = [], recents = [] } = {}) {
-  const search = String(query).trim().toLocaleLowerCase().slice(0, 200);
+  const search = String(query).trim().toLowerCase().slice(0, 200);
+  const searchKey = normalizeCatalogTitle(search);
   const saved = new Set(favorites);
   const recent = new Map(recents.map((id, index) => [id, index]));
-  const list = games.filter(game => (source === 'all' || game.source === source)
-    && (view !== 'favorites' || saved.has(game.id)) && (view !== 'recent' || recent.has(game.id))
-    && (!search || [game.name, game.author, SOURCE_BY_ID.get(game.source)?.label || ''].some(value => value.toLocaleLowerCase().includes(search))));
+  const list = games.filter(game => (source === 'all' || game.sources.includes(source))
+    && (view !== 'favorites' || saved.has(game.id) || game.aliases.some(id => saved.has(id)))
+    && (view !== 'recent' || recent.has(game.id) || game.aliases.some(id => recent.has(id)))
+    && (!search || game.searchText.includes(search) || (searchKey && game.titleKey.includes(searchKey))));
+  for (const game of list) if (view === 'recent' && !recent.has(game.id)) recent.set(game.id, Math.min(...game.aliases.filter(id => recent.has(id)).map(id => recent.get(id))));
   if (view === 'recent') list.sort((a, b) => recent.get(a.id) - recent.get(b.id));
   else if (sort === 'az' || sort === 'za') list.sort((a, b) => a.name.localeCompare(b.name) * (sort === 'za' ? -1 : 1));
   else {
-    const rank = name => { const index = FEATURED.findIndex(value => value.toLowerCase() === name.toLowerCase()); return index < 0 ? FEATURED.length : index; };
-    list.sort((a, b) => rank(a.name) - rank(b.name));
+    list.sort((a, b) => a.rank - b.rank);
   }
   return list;
 }
@@ -117,6 +177,10 @@ export async function fetchGameJson(fetcher, url, { signal } = {}) {
 
 export function createGameCatalog(win, doc) {
   let games = [];
+  let rawGames = [];
+  let gameIndex = new Map();
+  let aliasIndex = new Map();
+  const preferredVariants = new Map();
   let filtered = [];
   let page = 1;
   let loading = null;
@@ -138,12 +202,19 @@ export function createGameCatalog(win, doc) {
     catch { if (node('games-status')) node('games-status').textContent = 'Saved for this visit. Browser storage is unavailable.'; }
   }
 
+  function activeVariant(game) {
+    const source = node('games-source-select')?.value || 'all';
+    const variants = source === 'all' ? game.variants : game.variants.filter(item => item.source === source);
+    return variants.find(item => item.id === preferredVariants.get(game.id)) || variants[0] || game.variants[0];
+  }
+
   function launch(game) {
-    const known = games.find(item => item.id === game?.id);
+    const known = gameIndex.get(game?.id) || gameIndex.get(aliasIndex.get(game?.id));
     if (!known) return;
     recents = [known.id, ...recents.filter(id => id !== known.id)].slice(0, 50);
     saveList(RECENTS_KEY, recents);
-    return win.openViewer?.(known.name, SOURCE_BY_ID.get(known.source).label, known.url, true);
+    const variant = activeVariant(known);
+    return win.openViewer?.(known.name, SOURCE_BY_ID.get(variant.source).label, variant.url, true);
   }
 
   function toggleFavorite(game) {
@@ -171,10 +242,11 @@ export function createGameCatalog(win, doc) {
     if (!slice.items.length) fragment.appendChild(element('div', 'loading-text', ready ? 'No games match these filters.' : 'Loading catalog…'));
     const saved = new Set(favorites);
     for (const game of slice.items) {
+      const variant = activeVariant(game);
       const item = element('div', 'game-item');
       const launchButton = element('button', 'game-launch');
       launchButton.type = 'button';
-      launchButton.setAttribute('aria-label', 'Play ' + game.name + ' from ' + SOURCE_BY_ID.get(game.source).label);
+      launchButton.setAttribute('aria-label', 'Play ' + game.name + ' from ' + SOURCE_BY_ID.get(variant.source).label);
       launchButton.addEventListener('click', () => launch(game));
       if (game.cover && win.MonkehPrivacy?.get().showCovers !== false) {
         const cover = element('img', 'game-cover');
@@ -188,7 +260,7 @@ export function createGameCatalog(win, doc) {
       }
       const info = element('span', 'game-info');
       info.appendChild(element('span', 'game-title', game.name));
-      info.appendChild(element('span', 'game-author', SOURCE_BY_ID.get(game.source).label + (game.author ? ' · ' + game.author : '')));
+      info.appendChild(element('span', 'game-author', SOURCE_BY_ID.get(variant.source).label + (game.author ? ' · ' + game.author : '')));
       launchButton.appendChild(info);
       const star = element('button', 'game-favorite', saved.has(game.id) ? '★' : '☆');
       star.type = 'button';
@@ -196,10 +268,32 @@ export function createGameCatalog(win, doc) {
       star.setAttribute('aria-pressed', String(saved.has(game.id)));
       star.addEventListener('click', () => toggleFavorite(game));
       item.append(launchButton, star);
+      const sourceFilter = node('games-source-select')?.value || 'all';
+      const variants = sourceFilter === 'all' ? game.variants : game.variants.filter(entry => entry.source === sourceFilter);
+      if (variants.length > 1) {
+        const chooser = element('select', 'game-source-choice');
+        chooser.setAttribute('aria-label', 'Source for ' + game.name);
+        const sourceCounts = new Map();
+        for (const entry of variants) {
+          const count = (sourceCounts.get(entry.source) || 0) + 1;
+          sourceCounts.set(entry.source, count);
+          const option = element('option', '', SOURCE_BY_ID.get(entry.source).label + (count > 1 ? ' · alternate ' + count : ''));
+          option.value = entry.id;
+          chooser.appendChild(option);
+        }
+        chooser.value = variant.id;
+        chooser.addEventListener('change', () => {
+          preferredVariants.set(game.id, chooser.value);
+          const selected = activeVariant(game);
+          launchButton.setAttribute('aria-label', 'Play ' + game.name + ' from ' + SOURCE_BY_ID.get(selected.source).label);
+          info.children[1].textContent = SOURCE_BY_ID.get(selected.source).label + (game.author ? ' · ' + game.author : '');
+        });
+        item.appendChild(chooser);
+      }
       fragment.appendChild(item);
     }
     container.replaceChildren(fragment);
-    if (node('games-status')) node('games-status').textContent = `${filtered.length.toLocaleString()} of ${games.length.toLocaleString()} games · Source versions are listed separately`;
+    if (node('games-status')) node('games-status').textContent = `${filtered.length.toLocaleString()} of ${games.length.toLocaleString()} games · ${(rawGames.length - games.length).toLocaleString()} duplicate titles merged`;
     if (node('games-page')) node('games-page').textContent = `Page ${page} of ${slice.pages}`;
     if (node('games-prev')) node('games-prev').disabled = page <= 1;
     if (node('games-next')) node('games-next').disabled = page >= slice.pages;
@@ -272,7 +366,7 @@ export function createGameCatalog(win, doc) {
     if (loading) return loading;
     loading = (async () => {
       if (node('games-status')) node('games-status').textContent = 'Loading catalogs…';
-      let base = games;
+      let base = rawGames;
       const live = new Map();
       const publish = () => {
         const next = new Map(base.map(game => [game.id, game]));
@@ -280,13 +374,22 @@ export function createGameCatalog(win, doc) {
           for (const [id, game] of next) if (game.source === source) next.delete(id);
           for (const game of entries) next.set(game.id, game);
         }
-        games = [...next.values()];
+        rawGames = [...next.values()];
+        games = deduplicateGames(rawGames);
+        gameIndex = new Map(games.map(game => [game.id, game]));
+        aliasIndex = new Map(games.flatMap(game => game.aliases.map(id => [id, game.id])));
+        for (const [key, values] of [[FAVORITES_KEY, favorites], [RECENTS_KEY, recents]]) {
+          const migrated = [...new Set(values.map(id => aliasIndex.get(id) || id))];
+          if (migrated.length !== values.length || migrated.some((id, index) => id !== values[index])) saveList(key, migrated);
+          if (key === FAVORITES_KEY) favorites = migrated;
+          else recents = migrated;
+        }
         ready = games.length > 0;
         render();
       };
       const outcomes = await Promise.allSettled([
         fetchGameJson(win.fetch.bind(win), '/browser-tools/game-catalog.json', { signal: AbortSignal.timeout(10000) }).then(data => {
-          const snapshot = normalizeGameSnapshot(data);
+          const snapshot = snapshotGameEntries(data);
           if (!snapshot.length) throw new Error('Saved catalogs are empty.');
           base = snapshot;
           publish();
@@ -312,7 +415,7 @@ export function createGameCatalog(win, doc) {
     return ready ? Promise.resolve(games.length) : refresh();
   }
 
-  return Object.freeze({ open, refresh, render, launch, getState: () => ({ count: games.length, ready, page, favorites: [...favorites], recents: [...recents] }) });
+  return Object.freeze({ open, refresh, render, launch, getState: () => ({ count: games.length, variants: rawGames.length, duplicates: rawGames.length - games.length, ready, page, favorites: [...favorites], recents: [...recents] }) });
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {

@@ -203,6 +203,26 @@ test('accepted warm proxy navigation preserves the outer iframe and its document
   assert.equal(element('viewer-title').textContent, 'Next');
 });
 
+test('changing browser identity recreates the proxy view before navigating', async () => {
+  const { page, element } = createPage();
+  let userAgent = 'Monkeh-A/1.0';
+  let reused = 0;
+  page.MonkehPrivacy = { get: () => ({ httpsOnly: true, userAgent }), sandbox: () => 'allow-scripts allow-same-origin allow-forms allow-pointer-lock' };
+  page.MonkehTools = { prepareNavigation() {}, expectDocument() {}, async navigateRemote() { reused++; return true; } };
+  await page.openViewer('First', '', 'https://first.example/', true);
+  assert.equal(new URL(element('viewer-frame').src).searchParams.get('ua'), 'Monkeh-A/1.0');
+  await page.openViewer('Second', '', 'https://second.example/', true);
+  assert.equal(reused, 1);
+  userAgent = 'Monkeh-B/1.0';
+  await page.openViewer('Third', '', 'https://third.example/', true);
+  assert.equal(reused, 1);
+  assert.equal(new URL(element('viewer-frame').src).searchParams.get('ua'), 'Monkeh-B/1.0');
+  userAgent = '';
+  await page.openViewer('Default', '', 'https://default.example/', true);
+  assert.equal(reused, 1);
+  assert.equal(new URL(element('viewer-frame').src).searchParams.has('ua'), false);
+});
+
 test('changed popup or download sandbox permissions force a cold proxy navigation', async () => {
   const { page, element } = createPage();
   let policy = 'allow-scripts allow-same-origin allow-forms allow-pointer-lock';

@@ -292,6 +292,29 @@ test('reload delegates srcdoc games and error placeholders to the shell retry na
   assert.doesNotMatch(app.text('console-output'), /Reassigning src/);
 });
 
+test('reload applies changed proxy identities and restores the real browser default', async () => {
+  const app = harness();
+  await app.connect('https://example.com/');
+  let identity = 'Selected Browser/1';
+  let coldReloads = 0;
+  app.window.MonkehPrivacy = { get: () => ({ userAgent: identity }) };
+  app.window.retryViewerNavigation = async () => { coldReloads++; };
+  await app.get('browser-reload').fire('click');
+  assert.equal(coldReloads, 1);
+  assert.equal(app.sessions[0].reloaded, undefined);
+  const host = new URL(app.get('viewer-frame').src);
+  host.searchParams.set('ua', identity);
+  app.get('viewer-frame').src = host.href;
+  await app.get('browser-reload').fire('click');
+  assert.equal(coldReloads, 1);
+  assert.equal(app.sessions[0].reloaded, true);
+  app.sessions[0].reloaded = false;
+  identity = '';
+  await app.get('browser-reload').fire('click');
+  assert.equal(coldReloads, 2);
+  assert.equal(app.sessions[0].reloaded, false);
+});
+
 test('warm navigation reuses a connected proxy host and falls back when no valid bridge exists', async () => {
   const app = harness();
   assert.equal(await app.window.MonkehTools.navigateRemote('https://next.example/'), false);

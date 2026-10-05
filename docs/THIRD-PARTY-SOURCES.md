@@ -59,3 +59,29 @@ That relay has not been added to Monkeh's public rotation.
 
 Use `node scripts/update-game-catalog.mjs` to refresh the bundled catalog links.
 Review the resulting source diff before publishing the refreshed snapshot.
+
+## Cherri catalogs, music and settings
+
+The public [Cherri reference](https://h35d5a9.jfs-autoelevadores.com.ar/) was
+reviewed on October 4, 2026. Its public game catalogs list CKV (821), Seraph (501),
+Truffled (505), UGS (1,512) and GN-Math (818). Eleven duplicate launch URLs and
+the GN-Math comments entry are excluded, adding 4,145 source variants to the
+existing 3,543. The combined title index contains 3,082 cards. Account-dependent
+cloud/arcade providers and user-supplied ROM placeholders are not imported.
+Only catalog metadata, covers and source-hosted launch links are referenced;
+no game payloads or Cherri executable code are bundled.
+
+Cherri's music is a live service rather than a finite track manifest. Monkeh
+independently implements a player that searches its five anonymous source IDs:
+Qobuz, Tidal, YouTube Music, and two SoundCloud routes. Matching normalized titles
+share a row, with provider/artist variants retained. The SoundCloud routes were
+observed returning Qobuz results, so returned source identities are preserved.
+The discovery snapshot has 287 unique titles and 288 provider variants. The
+bounded Worker relay requests only fixed public search, browse and stream routes;
+it never sends account cookies, passwords, or arbitrary destination URLs. No
+audio files are bundled or downloaded in advance. Availability and rights to
+stream remain controlled by the upstream providers.
+
+Settings, character masking, browser identity, and snow/rain/bubble effects are
+independent implementations inspired by Cherri and the public Figure interface.
+No sign-in, account synchronization, advertising, or chat features are added.

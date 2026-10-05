@@ -1,3 +1,5 @@
+import { proxyViewUrl } from '../browser-tools/proxy-identity.js';
+
 const figureGames = new Map([
   ["117", "jy0354"],
   ["209", "jy0108"],
@@ -101,7 +103,7 @@ export function getFigureLaunchUrl(gameId) {
   return key ? 'https://figure-cloud.figure-softwares.workers.dev/?game=' + encodeURIComponent(key) : null;
 }
 
-export function getFigureProxyUrl(gameId, config, shellOrigin) {
+export function getFigureProxyUrl(gameId, config, shellOrigin, userAgent = '') {
   const target = getFigureLaunchUrl(gameId);
   if (!target || !config || !Array.isArray(config.shellOrigins) || !config.shellOrigins.includes(shellOrigin)) return null;
   try {
@@ -111,6 +113,6 @@ export function getFigureProxyUrl(gameId, config, shellOrigin) {
     if (proxy.protocol !== 'https:' && !(proxy.protocol === 'http:' && local)) return null;
     if (proxy.username || proxy.password || proxy.pathname !== '/' || proxy.search || proxy.hash) return null;
     if (proxy.origin === shellOrigin || config.shellOrigins.includes(proxy.origin)) return null;
-    return proxy.origin + '/proxy-host.html#' + encodeURIComponent(target);
+    return proxyViewUrl(proxy.origin, target, userAgent);
   } catch { return null; }
 }

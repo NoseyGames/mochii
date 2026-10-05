@@ -192,6 +192,32 @@ test('Flyflix opens the live website through the isolated proxy and rejects inse
   }
 });
 
+test('Flyflix waits for deferred privacy settings before its first static-config navigation', async () => {
+  const elements = new Map();
+  const listeners = new Map();
+  let configCalls = 0;
+  const page = contextFor(inlineScript(flyflix), {
+    location: new URL('https://monkeh.test/flyflix.html'),
+    document: {
+      readyState: 'loading',
+      getElementById(id) {
+        if (!elements.has(id)) elements.set(id, { addEventListener() {} });
+        return elements.get(id);
+      },
+      addEventListener(name, callback) { listeners.set(name, callback); }
+    }
+  });
+  page.MonkehConfig = { async fetchConfig() { configCalls++; return { proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }; } };
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(configCalls, 0);
+  assert.equal(elements.get('provider').src, undefined);
+  page.MonkehPrivacy = { get: () => ({ userAgent: 'Saved Browser/1' }) };
+  listeners.get('DOMContentLoaded')();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(configCalls, 1);
+  assert.equal(new URL(elements.get('provider').src).searchParams.get('ua'), 'Saved Browser/1');
+});
+
 test('Flyflix accepts only the real proxy frame handshake and closes its status channel on reload', async () => {
   const listeners = new Map();
   const channels = [];

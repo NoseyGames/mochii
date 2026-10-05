@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { request } from 'node:http';
 import WebSocket from 'ws';
-import { createAppServer } from '../server.mjs';
+import { createAppServer, createProxyServer } from '../server.mjs';
 import '../browser-tools/config.js';
 
 let server;
@@ -270,5 +270,44 @@ test('Wisp rejects WebSockets initiated by a different site', { timeout: 10000 }
     assert.equal(status, 403);
   } finally {
     socket.terminate();
+  }
+});
+
+test('the Node music adapter accepts configured app origins and cancels audio when the client disconnects', { timeout: 5000 }, async t => {
+  const events = new EventEmitter();
+  const cancelled = once(events, 'cancel', { signal: AbortSignal.timeout(2000) });
+  let upstreamController;
+  const upstream = t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.match(url, /^https:\/\/h35d5a9\.jfs-autoelevadores\.com\.ar\/api\/music\/stream\?/);
+    assert.equal(options.headers.Range, 'bytes=0-');
+    return new Response(new ReadableStream({
+      start(controller) { upstreamController = controller; controller.enqueue(new Uint8Array(1024)); },
+      cancel() { events.emit('cancel'); }
+    }), { status: 206, headers: { 'Content-Type': 'audio/mpeg', 'Content-Range': 'bytes 0-8191/8192', 'Accept-Ranges': 'bytes' } });
+  });
+  const proxy = createProxyServer({ env: { PORT: '3000', PROXY_PORT: '3001' } });
+  let client;
+  try {
+    proxy.listen(0, '127.0.0.1');
+    await once(proxy, 'listening');
+    client = request(`http://127.0.0.1:${proxy.address().port}/api/music/stream?source=tidal&id=123`, {
+      headers: { Origin: 'http://127.0.0.1:3000', Range: 'bytes=0-' }
+    });
+    const incoming = once(client, 'response');
+    client.end();
+    const [response] = await incoming;
+    assert.equal(response.statusCode, 206);
+    assert.equal(response.headers['access-control-allow-origin'], 'http://127.0.0.1:3000');
+    assert.equal(response.headers['content-type'], 'audio/mpeg');
+    assert.equal(response.headers['content-range'], 'bytes 0-8191/8192');
+    await once(response, 'data');
+    client.destroy();
+    await cancelled;
+    assert.equal(upstream.mock.callCount(), 1);
+  } finally {
+    client?.destroy();
+    try { upstreamController?.close(); } catch {}
+    proxy.closeAllConnections();
+    await new Promise(resolve => proxy.close(resolve));
   }
 });

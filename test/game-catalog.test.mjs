@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { GAME_SOURCES, normalizeGameEntries, normalizeGameSnapshot, selectGames, gamePage, fetchGameJson, createGameCatalog } from '../browser-tools/game-catalog.js';
+import { GAME_SOURCES, normalizeGameEntries, normalizeGameSnapshot, snapshotGameEntries, deduplicateGames, selectGames, gamePage, fetchGameJson, createGameCatalog } from '../browser-tools/game-catalog.js';
 
 const fixture = { version: 1, sources: [
   { id: 'securly', games: [{ name: 'First game', url: '{HTML_URL}/first.html', cover: '{COVER_URL}/first.png', author: 'Creator' }, { name: 'Slope', url: '{HTML_URL}/slope.html' }] },
@@ -10,12 +10,15 @@ const fixture = { version: 1, sources: [
 const response = value => new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-test('all playable reference entries ship alongside the previous catalog, with chat and suggestion entries removed', async () => {
+test('all public Cherri source games ship alongside existing games with one card per title', async () => {
   const snapshot = JSON.parse(await readFile(new URL('../browser-tools/game-catalog.json', import.meta.url), 'utf8'));
   const games = normalizeGameSnapshot(snapshot);
-  assert.equal(games.length, 3543);
-  assert.deepEqual(Object.fromEntries(GAME_SOURCES.map(source => [source.id, games.filter(game => game.source === source.id).length])), {
-    securly: 835, 'gn-math': 808, seraph: 468, hydra: 872, '3kh0': 370, ports: 107, tglsc: 83
+  assert.equal(games.length, 3082);
+  const entries = snapshotGameEntries(snapshot);
+  assert.equal(entries.length, 7688);
+  assert.deepEqual(Object.fromEntries(GAME_SOURCES.map(source => [source.id, entries.filter(game => game.source === source.id).length])), {
+    securly: 835, 'gn-math': 808, seraph: 468, hydra: 872, '3kh0': 370, ports: 107, tglsc: 83,
+    'cherri-ckv': 819, 'cherri-seraph': 492, 'cherri-truffled': 505, 'cherri-ugs': 1512, 'cherri-gn-math': 817
   });
   assert.equal(new Set(games.map(game => game.id)).size, games.length);
   assert(games.every(game => !/^\[!\]/.test(game.name) && game.url.startsWith('https://')));
@@ -47,15 +50,15 @@ test('catalog normalization resolves each source and rejects unsafe URLs without
   assert.deepEqual(normalizeGameSnapshot({ version: 2, sources: fixture.sources }), []);
 });
 
-test('favorites, recent order, search, and source filters retain alternate source versions', () => {
+test('favorites, recent order, and source filters share one title while retaining alternate sources', () => {
   const games = normalizeGameSnapshot(fixture);
   const slopes = selectGames(games, { query: 'slope' });
-  assert.equal(slopes.length, 2);
-  assert.notEqual(slopes[0].id, slopes[1].id);
+  assert.equal(slopes.length, 1);
+  assert.equal(slopes[0].variants.length, 2);
   assert.equal(selectGames(games, { query: 'slope', source: 'gn-math' }).length, 1);
   assert.equal(selectGames(games, { query: 'Creator' })[0].name, 'First game');
-  assert.deepEqual(selectGames(games, { view: 'favorites', favorites: [games[2].id] }), [games[2]]);
-  assert.deepEqual(selectGames(games, { view: 'recent', recents: [games[2].id, games[0].id] }), [games[2], games[0]]);
+  assert.deepEqual(selectGames(games, { view: 'favorites', favorites: [games[1].aliases[1]] }), [games[1]]);
+  assert.deepEqual(selectGames(games, { view: 'recent', recents: [games[1].aliases[1], games[0].id] }), [games[1], games[0]]);
   assert.equal(selectGames(games)[0].name, 'Slope');
   assert.equal(selectGames(games, { sort: 'az' })[0].name, 'First game');
 });
@@ -84,7 +87,7 @@ test('fetch rejects HTML errors and oversized streaming catalogs and cancels the
   assert.equal(options.referrerPolicy, 'no-referrer');
 });
 
-function harness(fetcher) {
+function harness(fetcher, initialStorage = []) {
   const nodes = new Map();
   function element(tagName = 'div') {
     const events = new Map();
@@ -111,7 +114,7 @@ function harness(fetcher) {
   const panel = element();
   for (const id of ['popover-search-input', 'popover-sort-select', 'game-list']) { const item = element(); item.id = id; panel.appendChild(item); }
   const doc = { getElementById: id => nodes.get(id), createElement: element, createDocumentFragment: () => element('#fragment') };
-  const storage = new Map();
+  const storage = new Map(initialStorage);
   const opened = [];
   const win = { localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) }, fetch: fetcher,
     openViewer: (...args) => opened.push(args), MonkehPrivacy: { get: () => ({ showCovers: true }) } };
@@ -129,16 +132,17 @@ test('saved catalogs render before a slow live source, controls are installed on
   });
   const loading = app.catalog.open();
   await flush();
-  assert.equal(app.catalog.getState().count, 3);
-  assert.equal(app.nodes.get('game-list').children.length, 3);
-  assert.equal(app.nodes.get('games-source-select').children.length, 8);
+  assert.equal(app.catalog.getState().count, 2);
+  assert.equal(app.catalog.getState().duplicates, 1);
+  assert.equal(app.nodes.get('game-list').children.length, 2);
+  assert.equal(app.nodes.get('games-source-select').children.length, 13);
   const panelSize = app.panel.children.length;
   await app.catalog.open();
   assert.equal(app.panel.children.length, panelSize);
   finish(new Response('unavailable', { status: 503 }));
-  assert.equal(await loading, 3);
+  assert.equal(await loading, 2);
   rejectSnapshot = true;
-  assert.equal(await app.catalog.refresh(), 3);
+  assert.equal(await app.catalog.refresh(), 2);
   assert.match(app.nodes.get('games-status').textContent, /temporarily unavailable/);
 });
 
@@ -169,4 +173,95 @@ test('one failed snapshot does not hide a healthy live source', async () => {
   const app = harness(url => url.startsWith('/') ? Promise.reject(new Error('offline')) : Promise.resolve(response(fixture.sources[0].games)));
   assert.equal(await app.catalog.open(), 2);
   assert.equal(app.catalog.getState().ready, true);
+});
+
+test('Cherri manifests resolve stores and covers while rejecting destinations outside the source allowlist', () => {
+  const entries = normalizeGameEntries([
+    { name: 'Slope', url: '/seraph/slope/index.html', img: '/img/seraph/slope.jpg' },
+    { name: 'External', url: 'https://attacker.example/game', img: 'https://attacker.example/pixel' },
+    { name: 'Script', url: 'javascript:alert(1)' }
+  ], 'cherri-seraph');
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].url, 'https://h35d5a9.jfs-autoelevadores.com.ar/stores/seraph/slope/index.html');
+  assert.equal(entries[0].cover, 'https://h35d5a9.jfs-autoelevadores.com.ar/covers/seraph/slope.jpg');
+  const reread = normalizeGameEntries(entries, 'cherri-seraph');
+  assert.equal(reread[0].url, entries[0].url);
+});
+
+test('ingest deduplicates titles once and keeps every unique launch alternative', () => {
+  const rows = normalizeGameEntries([
+    { name: 'Game — One', url: '/study2/1.html' },
+    { name: 'GAME ONE', url: '/study2/2.html' },
+    { name: 'Game One 2', url: '/study2/3.html' },
+    { name: 'Game One Remastered', url: '/study2/4.html' }
+  ], 'gn-math');
+  const games = deduplicateGames([...rows, rows[0]]);
+  assert.equal(games.length, 3);
+  assert.equal(games[0].variants.length, 2);
+  assert.equal(games[0].aliases.length, 2);
+  assert.equal(selectGames(games, { query: 'game-one' }).length, 3);
+  assert.equal(selectGames(games, { query: 'game one 2' }).length, 1);
+  assert.equal(games[0].id, 'game|gameone');
+});
+
+test('favorite and recent source IDs migrate to one canonical title and alternate selection routes through the proxy', async () => {
+  const oldA = 'securly|https://cdn.jsdelivr.net/gh/securlycdn/html@main/slope.html';
+  const oldB = 'gn-math|https://photos.tram-gallery.ru/study2/1.html';
+  const app = harness(url => Promise.resolve(url.startsWith('/') ? response(fixture) : new Response('offline', { status: 503 })), [
+    ['monkeh.games.favorites.v1', JSON.stringify([oldA, oldB])],
+    ['monkeh.games.recents.v1', JSON.stringify([oldB, oldA])]
+  ]);
+  await app.catalog.open();
+  assert.deepEqual(app.catalog.getState().favorites, ['game|slope']);
+  assert.deepEqual(app.catalog.getState().recents, ['game|slope']);
+  assert.equal(app.storage.get('monkeh.games.favorites.v1'), '["game|slope"]');
+  const card = app.nodes.get('game-list').children[0];
+  assert.equal(card.children.length, 3);
+  card.children[2].value = oldB;
+  card.children[2].fire('change');
+  card.children[0].fire('click');
+  assert.deepEqual(app.opened[0], ['Slope', 'GN-Math', 'https://photos.tram-gallery.ru/study2/1.html', true]);
+  app.nodes.get('games-source-select').value = 'securly';
+  app.nodes.get('games-source-select').fire('change');
+  app.catalog.launch({ id: oldB });
+  assert.equal(app.opened.at(-1)[1], 'Original catalog');
+  assert.equal(app.catalog.getState().count, 2);
+});
+
+test('a live source refresh retains all alternative sources and merges new duplicate titles', async () => {
+  const app = harness(url => Promise.resolve(response(url.startsWith('/') ? fixture : [
+    { name: 'SLOPE', url: '{HTML_URL}/new-slope.html' },
+    { name: 'Slope', url: '{HTML_URL}/backup-slope.html' }
+  ])));
+  assert.equal(await app.catalog.open(), 1);
+  assert.equal(app.catalog.getState().variants, 3);
+  assert.equal(app.catalog.getState().duplicates, 2);
+  const card = app.nodes.get('game-list').children[0];
+  assert.equal(card.children[2].children.length, 3);
+  app.nodes.get('games-source-select').value = 'gn-math';
+  app.nodes.get('games-source-select').fire('change');
+  app.nodes.get('game-list').children[0].children[0].fire('click');
+  assert.equal(app.opened[0][2], 'https://photos.tram-gallery.ru/study2/1.html');
+});
+
+test('2048 defaults to its verified Seraph launch while keeping broken upstream alternatives selectable', async () => {
+  const data = { version: 1, sources: [
+    { id: 'securly', games: [{ name: '2048', url: '{HTML_URL}/114-f.html' }] },
+    { id: 'cherri-seraph', games: [{ name: '2048', url: '/seraph/2048/index.html' }] },
+    { id: 'cherri-gn-math', games: [{ name: '2048', url: '/gn-math/114-f.html' }] }
+  ] };
+  const healthy = 'https://h35d5a9.jfs-autoelevadores.com.ar/stores/seraph/2048/index.html';
+  const [game] = normalizeGameSnapshot(data);
+  assert.equal(game.variants.length, 3);
+  assert.equal(game.url, healthy);
+  const app = harness(url => Promise.resolve(url.startsWith('/') ? response(data) : new Response('offline', { status: 503 })));
+  await app.catalog.open();
+  app.catalog.launch({ id: game.id });
+  assert.equal(app.opened[0][2], healthy);
+  const chooser = app.nodes.get('game-list').children[0].children[2];
+  chooser.value = game.aliases[0];
+  chooser.fire('change');
+  app.catalog.launch({ id: game.id });
+  assert.equal(app.opened[1][2], 'https://cdn.jsdelivr.net/gh/securlycdn/html@main/114-f.html');
+  assert.equal(app.opened.length, 2);
 });

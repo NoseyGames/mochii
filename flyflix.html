@@ -52,7 +52,11 @@
         if (!Array.isArray(config.shellOrigins) || !config.shellOrigins.includes(location.origin)) throw new Error('This Flyflix app origin is not configured.');
         if (current !== generation || pending.signal.aborted) return;
         providerOrigin = origin;
-        frame.src = `${origin}/proxy-host.html#${encodeURIComponent('https://flyflix.net/')}`;
+        const hostUrl = new URL('/proxy-host.html', origin);
+        const userAgent = window.MonkehPrivacy?.get().userAgent || '';
+        if (typeof userAgent === 'string' && userAgent.length <= 512 && /^[\x20-\x7e]+$/.test(userAgent)) hostUrl.searchParams.set('ua', userAgent.trim());
+        hostUrl.hash = encodeURIComponent('https://flyflix.net/');
+        frame.src = hostUrl.href;
       } catch (error) {
         if (current === generation && !pending.signal.aborted) status.textContent = String(error.message || 'Flyflix could not start.');
       }
@@ -72,7 +76,8 @@
     });
     document.getElementById('retry').addEventListener('click', loadProvider);
     window.addEventListener('pagehide', () => { generation++; request?.abort(); channel?.port1.close(); });
-    void loadProvider();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { void loadProvider(); }, { once: true });
+    else void loadProvider();
   </script>
 </body>
 </html>

@@ -192,16 +192,39 @@ https://copy.sh/v86/ and https://guacamole.apache.org/.
 
 ## Library and appearance
 
-Games combines the original catalog with six reference libraries. Use source
+Games combines the original catalog with the Tung Tung and Cherri libraries. Use source
 filters, Favorites, Recently played, Random game, and paged results. The bundled
 manifest keeps the catalog available when a source is down; cover images and
 game launches still require their hosts. Refresh links with
 `node scripts/update-game-catalog.mjs` before a normal build/deploy.
 
+The current snapshot has 7,688 launch variants grouped into 3,082 title cards.
+Normalized names are indexed once with Maps and Sets; source filters and search
+reuse that index. Alternate providers remain selectable on each card. Sequels
+and dotted version numbers remain distinct. Only public game links are included.
+
+Music searches all five Cherri music sources concurrently, progressively merging
+matching titles into one row. Select an alternate source or artist version in the
+player. Favorites, volume, shuffle and repeat stay on this device. Only the selected
+audio is streamed; opening the library does not preload songs. A bundled discovery
+snapshot is refreshed by `node scripts/update-music-catalog.mjs`. Live search and
+playback use the isolated Worker's bounded `/api/music/*` relay and depend on the
+upstream music service. Configure `MUSIC_ALLOWED_ORIGINS` or the existing
+`ASSIST_ALLOWED_ORIGINS`; `MUSIC_RATE` limits each visitor to 120 requests/minute.
+
 Settings includes dark/light modes, six fonts, accent colors, backgrounds, tab
 cloaking, a cloaked window, a panic shortcut, close protection, and animation
 preferences. Settings and game lists stay in this browser. No ads, chat, or
 cloud account synchronization is included.
+
+Searchable settings sections include character masking, browser identity presets
+and custom user agents, background opacity/blur, glass effects, and settings
+export/import. The user agent applies to the selected proxy view's HTTP requests
+and JavaScript navigator string; it does not emulate another engine or device.
+Reload the viewed page after changing it. Snow, rain and bubbles are optional,
+bounded effects that pause while browsing a page, while hidden, or when reduced
+motion is enabled. Character masking changes shell labels only and preserves
+readable accessibility labels and original search/catalog identities.
 
 External game and app URLs use the isolated proxy automatically, including
 Flyflix at `https://flyflix.net/`. A service-worker compatibility fallback also

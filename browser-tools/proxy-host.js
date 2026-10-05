@@ -34,6 +34,9 @@ let contentObserver;
 let blankDocument;
 let pageFailure = null;
 let switching = null;
+let identityStarting;
+let identityReady = false;
+let cancelIdentity;
 
 function httpUrl(value) {
   if (typeof value !== 'string' || value.length > 4096) throw new Error('Invalid page address.');
@@ -413,8 +416,8 @@ function watchDocument(previousDocument) {
 }
 
 frame.addEventListener('load', () => {
-  if (disposed) return;
-  try { if (frame.contentWindow.location.href === 'about:blank') return; } catch {                                                        }
+  if (disposed || identityStarting) return;
+  try { if (frame.contentWindow.location.href === 'about:blank' || new URL(frame.contentWindow.location.href).pathname === '/proxy-bootstrap.html') return; } catch {                                                        }
   connectDocument();
 });
 
@@ -446,6 +449,47 @@ async function controlledWorker() {
     navigator.serviceWorker.addEventListener('controllerchange', listener);
     listener();
   }), 'The proxy worker could not take control. Reload this page.').finally(() => navigator.serviceWorker.removeEventListener('controllerchange', listener));
+}
+
+async function prepareIdentity() {
+  const userAgent = new URL(location.href).searchParams.get('ua') || '';
+  if (identityReady || !userAgent || userAgent.length > 512 || !/^[\x20-\x7e]+$/.test(userAgent)) return;
+  if (identityStarting) return identityStarting;
+  let listener;
+  let timer;
+  let channel;
+  let active = true;
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+  identityStarting = new Promise((resolve, reject) => {
+    cancelIdentity = () => reject(new Error('Browser identity setup was cancelled.'));
+    timer = setTimeout(() => reject(new Error('Browser identity setup timed out. Use Try again.')), 12000);
+    let binding = false;
+    listener = event => {
+      if (!active || !event.isTrusted || event.source !== frame.contentWindow || event.origin !== location.origin || event.data?.type !== 'monkeh-proxy:identity-ready' || event.data.nonce !== nonce || binding) return;
+      if (event.data.failed || typeof event.data.clientId !== 'string' || event.data.clientId.length > 128) { reject(new Error('Browser identity setup failed. Use Try again.')); return; }
+      binding = true;
+      channel = new MessageChannel();
+      channel.port1.onmessage = ({ data }) => {
+        if (!active) return;
+        if (data?.ok === true) { identityReady = true; resolve(); }
+        else reject(new Error('Browser identity setup was rejected. Use Try again.'));
+      };
+      channel.port1.start();
+      try { navigator.serviceWorker.controller.postMessage({ type: 'monkeh:identity:bind', clientId: event.data.clientId, nonce }, [channel.port2]); }
+      catch { reject(new Error('Browser identity setup could not reach the proxy worker. Use Try again.')); }
+    };
+    window.addEventListener('message', listener);
+    frame.src = '/proxy-bootstrap.html?nonce=' + nonce;
+  }).finally(() => {
+    active = false;
+    clearTimeout(timer);
+    window.removeEventListener('message', listener);
+    channel?.port1.close();
+    channel?.port2.close();
+    cancelIdentity = null;
+    identityStarting = null;
+  });
+  return identityStarting;
 }
 
 async function start() {
@@ -500,6 +544,8 @@ async function navigate(url = null) {
     await start();
     if (disposed || generation !== navigationGeneration) return false;
     if (config.shellOrigins.includes(new URL(targetUrl).origin) || new URL(targetUrl).origin === location.origin) throw new Error('App pages cannot be opened as proxy destinations.');
+    await prepareIdentity();
+    if (disposed || generation !== navigationGeneration) return false;
     if (url !== null) window.history?.replaceState(null, '', '#' + encodeURIComponent(targetUrl));
     const previousDocument = frame.contentDocument;
     pageFailure = null;
@@ -527,6 +573,6 @@ document.getElementById('dismiss-status').addEventListener('click', () => { stat
 window.addEventListener('hashchange', () => { requestedUrl = null; void navigate(); });
 window.addEventListener('offline', () => network?.setOnline(false).catch(() => {}));
 window.addEventListener('online', () => network?.setOnline(true).catch(() => {}));
-window.addEventListener('pagehide', () => { disposed = true; navigationGeneration++; stopDocumentWatch(); runtime?.dispose(); network?.dispose(); port?.close(); });
+window.addEventListener('pagehide', () => { disposed = true; navigationGeneration++; cancelIdentity?.(); stopDocumentWatch(); runtime?.dispose(); network?.dispose(); port?.close(); });
 window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
 void navigate();
