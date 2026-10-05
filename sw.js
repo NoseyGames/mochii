@@ -23,7 +23,7 @@ let gameFetches = 0;
 function hostIdentity(client) {
 	try {
 		const url = new URL(client.url);
-		if (url.origin !== self.location.origin || url.pathname !== '/proxy-host.html') return null;
+		if (url.origin !== self.location.origin || !['/proxy-host.html', '/proxy-host'].includes(url.pathname)) return null;
 		const value = url.searchParams.get('ua') || '';
 		return value.length <= 512 && /^[\x20-\x7e]*$/.test(value) ? value.trim() : '';
 	} catch { return null; }
@@ -55,7 +55,7 @@ function bootstrapNonce(client) {
 	try {
 		const url = new URL(client.url);
 		const nonce = url.searchParams.get('nonce');
-		return url.origin === self.location.origin && url.pathname === '/proxy-bootstrap.html' && /^[a-f0-9]{32}$/.test(nonce || '') ? nonce : null;
+		return url.origin === self.location.origin && ['/proxy-bootstrap.html', '/proxy-bootstrap'].includes(url.pathname) && /^[a-f0-9]{32}$/.test(nonce || '') ? nonce : null;
 	} catch { return null; }
 }
 
@@ -369,7 +369,7 @@ async function handleRequest(event) {
 
 function localRuntime(url) {
 	return url.origin === self.location.origin && (
-		['/sw.js', '/proxy-host.html', '/proxy-bootstrap.html', '/flyflix-provider.html'].includes(url.pathname) ||
+		['/sw.js', '/proxy-host.html', '/proxy-host', '/proxy-bootstrap.html', '/proxy-bootstrap', '/flyflix-provider.html'].includes(url.pathname) ||
 		['/ultrav/', '/bearmux/', '/browser-tools/'].some(prefix => url.pathname.startsWith(prefix))
 	);
 }

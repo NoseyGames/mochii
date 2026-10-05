@@ -131,6 +131,26 @@ test('bootstrap messages reject remote senders, wrong nonces and already navigat
   assert.equal((await app.request('remote', '', 'script')).headers['user-agent'], 'Real browser');
 });
 
+test('Cloudflare extensionless host and bootstrap URLs retain exact identity checks', async () => {
+  const nonce = '1234567890abcdef1234567890abcdef';
+  const clients = new Map([
+    ['host', { id: 'host', url: origin + '/proxy-host?ua=Clean%2F1' }],
+    ['child', { id: 'child', url: origin + '/proxy-bootstrap?nonce=' + nonce }]
+  ]);
+  const app = worker(clients);
+  assert.equal((await app.message('child', { type: 'monkeh:identity:client', nonce })).clientId, 'child');
+  const bind = { type: 'monkeh:identity:bind', clientId: 'child', nonce };
+  assert.equal((await app.message('host', bind)).ok, true);
+  assert.equal((await app.request('child', 'page')).headers['user-agent'], 'Clean/1');
+  for (const path of ['/proxy-host/', '/proxy-host-extra', '/apps/proxy-host']) {
+    clients.set('host', { id: 'host', url: origin + path });
+    assert.equal((await app.message('host', bind)).ok, false, path);
+  }
+  clients.set('host', { id: 'host', url: origin + '/proxy-host' });
+  clients.set('child', { id: 'child', url: origin + '/proxy-bootstrap-extra?nonce=' + nonce });
+  assert.equal((await app.message('host', bind)).ok, false);
+});
+
 test('concurrent proxy views retain their own header and early navigator identity', async () => {
   const clients = new Map([
     ['host-a', { id: 'host-a', url: proxyViewUrl(origin, 'https://example.com/', 'Browser A/1') }],

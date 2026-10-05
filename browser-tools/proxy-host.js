@@ -420,7 +420,7 @@ function watchDocument(previousDocument) {
 
 frame.addEventListener('load', () => {
   if (disposed || identityStarting) return;
-  try { if (frame.contentWindow.location.href === 'about:blank' || new URL(frame.contentWindow.location.href).pathname === '/proxy-bootstrap.html') return; } catch {                                                        }
+  try { if (frame.contentWindow.location.href === 'about:blank' || ['/proxy-bootstrap.html', '/proxy-bootstrap'].includes(new URL(frame.contentWindow.location.href).pathname)) return; } catch {                                                        }
   connectDocument();
 });
 

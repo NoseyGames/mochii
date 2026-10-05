@@ -86,7 +86,7 @@ test('compatibility routing preserves an explicit no-referrer privacy policy', a
 
 test('UV runtime assets and proxy pages are left to the local host', () => {
   const app = worker();
-  for (const path of ['/ultrav/uv.handler.js', '/ultrav/uv.config.js', '/bearmux/worker.js', '/bearmux/epoxy/index.mjs', '/browser-tools/runtime.js', '/proxy-host.html', '/sw.js', '/flyflix-provider.html']) {
+  for (const path of ['/ultrav/uv.handler.js', '/ultrav/uv.config.js', '/bearmux/worker.js', '/bearmux/epoxy/index.mjs', '/browser-tools/runtime.js', '/proxy-host.html', '/proxy-host', '/proxy-bootstrap.html', '/proxy-bootstrap', '/sw.js', '/flyflix-provider.html']) {
     assert.equal(app.request(origin + path), undefined, path);
   }
   assert.equal(app.forwarded.length, 0);

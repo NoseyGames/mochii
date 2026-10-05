@@ -342,3 +342,17 @@ test('capabilities cannot collide across owners and unknown stage URLs never rea
   assert.equal(app.requests.length, 1);
   assert.equal((await app.navigate('', staged(nonce))).status, 200);
 });
+
+test('Cloudflare extensionless host and bootstrap clients can prepare and execute a game', async () => {
+  const app = await fixture();
+  app.clients.set('host-a', { id: 'host-a', url: origin + '/proxy-host?ua=Cloudflare%2F1&loadCode=1' });
+  app.clients.set('child-a', { id: 'child-a', url: origin + '/proxy-bootstrap?nonce=' + nonce });
+  assert.equal((await app.message('host-a', { type: 'monkeh:identity:bind', clientId: 'child-a', nonce })).ok, true);
+  const ready = await app.prepare();
+  assert.equal(ready.ok, true);
+  assert.equal(app.requests[0].headers['user-agent'], 'Cloudflare/1');
+  const response = await app.navigate('', ready.url);
+  assert.equal(response.status, 200);
+  assert.ok((await response.text()).includes('monkeh-game-code'));
+  assert.equal(app.requests.length, 1);
+});
