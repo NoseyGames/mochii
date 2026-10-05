@@ -15,6 +15,10 @@ let originCheck;
 const identityOwners = new Map();
 const identityCache = 'monkeh-proxy-identity-v2';
 const identityGraceMs = 120000;
+const gameStages = new Map();
+const gameLimits = Object.freeze({ source: 32 * 1024 * 1024, output: 48 * 1024 * 1024, total: 64 * 1024 * 1024, entries: 8, ttl: 30000 });
+let gameBytes = 0;
+let gameFetches = 0;
 
 function hostIdentity(client) {
 	try {
@@ -75,9 +79,217 @@ async function identityMessage(event) {
 }
 
 self.addEventListener('message', event => {
-	if (!event.source?.id || event.ports?.length !== 1 || !['monkeh:identity:client', 'monkeh:identity:bind'].includes(event.data?.type)) return;
-	event.waitUntil(identityMessage(event));
+	if (!event.source?.id) return;
+	if (event.ports?.length === 1 && ['monkeh:identity:client', 'monkeh:identity:bind'].includes(event.data?.type)) event.waitUntil(identityMessage(event));
+	else if (['monkeh:game:prepare', 'monkeh:game:cancel'].includes(event.data?.type) && (event.data.type === 'monkeh:game:cancel' || event.ports?.length === 1)) event.waitUntil(gameMessage(event));
 });
+
+function gameError(message) {
+	const error = new Error(message);
+	error.gamePreparation = true;
+	return error;
+}
+
+function discardGameStage(record) {
+	if (gameStages.get(record.owner) !== record) return;
+	gameStages.delete(record.owner);
+	clearTimeout(record.timer);
+	gameBytes -= record.bytes;
+	record.bytes = 0;
+	record.controller.abort();
+	void record.response?.body?.cancel().catch(() => {});
+}
+
+function reserveGameBytes(record, bytes) {
+	if (record.controller.signal.aborted || gameStages.get(record.owner) !== record) throw gameError('Game loading was cancelled.');
+	if (gameBytes - record.bytes + bytes > gameLimits.total) throw gameError('Too many large games are loading. Close another game and retry.');
+	gameBytes += bytes - record.bytes;
+	record.bytes = bytes;
+}
+
+async function readGameBytes(response, maximum, record) {
+	const declared = response.headers.get('content-length');
+	if (declared && /^\d+$/.test(declared) && Number(declared) > maximum) {
+		void response.body?.cancel().catch(() => {});
+		throw gameError('This game page exceeds the loading size limit.');
+	}
+	if (!response.body) throw gameError('This game did not return any page code.');
+	const reader = response.body.getReader();
+	const signal = record.controller.signal;
+	const cancel = () => { void reader.cancel().catch(() => {}); };
+	const chunks = [];
+	let length = 0;
+	signal.addEventListener('abort', cancel, { once: true });
+	try {
+		while (true) {
+			if (signal.aborted) throw gameError('Game loading was cancelled.');
+			const { done, value } = await reader.read();
+			if (signal.aborted) throw gameError('Game loading was cancelled.');
+			if (done) break;
+			length += value.byteLength;
+			if (length > maximum) throw gameError('This game page exceeds the loading size limit.');
+			reserveGameBytes(record, Math.max(record.bytes, length));
+			chunks.push(value);
+		}
+		const bytes = new Uint8Array(length);
+		let offset = 0;
+		for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+		return bytes;
+	} finally {
+		signal.removeEventListener('abort', cancel);
+		void reader.cancel().catch(() => {});
+		reader.releaseLock();
+	}
+}
+
+function gameTarget(value, config) {
+	if (typeof value !== 'string' || value.length > 4096) throw gameError('This game has an invalid page address.');
+	let target;
+	try { target = new URL(value); } catch { throw gameError('This game has an invalid page address.'); }
+	if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password || target.origin === self.location.origin || config.shellOrigins?.includes(target.origin)) throw gameError('This game has an unsupported page address.');
+	return target.href;
+}
+
+function gameProxyUrl(target) { return self.location.origin + __uv$config.prefix + __uv$config.encodeUrl(target); }
+
+async function prepareGameSource(response, record) {
+	if ([301, 302, 303, 307, 308].includes(response.status)) {
+		void response.body?.cancel().catch(() => {});
+		const empty = new Response(null, { status: response.status, statusText: response.statusText, headers: response.headers });
+		empty.rawHeaders = { ...response.rawHeaders };
+		empty.finalURL = response.finalURL;
+		return empty;
+	}
+	if (!response.ok) {
+		void response.body?.cancel().catch(() => {});
+		throw gameError(`The game source returned HTTP ${response.status}.`);
+	}
+	let bytes = await readGameBytes(response, gameLimits.source, record);
+	const charset = /(?:^|;)\s*charset\s*=\s*["']?([^;\s"']+)/i.exec(response.headers.get('content-type') || '')?.[1];
+	let decoder;
+	try { decoder = new TextDecoder(charset || (bytes[0] === 0xff && bytes[1] === 0xfe ? 'utf-16le' : bytes[0] === 0xfe && bytes[1] === 0xff ? 'utf-16be' : 'utf-8')); }
+	catch { throw gameError('This game page uses an unsupported text encoding.'); }
+	let prefix = decoder.decode(bytes.subarray(0, 8192)).replace(/^\uFEFF/, '').trimStart();
+	while (prefix.startsWith('<!--')) {
+		const end = prefix.indexOf('-->');
+		if (end < 0) break;
+		prefix = prefix.slice(end + 3).trimStart();
+	}
+	if (!/^<(?:!doctype\s+html\b|(?:html|head|body|title|meta|link|style|script|div|canvas|iframe)(?:\s|>))/i.test(prefix) || prefix.includes('\u0000')) throw gameError('This game source did not return an HTML game page.');
+	if (decoder.encoding !== 'utf-8') {
+		bytes = new TextEncoder().encode(decoder.decode(bytes));
+		if (bytes.byteLength > gameLimits.source) throw gameError('This game page exceeds the loading size limit.');
+		reserveGameBytes(record, Math.max(record.bytes, bytes.byteLength));
+	}
+	const headers = new Headers(response.headers);
+	headers.set('content-type', 'text/html; charset=utf-8');
+	headers.delete('content-length');
+	headers.delete('content-encoding');
+	const prepared = new Response(bytes, { status: response.status, statusText: response.statusText, headers });
+	prepared.rawHeaders = { ...response.rawHeaders };
+	for (const name of Object.keys(prepared.rawHeaders)) if (/^(?:content-type|content-length|content-encoding)$/i.test(name)) delete prepared.rawHeaders[name];
+	prepared.rawHeaders['content-type'] = 'text/html; charset=utf-8';
+	prepared.finalURL = response.finalURL;
+	return prepared;
+}
+
+async function fetchGameCode(record, target, config) {
+	const visited = new Set();
+	for (let redirects = 0; redirects <= 6; redirects++) {
+		if (visited.has(target)) throw gameError('This game source has a redirect loop.');
+		visited.add(target);
+		const url = gameProxyUrl(target);
+		record.canonicalUrl = url;
+		const original = new Request(url, { method: 'GET', redirect: 'manual', credentials: 'omit', referrer: '', headers: { Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8' }, signal: record.controller.signal });
+		const request = new Proxy(original, { get(value, property) {
+			if (property === 'destination') return 'iframe';
+			if (property === 'mode') return 'navigate';
+			const field = Reflect.get(value, property, value);
+			return typeof field === 'function' ? field.bind(value) : field;
+		} });
+		const response = await fetchThroughUV({ request, clientId: record.owner }, record);
+		if ([301, 302, 303, 307, 308].includes(response.status)) {
+			void response.body?.cancel().catch(() => {});
+			if (redirects === 6) throw gameError('This game source redirected too many times.');
+			const location = response.headers.get('location');
+			if (!location) throw gameError('This game source returned an invalid redirect.');
+			const destination = proxiedDestination(new URL(location, url).href);
+			if (!destination) throw gameError('This game source returned an invalid redirect.');
+			target = gameTarget(destination.href, config);
+			continue;
+		}
+		if (!response.ok) { void response.body?.cancel().catch(() => {}); throw gameError('The proxy could not prepare this game page. Try another proxy server.'); }
+		const bytes = await readGameBytes(response, gameLimits.output, record);
+		reserveGameBytes(record, bytes.byteLength);
+		const headers = new Headers(response.headers);
+		headers.delete('content-length');
+		headers.delete('content-encoding');
+		headers.set('content-disposition', 'inline');
+		headers.set('cache-control', 'no-store');
+		record.response = new Response(bytes, { status: response.status, statusText: response.statusText, headers });
+		return url;
+	}
+}
+
+async function gameMessage(event) {
+	const reply = event.ports?.[0];
+	let record;
+	try {
+		if (!await isProxyOrigin()) throw gameError('Game loading requires the isolated proxy.');
+		const sender = await self.clients.get(event.source.id);
+		if (!sender || hostIdentity(sender) === null || !/^[a-f0-9]{32}$/.test(event.data.nonce || '')) throw gameError('The game loading request was rejected.');
+		const previous = gameStages.get(sender.id);
+		if (event.data.type === 'monkeh:game:cancel') {
+			if (previous?.nonce === event.data.nonce) discardGameStage(previous);
+			return;
+		}
+		if (previous) discardGameStage(previous);
+		for (const entry of gameStages.values()) if (entry.expires <= Date.now()) discardGameStage(entry);
+		if ([...gameStages.values()].some(entry => entry.nonce === event.data.nonce)) throw gameError('The game loading request was rejected.');
+		if (gameStages.size >= gameLimits.entries) throw gameError('Too many games are loading. Close another game and retry.');
+		record = { owner: sender.id, nonce: event.data.nonce, url: self.location.origin + '/__monkeh_game__/' + event.data.nonce, controller: new AbortController(), bytes: 0, expires: Date.now() + gameLimits.ttl, response: null };
+		gameStages.set(sender.id, record);
+		const timeout = new Promise((resolve, reject) => {
+			record.timer = setTimeout(() => { reject(gameError('The game source took too long to load. Try another proxy server.')); discardGameStage(record); }, gameLimits.ttl);
+		});
+		const cancelled = new Promise((resolve, reject) => record.controller.signal.addEventListener('abort', () => reject(gameError('Game loading was cancelled.')), { once: true }));
+		const prepare = async () => {
+			const config = await globalThis.MonkehConfig.fetchConfig();
+			if (record.controller.signal.aborted) throw gameError('Game loading was cancelled.');
+			return fetchGameCode(record, gameTarget(event.data.url, config), config);
+		};
+		const url = await Promise.race([prepare(), timeout, cancelled]);
+		if (gameStages.get(sender.id) !== record || record.controller.signal.aborted) throw gameError('Game loading was cancelled.');
+		clearTimeout(record.timer);
+		record.expires = Date.now() + gameLimits.ttl;
+		record.timer = setTimeout(() => discardGameStage(record), gameLimits.ttl);
+		reply?.postMessage({ ok: true, url: record.url, canonicalUrl: url });
+	} catch (error) {
+		if (record) discardGameStage(record);
+		try { reply?.postMessage({ ok: false, error: error.gamePreparation ? error.message : 'The proxy could not fetch this game page. Try another proxy server.' }); } catch {}
+	} finally { try { reply?.close(); } catch {} }
+}
+
+async function preparedGameResponse(event) {
+	const failure = (message, status = 410) => new Response(message, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+	try {
+		if (!await isProxyOrigin() || event.request.method !== 'GET' || !['iframe', 'document'].includes(event.request.destination)) return failure('This game page can only open inside the isolated game viewer.', 403);
+		const record = [...gameStages.values()].find(entry => entry.url === event.request.url);
+		if (!record?.response) return failure('This prepared game page expired. Open the game again from the catalog.');
+		if (record.expires <= Date.now() || hostIdentity(await self.clients.get(record.owner)) === null) { discardGameStage(record); return failure('This prepared game page expired. Open the game again from the catalog.'); }
+		if (event.clientId) {
+			const client = await self.clients.get(event.clientId);
+			let owner = hostIdentity(client) !== null ? event.clientId : identityOwners.get(event.clientId);
+			if (!owner && typeof caches !== 'undefined') owner = (await readIdentityRecord(await (await caches.open(identityCache)).match(identityKey(event.clientId))))?.owner;
+			if (owner !== record.owner) return failure('This prepared game belongs to another viewer.', 403);
+		}
+		const response = record.response;
+		record.response = null;
+		discardGameStage(record);
+		if (event.resultingClientId) await rememberIdentity(event.resultingClientId, record.owner);
+		return response;
+	} catch { return failure('This prepared game page could not open. Open the game again from the catalog.'); }
+}
 
 async function requestIdentity(event) {
 	if (!event.clientId || !self.clients?.get) return '';
@@ -223,12 +435,12 @@ async function repairGameDocument(response) {
 	return repaired;
 }
 
-async function fetchThroughUV(event) {
+async function fetchThroughUV(event, game = null) {
 	const request = event.request;
 	const target = proxiedDestination(request.url);
 	const repair = request.method === 'GET' && ['document', 'iframe'].includes(request.destination) && target && cdnGameDocument(target.href);
 	const userAgent = await requestIdentity(event);
-	if (!repair && !userAgent) return uv.fetch(event);
+	if (!repair && !userAgent && !game) return uv.fetch(event);
 	const scoped = Object.create(uv);
 	scoped.emit = (name, context) => {
 		if (name === 'request' && userAgent) {
@@ -237,24 +449,47 @@ async function fetchThroughUV(event) {
 		}
 		return uv.emit(name, context);
 	};
-	if (userAgent) {
-		const script = identityScript(userAgent);
+	if (userAgent || game) {
 		scoped.config = { ...uv.config, construct(instance, mode) {
 			uv.config.construct?.(instance, mode);
 			const html = instance.createHtmlInject.bind(instance);
 			instance.createHtmlInject = (...args) => {
-				const node = { tagName: 'script', nodeName: 'script', namespaceURI: 'http://www.w3.org/1999/xhtml', childNodes: [], attrs: [{ name: '__uv-script', value: '1', skip: true }], skip: true };
-				node.childNodes.push({ nodeName: '#text', value: script, parentNode: node });
-				return [node, ...html(...args)];
+				const nodes = [];
+				const script = value => {
+					const node = { tagName: 'script', nodeName: 'script', namespaceURI: 'http://www.w3.org/1999/xhtml', childNodes: [], attrs: [{ name: '__uv-script', value: '1', skip: true }], skip: true };
+					node.childNodes.push({ nodeName: '#text', value, parentNode: node });
+					return node;
+				};
+				if (game) {
+					nodes.push(script(`history.replaceState(null,'',${JSON.stringify(game.canonicalUrl).replace(/</g, '\\u003c')});`));
+					nodes.push({ tagName: 'meta', nodeName: 'meta', namespaceURI: 'http://www.w3.org/1999/xhtml', childNodes: [], attrs: [{ name: 'name', value: 'monkeh-game-code' }, { name: 'content', value: 'fetched' }], skip: true });
+				}
+				if (userAgent) nodes.push(script(identityScript(userAgent)));
+				return [...nodes, ...html(...args)];
 			};
-			if (instance.createJsInject) {
+			if (userAgent && instance.createJsInject) {
 				const js = instance.createJsInject.bind(instance);
-				instance.createJsInject = (...args) => js(...args) + script;
+				instance.createJsInject = (...args) => js(...args) + identityScript(userAgent);
 			}
 		} };
 	}
-	if (repair) scoped.bareClient = { fetch: async (...args) => repairGameDocument(await uv.bareClient.fetch(...args)) };
-	return scoped.fetch(event);
+	let gameFailure;
+	if (game) scoped.bareClient = { fetch: async (url, options) => {
+		let reserved = false;
+		try {
+			if (game.controller.signal.aborted) throw gameError('Game loading was cancelled.');
+			if (gameFetches >= gameLimits.entries) throw gameError('Too many game requests are still loading. Wait briefly and retry.');
+			gameFetches++;
+			reserved = true;
+			const response = await uv.bareClient.fetch(url, { ...options, signal: game.controller.signal });
+			return await prepareGameSource(response, game);
+		} catch (error) { gameFailure = error; throw error; }
+		finally { if (reserved) gameFetches--; }
+	} };
+	else if (repair) scoped.bareClient = { fetch: async (...args) => repairGameDocument(await uv.bareClient.fetch(...args)) };
+	const response = await scoped.fetch(event);
+	if (gameFailure) throw gameFailure;
+	return response;
 }
 
 async function handleCompatibilityRequest(event, requested) {
@@ -281,6 +516,11 @@ async function handleCompatibilityRequest(event, requested) {
 }
 
 self.addEventListener("fetch", (event) => {
+	const stage = new URL(event.request.url);
+	if (stage.origin === self.location.origin && stage.pathname.startsWith('/__monkeh_game__/')) {
+		event.respondWith(preparedGameResponse(event));
+		return;
+	}
 	if (uv.route(event)) {
 		event.respondWith(handleRequest(event));
 		return;

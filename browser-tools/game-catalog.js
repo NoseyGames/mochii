@@ -273,7 +273,7 @@ export function createGameCatalog(win, doc) {
     recentsRevision++;
     saveList(RECENTS_KEY, recents);
     const variant = activeVariant(known);
-    return win.openViewer?.(known.name, SOURCE_BY_ID.get(variant.source).label, variant.url, true);
+    return win.openViewer?.(known.name, SOURCE_BY_ID.get(variant.source).label, variant.url, true, { loadCode: true });
   }
 
   function toggleFavorite(game) {

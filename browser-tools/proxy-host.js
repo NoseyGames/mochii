@@ -37,6 +37,8 @@ let switching = null;
 let identityStarting;
 let identityReady = false;
 let cancelIdentity;
+let cancelGameCode;
+const loadCode = new URL(location.href).searchParams.get('loadCode') === '1';
 
 function httpUrl(value) {
   if (typeof value !== 'string' || value.length > 4096) throw new Error('Invalid page address.');
@@ -244,7 +246,8 @@ async function command(method, params) {
       return selectionSnapshot(node);
     }
     case 'reload':
-      if (runtime) frame.contentWindow.location.reload();
+      if (loadCode) await navigate(lastGetAddress || requestedUrl);
+      else if (runtime) frame.contentWindow.location.reload();
       else await navigate();
       return null;
     case 'navigate': {
@@ -271,7 +274,7 @@ async function receive(event) {
   const replyPort = port;
   const generation = documentGeneration;
   try {
-    const result = await deadline(command(request.method, request.params && typeof request.params === 'object' ? request.params : {}), 'The command timed out. Reload the page if its script is unresponsive.', request.method === 'switchServer' ? 25000 : 15000);
+    const result = await deadline(command(request.method, request.params && typeof request.params === 'object' ? request.params : {}), 'The command timed out. Reload the page if its script is unresponsive.', ['navigate', 'reload'].includes(request.method) ? 60000 : request.method === 'switchServer' ? 25000 : 15000);
     if (!disposed && (request.method === 'navigate' || generation === documentGeneration) && replyPort === port) replyPort?.postMessage({ id, result });
   } catch (error) {
     if (!disposed && (request.method === 'navigate' || generation === documentGeneration) && replyPort === port) replyPort?.postMessage({ id, error: String(error.message || error).slice(0, 2000) });
@@ -451,9 +454,9 @@ async function controlledWorker() {
   }), 'The proxy worker could not take control. Reload this page.').finally(() => navigator.serviceWorker.removeEventListener('controllerchange', listener));
 }
 
-async function prepareIdentity() {
+async function prepareIdentity(force = false) {
   const userAgent = new URL(location.href).searchParams.get('ua') || '';
-  if (identityReady || !userAgent || userAgent.length > 512 || !/^[\x20-\x7e]+$/.test(userAgent)) return;
+  if (identityReady || !force && (!userAgent || userAgent.length > 512 || !/^[\x20-\x7e]+$/.test(userAgent))) return;
   if (identityStarting) return identityStarting;
   let listener;
   let timer;
@@ -490,6 +493,47 @@ async function prepareIdentity() {
     identityStarting = null;
   });
   return identityStarting;
+}
+
+function prepareGameCode(targetUrl) {
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+  const channel = new MessageChannel();
+  const controller = navigator.serviceWorker.controller;
+  let timer;
+  let active = true;
+  let cancel;
+  return new Promise((resolve, reject) => {
+    cancel = message => {
+      if (!active) return;
+      try { controller.postMessage({ type: 'monkeh:game:cancel', nonce }); } catch {}
+      active = false;
+      reject(new Error(message || 'Game loading was cancelled.'));
+    };
+    cancelGameCode = cancel;
+    timer = setTimeout(() => cancel('Fetching game code timed out. Use Try again or switch proxy servers.'), 35000);
+    channel.port1.onmessage = ({ data }) => {
+      if (!active) return;
+      try {
+        if (data?.ok !== true) throw new Error(typeof data?.error === 'string' ? data.error.slice(0, 1000) : 'The game code could not be fetched. Use Try again.');
+        const prepared = new URL(data.url);
+        const canonical = new URL(data.canonicalUrl);
+        if (prepared.href !== location.origin + '/__monkeh_game__/' + nonce || canonical.origin !== location.origin || !canonical.pathname.startsWith(__uv$config.prefix)) throw new Error('The proxy returned an invalid game document.');
+        const target = new URL(httpUrl(__uv$config.decodeUrl(canonical.href.slice(location.origin.length + __uv$config.prefix.length))));
+        if (target.origin === location.origin || config.shellOrigins.includes(target.origin)) throw new Error('App pages cannot be opened as proxy destinations.');
+        active = false;
+        resolve(prepared.href);
+      } catch (error) { cancel(error.message); }
+    };
+    channel.port1.start();
+    try { controller.postMessage({ type: 'monkeh:game:prepare', url: targetUrl, nonce }, [channel.port2]); }
+    catch { cancel('The proxy worker could not fetch the game code. Use Try again.'); }
+  }).finally(() => {
+    active = false;
+    clearTimeout(timer);
+    channel.port1.close();
+    channel.port2.close();
+    if (cancelGameCode === cancel) cancelGameCode = null;
+  });
 }
 
 async function start() {
@@ -535,6 +579,7 @@ async function start() {
 
 async function navigate(url = null) {
   const generation = ++navigationGeneration;
+  cancelGameCode?.();
   stopDocumentWatch();
   try {
     if (disposed) return false;
@@ -544,13 +589,19 @@ async function navigate(url = null) {
     await start();
     if (disposed || generation !== navigationGeneration) return false;
     if (config.shellOrigins.includes(new URL(targetUrl).origin) || new URL(targetUrl).origin === location.origin) throw new Error('App pages cannot be opened as proxy destinations.');
-    await prepareIdentity();
+    await prepareIdentity(loadCode);
     if (disposed || generation !== navigationGeneration) return false;
     if (url !== null) window.history?.replaceState(null, '', '#' + encodeURIComponent(targetUrl));
+    let frameUrl = __uv$config.prefix + __uv$config.encodeUrl(targetUrl);
+    if (loadCode) {
+      showProgress('Fetching game code through the proxy…');
+      frameUrl = await prepareGameCode(targetUrl);
+      if (disposed || generation !== navigationGeneration) return false;
+    }
     const previousDocument = frame.contentDocument;
     pageFailure = null;
     lastGetAddress = targetUrl;
-    frame.src = __uv$config.prefix + __uv$config.encodeUrl(targetUrl);
+    frame.src = frameUrl;
     showProgress('The page is loading. You can use content as it appears.');
     watchDocument(previousDocument);
     return true;
@@ -573,6 +624,6 @@ document.getElementById('dismiss-status').addEventListener('click', () => { stat
 window.addEventListener('hashchange', () => { requestedUrl = null; void navigate(); });
 window.addEventListener('offline', () => network?.setOnline(false).catch(() => {}));
 window.addEventListener('online', () => network?.setOnline(true).catch(() => {}));
-window.addEventListener('pagehide', () => { disposed = true; navigationGeneration++; cancelIdentity?.(); stopDocumentWatch(); runtime?.dispose(); network?.dispose(); port?.close(); });
+window.addEventListener('pagehide', () => { disposed = true; navigationGeneration++; cancelGameCode?.(); cancelIdentity?.(); stopDocumentWatch(); runtime?.dispose(); network?.dispose(); port?.close(); });
 window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
 void navigate();

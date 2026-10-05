@@ -127,7 +127,7 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
     return new Promise((resolve, reject) => {
                                                                               
                                                                                 
-      const timeout = options.requestTimeout ?? (method === 'switchServer' ? 30000 : 10000);
+      const timeout = options.requestTimeout ?? (['navigate', 'reload'].includes(method) ? 65000 : method === 'switchServer' ? 30000 : 10000);
       const timer = setTimeout(() => { pending.delete(id); reject(new Error('The page did not respond to this command.')); }, timeout);
       pending.set(id, { resolve, reject, timer, method });
       try { port.postMessage({ id, method, params }); }

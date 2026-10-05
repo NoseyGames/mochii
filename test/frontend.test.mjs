@@ -223,6 +223,26 @@ test('changing browser identity recreates the proxy view before navigating', asy
   assert.equal(new URL(element('viewer-frame').src).searchParams.has('ua'), false);
 });
 
+test('game code mode survives retry and only reuses a host with the same loading mode', async () => {
+  const { page, element } = createPage();
+  const reused = [];
+  page.MonkehTools = { prepareNavigation() {}, expectDocument() {}, async navigateRemote(url) { reused.push(url); return true; } };
+  await page.openViewer('Web', '', 'https://web.example/', true);
+  await page.openViewer('Game', '', 'https://games.example/first.html', true, { loadCode: true });
+  const host = new URL(element('viewer-frame').src);
+  assert.equal(host.origin, 'http://localhost:3001');
+  assert.equal(host.pathname, '/proxy-host.html');
+  assert.equal(host.searchParams.get('loadCode'), '1');
+  assert.equal(element('viewer-frame').srcdoc, '');
+  assert.deepEqual(reused, []);
+  await page.openViewer('Next game', '', 'https://games.example/second.html', true, { loadCode: true });
+  await page.retryViewerNavigation();
+  assert.deepEqual(reused, ['https://games.example/second.html', 'https://games.example/second.html']);
+  await page.openViewer('Web', '', 'https://web.example/next', true);
+  assert.equal(new URL(element('viewer-frame').src).searchParams.has('loadCode'), false);
+  assert.equal(reused.length, 2);
+});
+
 test('changed popup or download sandbox permissions force a cold proxy navigation', async () => {
   const { page, element } = createPage();
   let policy = 'allow-scripts allow-same-origin allow-forms allow-pointer-lock';

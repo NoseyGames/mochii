@@ -174,7 +174,7 @@ test('saved catalogs render before a slow live source, controls are installed on
   assert.match(app.nodes.get('games-status').textContent, /temporarily unavailable/);
 });
 
-test('launches use verified known destinations through the proxy and favorite buttons never launch a game', async () => {
+test('game launches request fetched code execution using verified proxy destinations and favorites never launch', async () => {
   const app = harness(url => Promise.resolve(url.startsWith('/') ? response(fixture) : new Response('offline', { status: 503 })));
   await app.catalog.open();
   const firstCard = app.nodes.get('game-list').children[0];
@@ -184,9 +184,10 @@ test('launches use verified known destinations through the proxy and favorite bu
   firstCard.children[0].fire('click');
   assert.equal(app.opened.length, 1);
   assert.equal(app.opened[0][3], true);
+  assert.deepEqual(app.opened[0][4], { loadCode: true });
   const known = normalizeGameSnapshot(fixture)[0];
   app.catalog.launch({ id: known.id, name: 'Forged', url: 'https://attacker.example' });
-  assert.deepEqual(app.opened.at(-1), ['First game', 'Original catalog', known.url, true]);
+  assert.deepEqual(app.opened.at(-1), ['First game', 'Original catalog', known.url, true, { loadCode: true }]);
   app.catalog.launch({ id: 'unknown', url: known.url });
   assert.equal(app.opened.length, 2);
   assert.equal(app.catalog.getState().recents[0], known.id);
@@ -201,6 +202,18 @@ test('one failed snapshot does not hide a healthy live source', async () => {
   const app = harness(url => url.startsWith('/') ? Promise.reject(new Error('offline')) : Promise.resolve(response(fixture.sources[0].games)));
   assert.equal(await app.catalog.open(), 2);
   assert.equal(app.catalog.getState().ready, true);
+});
+
+test('catalog status shows game counts without duplicate-removal text and random launches use fetched code', async () => {
+  const app = harness(url => Promise.resolve(url.startsWith('/') ? response(fixture) : new Response('offline', { status: 503 })));
+  await app.catalog.open();
+  assert.equal(app.catalog.getState().duplicates, 1);
+  assert.equal(app.nodes.get('games-status').textContent, '2 of 2 games');
+  app.nodes.get('popover-search-input').value = 'First game';
+  app.catalog.render(true);
+  assert.equal(app.nodes.get('games-status').textContent, '1 of 2 games');
+  app.nodes.get('games-random').fire('click');
+  assert.deepEqual(app.opened[0], ['First game', 'Original catalog', 'https://cdn.jsdelivr.net/gh/securlycdn/html@main/first.html', true, { loadCode: true }]);
 });
 
 test('Cherri manifests resolve stores and covers while rejecting destinations outside the source allowlist', () => {
@@ -249,7 +262,7 @@ test('favorite and recent source IDs migrate to one canonical title and alternat
   chooser.value = oldB;
   chooser.fire('change');
   card.children[0].fire('click');
-  assert.deepEqual(app.opened[0], ['Slope', 'GN-Math', 'https://photos.tram-gallery.ru/study2/1.html', true]);
+  assert.deepEqual(app.opened[0], ['Slope', 'GN-Math', 'https://photos.tram-gallery.ru/study2/1.html', true, { loadCode: true }]);
   app.nodes.get('games-source-select').value = 'securly';
   app.nodes.get('games-source-select').fire('change');
   app.catalog.launch({ id: oldB });

@@ -20,7 +20,7 @@ function node() {
 function port() {
   return { messages: [], starts: 0, closes: 0, postMessage(message) { this.messages.push(message); }, start() { this.starts++; }, close() { this.closes++; }, async request(message) { await this.onmessage?.({ data: message }); await flush(); } };
 }
-async function harness({ config: extraConfig = {}, evaluate = async code => `result: ${code}`, startup, fetchConfig, workerReady = Promise.resolve(), workerRegistration, workerController = {}, userAgent = '' } = {}) {
+async function harness({ config: extraConfig = {}, evaluate = async code => `result: ${code}`, startup, fetchConfig, workerReady = Promise.resolve(), workerRegistration, workerController = {}, userAgent = '', loadCode = false, bindIdentity, prepareGame } = {}) {
   const allNodes = new Map();
   const get = id => {
     if (!allNodes.has(id)) allNodes.set(id, node());
@@ -32,7 +32,11 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   const contextWindow = node();
   contextWindow.SharedWorker = class {};
   contextWindow.parent = { sent: [], postMessage(data, origin) { this.sent.push({ data, origin }); } };
-  const location = { origin: proxyOrigin, href: proxyOrigin + '/proxy-host.html' + (userAgent ? '?ua=' + encodeURIComponent(userAgent) : '') + '#' + encodeURIComponent('https://example.com/'), hash: '#' + encodeURIComponent('https://example.com/') };
+  const hostUrl = new URL('/proxy-host.html', proxyOrigin);
+  if (userAgent) hostUrl.searchParams.set('ua', userAgent);
+  if (loadCode) hostUrl.searchParams.set('loadCode', '1');
+  hostUrl.hash = encodeURIComponent('https://example.com/');
+  const location = { origin: proxyOrigin, href: hostUrl.href, hash: hostUrl.hash };
   const pageDoc = { ...node(), title: 'Example', readyState: 'complete', body: { childElementCount: 1, textContent: 'Example' }, getElementById: () => null };
   const root = { nodeType: 1, localName: 'html', id: '', className: '', children: [], ownerDocument: pageDoc };
   pageDoc.documentElement = root;
@@ -52,7 +56,21 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   let networkOptions;
   const identityRequests = [];
   const identityChannels = [];
-  if (workerController && !workerController.postMessage) workerController.postMessage = (data, ports) => { identityRequests.push(data); ports[0].postMessage({ ok: true }); };
+  const gameRequests = [];
+  const gameCancels = [];
+  const workerMessages = [];
+  if (workerController && !workerController.postMessage) workerController.postMessage = (data, ports) => {
+    workerMessages.push(data);
+    if (data.type === 'monkeh:identity:bind') {
+      identityRequests.push(data);
+      if (bindIdentity) bindIdentity(data, ports);
+      else ports[0].postMessage({ ok: true });
+    } else if (data.type === 'monkeh:game:prepare') {
+      const request = { data, ports, reply: result => ports[0].postMessage(result) };
+      gameRequests.push(request);
+      prepareGame?.(request);
+    } else if (data.type === 'monkeh:game:cancel') gameCancels.push({ data, ports });
+  };
   const serviceWorker = { ...node(), async register() { registrations++; return workerRegistration; }, ready: workerReady, controller: workerController };
   const network = { connects: 0, failures: 0, disposed: 0, switches: [], activeEndpoint: 'ws://127.0.0.1:3101/wisp/',
     async connect() { this.connects++; if (this.connects === 1) await networkOptions.activate('ws://127.0.0.1:3101/wisp/'); networkOptions.onStatus({ status: 'connected', activeEndpoint: 'ws://127.0.0.1:3101/wisp/', configuredCount: 1 }); return 'ws://127.0.0.1:3101/wisp/'; },
@@ -104,6 +122,10 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
     return connection;
   }
   function loadPage() { frame.fire('load'); }
+  function bindChild() {
+    const nonce = new URL(frame.src, proxyOrigin).searchParams.get('nonce');
+    contextWindow.fire('message', { isTrusted: true, source: pageWindow, origin: proxyOrigin, data: { type: 'monkeh-proxy:identity-ready', nonce, clientId: 'bootstrap-child' } });
+  }
   function replaceDocument(readyState = 'complete') {
     const next = { ...node(), title: 'Next', readyState, body: { childElementCount: 1, textContent: 'Next' }, getElementById: () => null };
     next.documentElement = { nodeType: 1, localName: 'html', id: '', className: '', children: [], ownerDocument: next };
@@ -125,8 +147,161 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
     timers.delete(id); timer.fn();
     return true;
   }
-  return { contextWindow, doc, get, frame, pageWindow, pageDoc, root, network, timers, evaluated, runtimes, observers, serviceWorker, init, loadPage, replaceDocument, tickWatch, expireReadiness, location, navigations, identityRequests, identityChannels, get networkOptions() { return networkOptions; }, get treeReads() { return treeReads; }, get activated() { return activated; }, get registrations() { return registrations; } };
+  return { contextWindow, doc, get, frame, pageWindow, pageDoc, root, network, timers, evaluated, runtimes, observers, serviceWorker, init, loadPage, bindChild, replaceDocument, tickWatch, expireReadiness, location, navigations, identityRequests, identityChannels, gameRequests, gameCancels, workerMessages, get networkOptions() { return networkOptions; }, get treeReads() { return treeReads; }, get activated() { return activated; }, get registrations() { return registrations; } };
 }
+
+const preparedUrl = target => proxyOrigin + '/service/' + encodeURIComponent(target);
+const stagedUrl = request => proxyOrigin + '/__monkeh_game__/' + request.data.nonce;
+const preparedGame = (request, target = 'https://example.com/') => ({ ok: true, url: stagedUrl(request), canonicalUrl: preparedUrl(target) });
+
+test('ordinary browsing navigates directly without binding or preparing game code', async () => {
+  const app = await harness();
+  assert.deepEqual(app.navigations, ['/service/' + encodeURIComponent('https://example.com/')]);
+  assert.equal(app.identityRequests.length, 0);
+  assert.equal(app.gameRequests.length, 0);
+  const connection = app.init(); app.loadPage();
+  await connection.request({ id: 1, method: 'reload' });
+  assert.equal(app.pageWindow.location.reloads, 1);
+  assert.equal(app.gameRequests.length, 0);
+  app.contextWindow.fire('pagehide');
+  assert.equal(app.gameCancels.length, 0);
+});
+
+test('game code waits for default-identity child binding and a prepared proxy document before execution', async () => {
+  let finishBinding;
+  const app = await harness({ loadCode: true, bindIdentity: (_, ports) => { finishBinding = () => ports[0].postMessage({ ok: true }); } });
+  assert.equal(app.navigations.length, 1);
+  assert.match(app.frame.src, /^\/proxy-bootstrap\.html\?nonce=[a-f0-9]{32}$/);
+  assert.equal(app.gameRequests.length, 0);
+  app.loadPage();
+  assert.equal(app.runtimes.length, 0);
+  app.bindChild(); await flush();
+  assert.equal(app.identityRequests.length, 1);
+  assert.equal(app.identityRequests[0].clientId, 'bootstrap-child');
+  assert.equal(app.gameRequests.length, 0, 'the child must be bound before HTML preparation');
+  finishBinding(); await flush();
+  assert.deepEqual(app.workerMessages.map(message => message.type), ['monkeh:identity:bind', 'monkeh:game:prepare']);
+  const pending = app.gameRequests[0];
+  assert.equal(pending.data.url, 'https://example.com/');
+  assert.match(pending.data.nonce, /^[a-f0-9]{32}$/);
+  assert.equal(pending.ports.length, 1);
+  assert.equal(app.navigations.length, 1, 'an unprepared target cannot execute');
+  pending.reply(preparedGame(pending, 'https://example.com/redirected?game=1'));
+  await flush();
+  assert.equal(app.frame.src, stagedUrl(pending));
+  assert.notEqual(app.frame.src, preparedUrl('https://example.com/redirected?game=1'), 'navigation must consume staged HTML instead of fetching the canonical address again');
+  assert.equal(app.navigations.length, 2);
+  assert(app.identityChannels.every(channel => channel.port1.closed && channel.port2.closed));
+  assert.equal([...app.timers.values()].some(timer => timer.ms === 35000), false);
+  app.contextWindow.fire('pagehide');
+});
+
+test('superseded game preparation is cancelled and stale success cannot navigate the frame', async () => {
+  const app = await harness({ loadCode: true });
+  app.bindChild(); await flush();
+  const first = app.gameRequests[0];
+  app.location.hash = '#' + encodeURIComponent('https://next.example/game.html');
+  app.contextWindow.fire('hashchange'); await flush();
+  assert.equal(app.gameCancels.length, 1);
+  assert.equal(app.gameCancels[0].data.nonce, first.data.nonce);
+  assert.equal(app.gameCancels[0].ports?.length || 0, 0);
+  assert.equal(app.gameRequests.length, 2);
+  const next = app.gameRequests[1];
+  assert.notEqual(next.data.nonce, first.data.nonce);
+  assert.equal(next.data.url, 'https://next.example/game.html');
+  assert.equal(app.identityRequests.length, 1, 'the already bound controlled child is reused');
+  first.reply(preparedGame(first, 'https://example.com/stale.html')); await flush();
+  assert.equal(app.navigations.length, 1);
+  next.reply(preparedGame(next, 'https://next.example/game.html')); await flush();
+  assert.equal(app.navigations.length, 2);
+  assert.equal(app.frame.src, stagedUrl(next));
+  app.contextWindow.fire('pagehide');
+});
+
+test('closing or timing out game preparation cancels its worker reservation and ignores late replies', async () => {
+  for (const close of [true, false]) {
+    const app = await harness({ loadCode: true });
+    app.bindChild(); await flush();
+    const pending = app.gameRequests[0];
+    const timeout = [...app.timers].find(([, timer]) => timer.ms === 35000);
+    assert.ok(timeout);
+    if (close) app.contextWindow.fire('pagehide');
+    else { app.timers.delete(timeout[0]); timeout[1].fn(); }
+    await flush();
+    assert.equal(app.gameCancels.length, 1);
+    assert.equal(app.gameCancels[0].data.nonce, pending.data.nonce);
+    assert.equal(app.gameCancels[0].ports?.length || 0, 0);
+    assert.equal(app.timers.size, 0);
+    assert(app.identityChannels.every(channel => channel.port1.closed && channel.port2.closed));
+    pending.reply(preparedGame(pending)); await flush();
+    assert.equal(app.navigations.length, 1);
+    assert.equal(app.runtimes.length, 0);
+    if (!close) {
+      assert.equal(app.get('retry').hidden, false);
+      assert.match(app.get('status-message').textContent, /timed out/i);
+      app.contextWindow.fire('pagehide');
+    }
+  }
+});
+
+test('game preparation requires its exact staging token and an external HTTP canonical proxy URL', async () => {
+  const invalidReplies = [
+    () => ({ ok: false, error: 'The game source could not be fetched.' }),
+    () => ({ ok: true }),
+    request => ({ ...preparedGame(request), canonicalUrl: undefined }),
+    request => ({ ...preparedGame(request), url: proxyOrigin + '/__monkeh_game__/' + (request.data.nonce[0] === '0' ? '1' : '0') + request.data.nonce.slice(1) }),
+    request => ({ ...preparedGame(request), url: proxyOrigin + '/wrong-path/' + request.data.nonce }),
+    request => ({ ...preparedGame(request), url: 'https://other-proxy.example/__monkeh_game__/' + request.data.nonce }),
+    request => ({ ...preparedGame(request), url: stagedUrl(request) + '?unexpected=1' }),
+    request => ({ ...preparedGame(request), url: stagedUrl(request) + '#unexpected' }),
+    request => ({ ...preparedGame(request), url: preparedUrl('https://example.com/') }),
+    request => ({ ...preparedGame(request), canonicalUrl: 'https://example.com/raw.html' }),
+    request => ({ ...preparedGame(request), canonicalUrl: 'https://other-proxy.example/service/' + encodeURIComponent('https://example.com/') }),
+    request => ({ ...preparedGame(request), canonicalUrl: proxyOrigin + '/proxy-host.html' }),
+    request => preparedGame(request, 'javascript:alert(1)'),
+    request => preparedGame(request, 'https://user:secret@example.com/'),
+    request => preparedGame(request, shellOrigin + '/math.html'),
+    request => preparedGame(request, proxyOrigin + '/proxy-host.html'),
+    request => ({ ...preparedGame(request), canonicalUrl: proxyOrigin + '/service/%zz' }),
+  ];
+  for (const makeReply of invalidReplies) {
+    const app = await harness({ loadCode: true });
+    app.bindChild(); await flush();
+    const pending = app.gameRequests[0];
+    const reply = makeReply(pending);
+    pending.reply(reply); await flush();
+    assert.equal(app.navigations.length, 1, JSON.stringify(reply));
+    assert.equal(app.get('retry').hidden, false);
+    assert.equal(app.get('status').hidden, false);
+    assert.equal(app.timers.size, 0);
+    assert(app.identityChannels.every(channel => channel.port1.closed && channel.port2.closed));
+    app.contextWindow.fire('pagehide');
+  }
+});
+
+test('game reload fetches the last entered address again instead of reloading the consumed document', async () => {
+  const app = await harness({ loadCode: true });
+  const connection = app.init();
+  app.bindChild(); await flush();
+  app.gameRequests[0].reply(preparedGame(app.gameRequests[0], 'https://example.com/redirected')); await flush();
+  app.loadPage();
+  app.pageWindow.location.href = preparedUrl('https://example.com/page-controlled-navigation');
+  const reload = connection.request({ id: 1, method: 'reload' });
+  await flush();
+  assert.equal(app.pageWindow.location.reloads, 0);
+  assert.equal(app.gameRequests.length, 2);
+  assert.equal([...app.timers.values()].some(timer => timer.ms === 60000), true);
+  assert.equal([...app.timers.values()].some(timer => timer.ms === 15000), false);
+  assert.equal(app.gameRequests[1].data.url, 'https://example.com/');
+  assert.equal(app.navigations.length, 2);
+  app.gameRequests[1].reply(preparedGame(app.gameRequests[1], 'https://example.com/redirected-again'));
+  await reload;
+  assert.equal(app.frame.src, stagedUrl(app.gameRequests[1]));
+  assert.notEqual(stagedUrl(app.gameRequests[1]), stagedUrl(app.gameRequests[0]), 'reload receives a fresh one-use document URL');
+  assert.equal(connection.messages.find(message => message.id === 1).result, null);
+  assert.equal(app.identityRequests.length, 1);
+  app.contextWindow.fire('pagehide');
+});
 
 test('custom identities wait for a validated controlled child binding before target navigation', async () => {
   const app = await harness({ userAgent: 'Chosen Browser/1' });
