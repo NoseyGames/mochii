@@ -86,8 +86,10 @@ async function fixture(options = {}) {
     listeners.get('fetch')({ request, clientId, resultingClientId, respondWith(value) { result = value; } });
     return await result;
   }
-  await message('host-a', { type: 'monkeh:identity:bind', clientId: 'child-a', nonce });
-  await message('host-b', { type: 'monkeh:identity:bind', clientId: 'child-b', nonce: nextNonce });
+  if (options.bindIdentity !== false) {
+    await message('host-a', { type: 'monkeh:identity:bind', clientId: 'child-a', nonce });
+    await message('host-b', { type: 'monkeh:identity:bind', clientId: 'child-b', nonce: nextNonce });
+  }
   return {
     context, requests, clients, cached, message, navigate,
     prepare(sender = 'host-a', url = target, token = nonce) { return message(sender, { type: 'monkeh:game:prepare', url, nonce: token }); },
@@ -330,6 +332,28 @@ test('navigation with an empty clientId consumes the capability once and binds r
   assert.equal(app.requests.at(-1).headers['user-agent'], 'GameBrowser/1');
   assert.equal((await app.navigate('', ready.url)).status, 410);
   assert.equal(app.requests.length, 2);
+});
+
+test('game execution needs no bootstrap binding and preserves custom UA in the page and later requests', async () => {
+  const app = await fixture({ bindIdentity: false });
+  app.clients.delete('child-a');
+  app.clients.delete('child-b');
+  assert.equal(app.cached.size, 0);
+  const ready = await app.prepare();
+  assert.equal(ready.ok, true);
+  assert.equal(app.requests[0].headers['user-agent'], 'GameBrowser/1');
+  assert.equal(app.cached.size, 0);
+  const response = await app.navigate('', ready.url, 'iframe', 'new-game');
+  const html = await response.text();
+  const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1]);
+  const page = { navigator: {}, history: { replaceState() {} } };
+  vm.runInNewContext(scripts[0] + scripts[1], page);
+  assert.equal(page.navigator.userAgent, 'GameBrowser/1');
+  assert.equal(app.requests.length, 1);
+  app.clients.set('new-game', { id: 'new-game', url: ready.canonicalUrl });
+  await app.navigate('new-game', proxied('https://games.example/game/engine.js'), 'script', '');
+  assert.equal(app.requests.at(-1).headers['user-agent'], 'GameBrowser/1');
+  assert.equal(app.cached.size, 1);
 });
 
 test('capabilities cannot collide across owners and unknown stage URLs never reach the upstream', async () => {

@@ -454,9 +454,9 @@ async function controlledWorker() {
   }), 'The proxy worker could not take control. Reload this page.').finally(() => navigator.serviceWorker.removeEventListener('controllerchange', listener));
 }
 
-async function prepareIdentity(force = false) {
+async function prepareIdentity() {
   const userAgent = new URL(location.href).searchParams.get('ua') || '';
-  if (identityReady || !force && (!userAgent || userAgent.length > 512 || !/^[\x20-\x7e]+$/.test(userAgent))) return;
+  if (identityReady || !userAgent || userAgent.length > 512 || !/^[\x20-\x7e]+$/.test(userAgent)) return;
   if (identityStarting) return identityStarting;
   let listener;
   let timer;
@@ -589,7 +589,7 @@ async function navigate(url = null) {
     await start();
     if (disposed || generation !== navigationGeneration) return false;
     if (config.shellOrigins.includes(new URL(targetUrl).origin) || new URL(targetUrl).origin === location.origin) throw new Error('App pages cannot be opened as proxy destinations.');
-    await prepareIdentity(loadCode);
+    if (!loadCode) await prepareIdentity();
     if (disposed || generation !== navigationGeneration) return false;
     if (url !== null) window.history?.replaceState(null, '', '#' + encodeURIComponent(targetUrl));
     let frameUrl = __uv$config.prefix + __uv$config.encodeUrl(targetUrl);

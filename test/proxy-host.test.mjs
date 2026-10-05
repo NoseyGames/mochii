@@ -167,38 +167,33 @@ test('ordinary browsing navigates directly without binding or preparing game cod
   assert.equal(app.gameCancels.length, 0);
 });
 
-test('game code waits for default-identity child binding and a prepared proxy document before execution', async () => {
-  let finishBinding;
-  const app = await harness({ loadCode: true, bindIdentity: (_, ports) => { finishBinding = () => ports[0].postMessage({ ok: true }); } });
-  assert.equal(app.navigations.length, 1);
-  assert.match(app.frame.src, /^\/proxy-bootstrap\.html\?nonce=[a-f0-9]{32}$/);
-  assert.equal(app.gameRequests.length, 0);
-  app.loadPage();
-  assert.equal(app.runtimes.length, 0);
-  app.bindChild(); await flush();
-  assert.equal(app.identityRequests.length, 1);
-  assert.equal(app.identityRequests[0].clientId, 'bootstrap-child');
-  assert.equal(app.gameRequests.length, 0, 'the child must be bound before HTML preparation');
-  finishBinding(); await flush();
-  assert.deepEqual(app.workerMessages.map(message => message.type), ['monkeh:identity:bind', 'monkeh:game:prepare']);
-  const pending = app.gameRequests[0];
-  assert.equal(pending.data.url, 'https://example.com/');
-  assert.match(pending.data.nonce, /^[a-f0-9]{32}$/);
-  assert.equal(pending.ports.length, 1);
-  assert.equal(app.navigations.length, 1, 'an unprepared target cannot execute');
-  pending.reply(preparedGame(pending, 'https://example.com/redirected?game=1'));
-  await flush();
-  assert.equal(app.frame.src, stagedUrl(pending));
-  assert.notEqual(app.frame.src, preparedUrl('https://example.com/redirected?game=1'), 'navigation must consume staged HTML instead of fetching the canonical address again');
-  assert.equal(app.navigations.length, 2);
-  assert(app.identityChannels.every(channel => channel.port1.closed && channel.port2.closed));
-  assert.equal([...app.timers.values()].some(timer => timer.ms === 35000), false);
-  app.contextWindow.fire('pagehide');
+test('game preparation starts without identity bootstrap for both default and custom browser identities', async () => {
+  for (const userAgent of ['', 'Chosen Browser/1']) {
+    const app = await harness({ loadCode: true, userAgent });
+    assert.equal(app.navigations.length, 0, 'the game does not depend on a bootstrap navigation');
+    assert.equal(app.identityRequests.length, 0);
+    assert.equal(app.gameRequests.length, 1);
+    assert.equal(new URL(app.location.href).searchParams.get('ua') || '', userAgent, 'the worker can derive identity from the requesting host URL');
+    assert.deepEqual(app.workerMessages.map(message => message.type), ['monkeh:game:prepare']);
+    const pending = app.gameRequests[0];
+    assert.equal(pending.data.url, 'https://example.com/');
+    assert.match(pending.data.nonce, /^[a-f0-9]{32}$/);
+    assert.equal(pending.ports.length, 1);
+    assert.equal(app.navigations.length, 0, 'an unprepared target cannot execute');
+    pending.reply(preparedGame(pending, 'https://example.com/redirected?game=1'));
+    await flush();
+    assert.equal(app.frame.src, stagedUrl(pending));
+    assert.notEqual(app.frame.src, preparedUrl('https://example.com/redirected?game=1'), 'navigation must consume staged HTML instead of fetching the canonical address again');
+    assert.equal(app.navigations.length, 1);
+    assert.equal(app.identityRequests.length, 0);
+    assert(app.identityChannels.every(channel => channel.port1.closed && channel.port2.closed));
+    assert.equal([...app.timers.values()].some(timer => timer.ms === 35000 || timer.ms === 12000), false);
+    app.contextWindow.fire('pagehide');
+  }
 });
 
 test('superseded game preparation is cancelled and stale success cannot navigate the frame', async () => {
   const app = await harness({ loadCode: true });
-  app.bindChild(); await flush();
   const first = app.gameRequests[0];
   app.location.hash = '#' + encodeURIComponent('https://next.example/game.html');
   app.contextWindow.fire('hashchange'); await flush();
@@ -209,11 +204,11 @@ test('superseded game preparation is cancelled and stale success cannot navigate
   const next = app.gameRequests[1];
   assert.notEqual(next.data.nonce, first.data.nonce);
   assert.equal(next.data.url, 'https://next.example/game.html');
-  assert.equal(app.identityRequests.length, 1, 'the already bound controlled child is reused');
+  assert.equal(app.identityRequests.length, 0, 'game navigation never starts a separate identity bootstrap');
   first.reply(preparedGame(first, 'https://example.com/stale.html')); await flush();
-  assert.equal(app.navigations.length, 1);
+  assert.equal(app.navigations.length, 0);
   next.reply(preparedGame(next, 'https://next.example/game.html')); await flush();
-  assert.equal(app.navigations.length, 2);
+  assert.equal(app.navigations.length, 1);
   assert.equal(app.frame.src, stagedUrl(next));
   app.contextWindow.fire('pagehide');
 });
@@ -221,7 +216,6 @@ test('superseded game preparation is cancelled and stale success cannot navigate
 test('closing or timing out game preparation cancels its worker reservation and ignores late replies', async () => {
   for (const close of [true, false]) {
     const app = await harness({ loadCode: true });
-    app.bindChild(); await flush();
     const pending = app.gameRequests[0];
     const timeout = [...app.timers].find(([, timer]) => timer.ms === 35000);
     assert.ok(timeout);
@@ -234,7 +228,7 @@ test('closing or timing out game preparation cancels its worker reservation and 
     assert.equal(app.timers.size, 0);
     assert(app.identityChannels.every(channel => channel.port1.closed && channel.port2.closed));
     pending.reply(preparedGame(pending)); await flush();
-    assert.equal(app.navigations.length, 1);
+    assert.equal(app.navigations.length, 0);
     assert.equal(app.runtimes.length, 0);
     if (!close) {
       assert.equal(app.get('retry').hidden, false);
@@ -266,11 +260,10 @@ test('game preparation requires its exact staging token and an external HTTP can
   ];
   for (const makeReply of invalidReplies) {
     const app = await harness({ loadCode: true });
-    app.bindChild(); await flush();
     const pending = app.gameRequests[0];
     const reply = makeReply(pending);
     pending.reply(reply); await flush();
-    assert.equal(app.navigations.length, 1, JSON.stringify(reply));
+    assert.equal(app.navigations.length, 0, JSON.stringify(reply));
     assert.equal(app.get('retry').hidden, false);
     assert.equal(app.get('status').hidden, false);
     assert.equal(app.timers.size, 0);
@@ -282,7 +275,6 @@ test('game preparation requires its exact staging token and an external HTTP can
 test('game reload fetches the last entered address again instead of reloading the consumed document', async () => {
   const app = await harness({ loadCode: true });
   const connection = app.init();
-  app.bindChild(); await flush();
   app.gameRequests[0].reply(preparedGame(app.gameRequests[0], 'https://example.com/redirected')); await flush();
   app.loadPage();
   app.pageWindow.location.href = preparedUrl('https://example.com/page-controlled-navigation');
@@ -293,13 +285,13 @@ test('game reload fetches the last entered address again instead of reloading th
   assert.equal([...app.timers.values()].some(timer => timer.ms === 60000), true);
   assert.equal([...app.timers.values()].some(timer => timer.ms === 15000), false);
   assert.equal(app.gameRequests[1].data.url, 'https://example.com/');
-  assert.equal(app.navigations.length, 2);
+  assert.equal(app.navigations.length, 1);
   app.gameRequests[1].reply(preparedGame(app.gameRequests[1], 'https://example.com/redirected-again'));
   await reload;
   assert.equal(app.frame.src, stagedUrl(app.gameRequests[1]));
   assert.notEqual(stagedUrl(app.gameRequests[1]), stagedUrl(app.gameRequests[0]), 'reload receives a fresh one-use document URL');
   assert.equal(connection.messages.find(message => message.id === 1).result, null);
-  assert.equal(app.identityRequests.length, 1);
+  assert.equal(app.identityRequests.length, 0);
   app.contextWindow.fire('pagehide');
 });
 
