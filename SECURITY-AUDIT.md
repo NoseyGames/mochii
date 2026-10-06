@@ -62,11 +62,11 @@ Re-run `pnpm check` and `pnpm test` after changes.
    them from the app shell; it is not a complete browser-grade boundary between
    unrelated remote sites. Treat page-reported URLs/titles as untrusted. Avoid
    using this proxy for sensitive accounts or storing secrets on its origin.
-2. **Fifteen independent public servers were not verified.** The pool now supports
-   fifteen entries. Anura is the verified public primary; an owned Cloudflare
-   Worker provides a restricted backup. Its native Wisp adapter passed local
-   runtime HTTP/HTTPS and destination-denial checks. See docs/WISP-HOSTING.md
-   for current endpoint results, deployment status, and Cloudflare limitations.
+2. **Configured addresses are not a verified count of independent servers.**
+   The pool supports 32 entries and currently contains 29 external URLs, including
+   two Anura paths. The owned Cloudflare Wisp adapter has been removed; its former
+   routes return HTTP 410. The shared Worker still hosts isolated browser assets,
+   coding help and music. See docs/WISP-HOSTING.md for dated endpoint results.
 3. Health probes validate protocol availability. They do not guarantee that a
    server can reach every destination or that a website will load successfully.
    Switching transport can break existing streams; manual reload avoids silently
@@ -107,11 +107,10 @@ Re-run `pnpm check` and `pnpm test` after changes.
 - Workers Free supplies the hard daily AI allowance. Rate limits are local to a
   Cloudflare location and are not a global billing cap. Changing the account to
   Paid can incur charges unless coding help is disabled first.
-- Native Worker Wisp pins validated public DNS answers, restricts ports to 80/443,
-  bounds frames/streams/queues/transfer/lifetime and handshake rates, and fails
-  closed without required configuration. Origin restrictions do not authenticate
-  non-browser clients. Cloudflare's TCP egress blocks Cloudflare destinations;
-  this endpoint is a limited backup, not universal browsing infrastructure.
+- The native Worker Wisp adapter reviewed on October 3 was retired on October 6.
+  Its implementation, configuration and dedicated tests have been removed.
+  Deployed browser configuration uses external relays; their policies and limits
+  are controlled by their operators. The optional Node gateway remains separate.
 
 This is a source, automated-test and targeted runtime review, not a claim that
 all possible issues or third-party failures have been eliminated.

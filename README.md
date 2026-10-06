@@ -19,7 +19,7 @@ optional bufferutil native build so pnpm 11's strict install succeeds.
 
 - Cloudflare Pages: build command `pnpm build`, output directory `dist`.
 - Cloudflare Worker: `npx wrangler deploy`; `wrangler.jsonc` builds and uploads
-  static assets plus the optional coding-help and limited Wisp routes. No paid container is required.
+  static assets plus the coding-help and music routes. No paid container is required.
 - App: https://testingproductionubgdontgo.pages.dev/math.html
 - Isolated proxy host: https://monkeh.1234-imwatchingyouopenthedoor.workers.dev
 
@@ -39,22 +39,19 @@ required for isolation; the public server still needs an internet connection.
 
 Edit `deployment.wispEndpoints` in `browser-tools/config.js`. The list includes
 all 28 unique addresses supplied by the site owner with production-use permission,
-the original Anura `/wisp/` path, and the owned Monkeh Worker as a limited fallback.
+and the original Anura `/wisp/` path: 29 external endpoint URLs in total.
 Exact endpoint paths are retained; a Wisp address does not need a trailing slash.
 
 The client supports 32 addresses and races eligible public endpoints concurrently.
 The first valid Wisp greeting whose transport activates wins; failed, timed-out,
 and non-Wisp connections are skipped. Unused probes are closed immediately.
-The limited Worker is tried only when no public endpoint can activate, because
-it cannot reach Cloudflare IP destinations. Transport changes are serialized.
+The retired Monkeh Wisp endpoint is not in the pool. Transport changes are serialized.
 The client checks availability every 30 seconds and switches after two failures.
 **Retry** immediately races the connection again. It pauses
 while offline and resumes when the network returns. Switching connections cannot
 preserve TCP sessions; reload is manual so forms and uploads are not replayed.
 
-The owned backup cannot reach Cloudflare IP ranges and has bounded session,
-transfer and connection limits. It is suitable only for destinations that those
-limits permit. Configured addresses are candidates, not a promise that every
+Configured addresses are candidates, not a promise that every
 server is currently online or compatible. Public operators can impose limits,
 block destinations or stop service. See `docs/WISP-HOSTING.md` for probe results.
 Their policies govern outgoing traffic; the optional Node gateway's restrictions
@@ -116,8 +113,9 @@ Set `ENABLE_ASSIST=false` before changing to a paid account if billing is unwant
 Missing bindings and exhausted quotas show a recoverable error. Plain static or
 Node deployments without the Worker API can browse normally but have no AI help.
 
-See [Wisp hosting notes](docs/WISP-HOSTING.md) for public-server verification,
-Cloudflare's TCP restrictions, and why GitHub Actions is used only for CI tests.
+See [Wisp hosting notes](docs/WISP-HOSTING.md) for public-server verification
+and the retired Cloudflare relay. The shared Worker still serves the isolated
+browser assets, coding help and music; its obsolete `/wisp` routes return HTTP 410.
 
 ## Apps and current limits
 

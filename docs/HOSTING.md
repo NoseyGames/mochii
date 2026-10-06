@@ -21,8 +21,10 @@ build while retaining pnpm's strict policy for other dependency scripts.
 
 Each provider below can serve a **shell mirror** over HTTPS at its own origin.
 These deployments do not run the optional Node backend, Cloudflare Workers AI,
-or a Wisp server. The isolated proxy and coding-help API remain on the configured
-Cloudflare Worker. More shell links do not create independent proxy backends.
+or a Wisp server. The isolated browser assets, coding-help API and music API remain
+on the configured Cloudflare Worker. Browser TCP connections use external Wisp
+servers; the Worker's retired `/wisp` routes return HTTP 410. More shell links do
+not create independent proxy backends.
 
 Before announcing a new mirror, add its exact HTTPS origin to the app's approved
 shell origins in `browser-tools/config.js` and to `ASSIST_ALLOWED_ORIGINS` in the

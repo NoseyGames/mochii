@@ -121,6 +121,8 @@ test('game preparation uses the real UV HTML pipeline once, preserves assets and
   assert.ok(body.includes('self.__uv$cookies'));
   assert.ok(body.includes('GameBrowser/1'));
   assert.ok(body.includes('<meta name="monkeh-game-code" content="fetched">'));
+  assert.equal(body.match(/function proxyPageCleanup\(\)/g)?.length, 1);
+  assert.ok(body.indexOf('function proxyPageCleanup()') < body.indexOf('window.gameStarted'));
   const firstScript = /<script\b[^>]*>([\s\S]*?)<\/script>/.exec(body)[1];
   let canonical;
   vm.runInNewContext(firstScript, { history: { replaceState(state, title, url) { canonical = url; } } });

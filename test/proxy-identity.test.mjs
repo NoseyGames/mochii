@@ -10,6 +10,8 @@ const source = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
 const uvSource = readFileSync(new URL('../ultrav/uv.sw.js', import.meta.url), 'utf8');
 const bundleSource = readFileSync(new URL('../ultrav/uv.bundle.js', import.meta.url), 'utf8');
 const proxied = target => origin + '/service/' + encodeURIComponent(target);
+const identityNode = nodes => nodes.find(node => node.childNodes?.[0]?.value?.includes("Object.defineProperty(navigator,'userAgent'"));
+const cleanupNodes = nodes => nodes.filter(node => node.childNodes?.[0]?.value?.includes('function proxyPageCleanup()'));
 
 function worker(clients = new Map(), stored = new Map(), options = {}) {
   const responseBody = options.body || '<!doctype html><html><body>Test</body></html>';
@@ -161,7 +163,7 @@ test('concurrent proxy views retain their own header and early navigator identit
   assert.deepEqual(app.requests.map(entry => entry.headers['user-agent']).sort(), ['Browser A/1', 'Browser B/2']);
   for (const entry of app.requests) { assert.equal(entry.headers['sec-ch-ua'], undefined); assert.equal(entry.headers['x-test'], 'preserved'); }
   const sandbox = { navigator: {} };
-  vm.runInNewContext(app.injections[0].at(-1).childNodes[0].value, sandbox);
+  vm.runInNewContext(identityNode(app.injections[0]).childNodes[0].value, sandbox);
   assert.equal(sandbox.navigator.userAgent, 'Browser A/1');
   clients.set('page-a', { id: 'page-a', url: proxied('https://example.com/') });
   assert.equal((await app.request('page-a', '', 'script')).headers['user-agent'], 'Browser A/1');
@@ -183,7 +185,8 @@ test('untrusted clients cannot select another browser identity through their des
   const clients = new Map([['page', { url: proxied('https://proxy.test/proxy-host.html?ua=Fake') }]]);
   const app = worker(clients);
   assert.equal((await app.request('page')).headers['user-agent'], 'Real browser');
-  assert.equal(app.injections[0].length, 0);
+  assert.equal(identityNode(app.injections[0]), undefined);
+  assert.equal(cleanupNodes(app.injections[0]).length, 1);
 });
 
 test('failed persistence never changes the resolved navigation identity', async () => {
@@ -193,7 +196,8 @@ test('failed persistence never changes the resolved navigation identity', async 
     assert.equal((await app.request('host', 'page')).headers['user-agent'], 'Chosen Browser/1');
     clients.set('page', { id: 'page', url: proxied('https://example.com/') });
     assert.equal((await app.request('page', '', 'script')).headers['user-agent'], 'Chosen Browser/1');
-    assert.equal(app.injections[0].length, 1);
+    assert(identityNode(app.injections[0]));
+    assert.equal(cleanupNodes(app.injections[0]).length, 1);
   }
 });
 
@@ -240,7 +244,7 @@ test('custom user-agent script text cannot terminate its injection element', asy
   const value = 'Browser </script><script>bad()</script>';
   const app = worker(new Map([['host', { url: proxyViewUrl(origin, 'https://example.com/', value) }]]));
   await app.request('host');
-  const script = app.injections[0].at(-1).childNodes[0].value;
+  const script = identityNode(app.injections[0]).childNodes[0].value;
   assert.doesNotMatch(script, /<\/script>/);
   const sandbox = { navigator: {} }; vm.runInNewContext(script, sandbox);
   assert.equal(sandbox.navigator.userAgent, value);
@@ -264,4 +268,30 @@ test('real UV HTML serialization preserves executable identity code before desti
   vm.runInContext(scripts[pageIndex], page);
   assert.equal(page.observedUA, value);
   assert.equal(page.navigator.userAgentData, undefined);
+});
+
+test('normal proxy documents receive cleanup before page scripts with the default identity', async () => {
+  for (const destination of ['document', 'iframe']) {
+    const app = worker(new Map(), new Map(), {
+      realRewriter: true,
+      body: '<!doctype html><html><head><script>window.destinationStarted = true;</script></head><body>Page</body></html>'
+    });
+    await app.request('page', '', destination);
+    const scripts = [...app.responses[0].matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(([, attributes]) => !/\bsrc=/.test(attributes)).map(([, , code]) => code);
+    const cleanup = scripts.filter(code => code.includes('function proxyPageCleanup()'));
+    assert.equal(cleanup.length, 1);
+    assert(scripts.indexOf(cleanup[0]) < scripts.findIndex(code => code.includes('destinationStarted')));
+    assert.doesNotMatch(cleanup[0], /&gt;|&amp;|&lt;/);
+    assert.doesNotThrow(() => new vm.Script(cleanup[0]));
+    assert.equal(app.requests[0].headers['user-agent'], 'Real browser');
+  }
+});
+
+test('subresource requests do not inject the document cleanup loop', async () => {
+  for (const destination of ['script', 'worker', 'sharedworker', 'image', 'style', 'empty']) {
+    const app = worker();
+    await app.request('page', '', destination === 'empty' ? '' : destination);
+    assert.equal(app.injections.flatMap(cleanupNodes).length, 0, destination);
+    assert.doesNotMatch(app.responses[0], /function proxyPageCleanup\(\)/, destination);
+  }
 });

@@ -44,7 +44,6 @@
       Object.freeze({ name: 'Solife', url: 'wss://wisp.solife.me/' }),
                                                                                 
       Object.freeze({ name: 'Anura', url: 'wss://anura.pro/wisp/' }),
-      Object.freeze({ name: 'Monkeh backup (limited)', url: 'wss://monkeh.1234-imwatchingyouopenthedoor.workers.dev/wisp/', fallback: true }),
     ]),
     windowsVm: null,
   });

@@ -5,15 +5,11 @@
   "ai": { "binding": "AI" },
   "vars": {
     "ENABLE_ASSIST": "true",
-    "ASSIST_ALLOWED_ORIGINS": "[\"https://testingproductionubgdontgo.pages.dev\",\"https://monkeh-noseygames.netlify.app\",\"https://monkeh-browser.robert360254.chatgpt.site\"]",
-    "ENABLE_WISP": "true",
-    "WISP_ALLOWED_ORIGINS": "[\"https://monkeh.1234-imwatchingyouopenthedoor.workers.dev\"]"
+    "ASSIST_ALLOWED_ORIGINS": "[\"https://testingproductionubgdontgo.pages.dev\",\"https://monkeh-noseygames.netlify.app\",\"https://monkeh-browser.robert360254.chatgpt.site\"]"
   },
   "ratelimits": [
     { "name": "ASSIST_RATE", "namespace_id": "106031", "simple": { "limit": 3, "period": 60 } },
     { "name": "ASSIST_GLOBAL_RATE", "namespace_id": "106032", "simple": { "limit": 10, "period": 60 } },
-    { "name": "WISP_RATE", "namespace_id": "106033", "simple": { "limit": 12, "period": 60 } },
-    { "name": "WISP_GLOBAL_RATE", "namespace_id": "106034", "simple": { "limit": 120, "period": 60 } },
     { "name": "MUSIC_RATE", "namespace_id": "106035", "simple": { "limit": 120, "period": 60 } }
   ],
   "build": {

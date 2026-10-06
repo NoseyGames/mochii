@@ -435,12 +435,74 @@ async function repairGameDocument(response) {
 	return repaired;
 }
 
+function proxyPageCleanup() {
+	const win = window;
+	const doc = win.document;
+	const key = Symbol.for('monkeh.pageCleanup');
+	const previous = win[key];
+	if (previous?.document === doc) { previous.start(); return; }
+	previous?.dispose();
+	let timer;
+	let disposed = false;
+	function setStyle(style, property, value) {
+		if (style && (style.getPropertyValue(property) !== value || style.getPropertyPriority(property) !== 'important')) style.setProperty(property, value, 'important');
+	}
+	function cleanup(current) {
+		try {
+			current.querySelectorAll('[id^="securly"],[class^="securly"],#securly-overlay,.securly-ui-container').forEach(element => element.remove());
+			setStyle(current.body?.style, 'overflow', 'auto');
+			setStyle(current.body?.style, 'position', 'static');
+			setStyle(current.documentElement?.style, 'overflow', 'auto');
+		} catch {}
+	}
+	function run() {
+		if (disposed || win.document !== doc) { dispose(); return; }
+		const pending = [doc];
+		const seen = new Set();
+		while (pending.length) {
+			const current = pending.pop();
+			if (!current || seen.has(current)) continue;
+			seen.add(current);
+			if (current !== doc) {
+				try { const owner = current.defaultView?.[key]; if (owner?.document === current && owner.active) continue; } catch {}
+			}
+			cleanup(current);
+			try {
+				for (const frame of current.querySelectorAll('iframe, frame')) {
+					try { const child = frame.contentDocument || frame.contentWindow?.document; if (child) pending.push(child); } catch {}
+				}
+			} catch {}
+		}
+	}
+	function start() {
+		if (disposed || timer !== undefined) return;
+		run();
+		if (!disposed) timer = win.setInterval(run, 500);
+	}
+	function stop() { if (timer !== undefined) win.clearInterval(timer); timer = undefined; }
+	function hide(event) { if (event.persisted) stop(); else dispose(); }
+	function dispose() {
+		if (disposed) return;
+		disposed = true;
+		stop();
+		win.removeEventListener('pagehide', hide);
+		win.removeEventListener('pageshow', start);
+		if (win[key] === controller) delete win[key];
+	}
+	const controller = { document: doc, get active() { return !disposed && timer !== undefined; }, start, dispose };
+	Object.defineProperty(win, key, { configurable: true, value: controller });
+	win.addEventListener('pagehide', hide);
+	win.addEventListener('pageshow', start);
+	start();
+}
+
 async function fetchThroughUV(event, game = null) {
 	const request = event.request;
 	const target = proxiedDestination(request.url);
 	const repair = request.method === 'GET' && ['document', 'iframe'].includes(request.destination) && target && cdnGameDocument(target.href);
 	const userAgent = await requestIdentity(event);
-	if (!repair && !userAgent && !game) return uv.fetch(event);
+	const page = ['document', 'iframe'].includes(request.destination);
+	if (!repair && !userAgent && !game && !page) return uv.fetch(event);
 	const scoped = Object.create(uv);
 	scoped.emit = (name, context) => {
 		if (name === 'request' && userAgent) {
@@ -449,7 +511,7 @@ async function fetchThroughUV(event, game = null) {
 		}
 		return uv.emit(name, context);
 	};
-	if (userAgent || game) {
+	if (userAgent || game || page) {
 		scoped.config = { ...uv.config, construct(instance, mode) {
 			uv.config.construct?.(instance, mode);
 			const html = instance.createHtmlInject.bind(instance);
@@ -465,6 +527,7 @@ async function fetchThroughUV(event, game = null) {
 					nodes.push({ tagName: 'meta', nodeName: 'meta', namespaceURI: 'http://www.w3.org/1999/xhtml', childNodes: [], attrs: [{ name: 'name', value: 'monkeh-game-code' }, { name: 'content', value: 'fetched' }], skip: true });
 				}
 				if (userAgent) nodes.push(script(identityScript(userAgent)));
+				if (page || game) nodes.push(script('(' + proxyPageCleanup.toString() + ')();'));
 				return [...nodes, ...html(...args)];
 			};
 			if (userAgent && instance.createJsInject) {

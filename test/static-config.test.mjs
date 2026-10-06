@@ -41,7 +41,7 @@ test('production and local static hosts share an immutable server list without A
       assert.deepEqual(Array.from(config.shellOrigins), app === shell ? productionShells : [app]);
       assert(Object.isFrozen(config.shellOrigins));
       assert.equal(config.requiresAuthentication, false);
-      assert.equal(config.wispEndpoints.length, 30);
+      assert.equal(config.wispEndpoints.length, 29);
       assert.equal(config.maxWispBackups, 31);
       assert.equal(new Set(config.wispEndpoints.map(entry => new URL(entry.url).href)).size, config.wispEndpoints.length);
       assert(Object.isFrozen(config.wispEndpoints));
@@ -94,16 +94,16 @@ test('local configurations keep only their own shell and proxy pair', async () =
   }
 });
 
-test('the owner-supplied endpoint paths are preserved and only the limited Worker is fallback-only', async () => {
+test('the owner-supplied endpoint paths are preserved and all configured relays are external', async () => {
   const config = await context(shell + '/math').page.MonkehConfig.fetchConfig();
   const urls = config.wispEndpoints.map(entry => entry.url);
   for (const url of ['wss://wisp.mercurywork.shop/', 'wss://wispserver.dev/wisp', 'wss://admin.proxy.hydrovolter.com/scramjet/wisp/',
     'wss://henhouse.social/relay', 'wss://nostr.me/relay', 'wss://anura.pro/', 'wss://anura.pro/wisp/', 'wss://wisp.solife.me/']) {
     assert(urls.includes(url), url);
   }
-  const fallbacks = config.wispEndpoints.filter(entry => entry.fallback);
-  assert.equal(fallbacks.length, 1);
-  assert.equal(fallbacks[0].url, proxy.replace('https:', 'wss:') + '/wisp/');
+  assert.equal(config.wispEndpoints.some(entry => entry.fallback), false);
+  assert.equal(config.wispEndpoints.some(entry => new URL(entry.url).hostname === new URL(proxy).hostname), false);
+  assert.equal(config.proxyOrigin, proxy, 'the isolated browser host remains available');
 });
 
 test('shell entry from proxy or Pages previews goes to canonical app preserving navigation', () => {
@@ -142,10 +142,15 @@ test('static service worker proxies only on the isolated origin without an API',
   }
 });
 
-test('deployed AI CORS allows exactly the confirmed shells while Wisp remains proxy-origin only', async () => {
-  const { vars } = JSON.parse(readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
+test('deployed AI CORS retains confirmed shells and removes only the retired Wisp bindings', async () => {
+  const { vars, ai, ratelimits, assets } = JSON.parse(readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
   assert.deepEqual(JSON.parse(vars.ASSIST_ALLOWED_ORIGINS), productionShells);
-  assert.deepEqual(JSON.parse(vars.WISP_ALLOWED_ORIGINS), [proxy]);
+  assert.equal(vars.ENABLE_WISP, undefined);
+  assert.equal(vars.WISP_ALLOWED_ORIGINS, undefined);
+  assert.deepEqual(ai, { binding: 'AI' });
+  assert.deepEqual(ratelimits.map(binding => binding.name), ['ASSIST_RATE', 'ASSIST_GLOBAL_RATE', 'MUSIC_RATE']);
+  assert.equal(assets.binding, 'ASSETS');
+  assert.deepEqual(assets.run_worker_first, ['/api/*', '/wisp', '/wisp/*']);
   for (const origin of productionShells) {
     const response = await handleAssist(new Request(proxy + '/api/assist', { method: 'OPTIONS', headers: { Origin: origin } }), vars);
     assert.equal(response.status, 204, origin);

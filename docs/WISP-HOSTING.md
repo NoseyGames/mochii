@@ -1,12 +1,12 @@
 # Wisp endpoints and hosting verification
 
-Checked October 3, 2026 (Pacific time). The site owner supplied 28 unique addresses and explicitly confirmed permission to use all of them in production, including Mercury. All are configured with their exact paths. The original Anura `/wisp/` alias and owned Worker remain, for 30 configured URLs; aliases are not separate servers. Capacity is 32 URLs.
+Endpoint snapshot checked October 3, 2026 (Pacific time); configuration updated October 6. The site owner supplied 28 unique addresses and explicitly confirmed permission to use all of them in production, including Mercury. All are configured with their exact paths. The original Anura `/wisp/` alias remains, for 29 external endpoint URLs; aliases are not separate servers. Capacity is 32 URLs. The owned Cloudflare Wisp endpoint has been removed.
 
 ## Endpoint evidence
 
-Each URL below received one bounded Wisp-handshake probe with a five-second deadline, the production proxy Origin, and TLS certificate validation enabled. No destination TCP stream was opened by this check. Eight configured URLs completed Wisp negotiation, including both Anura aliases and the owned Worker. Mercury responded first in this snapshot. Results vary with location, load, and time; a successful handshake does not guarantee all websites will work.
+Each URL below received one bounded Wisp-handshake probe with a five-second deadline, the production proxy Origin, and TLS certificate validation enabled. No destination TCP stream was opened by this check. Seven remaining configured URLs completed Wisp negotiation, including both Anura aliases. Mercury responded first in this snapshot. Results vary with location, load, and time; a successful handshake does not guarantee all websites will work.
 
-Every eligible public endpoint is raced concurrently at connection time, and the first valid greeting whose transport activates is selected. Failed, timed-out, malformed, or non-Wisp responses are skipped. Remaining probes close after selection. Failure cooldown and bounded automatic retry prevent tight reconnect loops. The Worker is fallback-only because of its destination restrictions. Availability checks do not automatically replay forms or reload pages.
+Every eligible public endpoint is raced concurrently at connection time, and the first valid greeting whose transport activates is selected. Failed, timed-out, malformed, or non-Wisp responses are skipped. Remaining probes close after selection. Failure cooldown and bounded automatic retry prevent tight reconnect loops. There is no owned Cloudflare fallback. Availability checks do not automatically replay forms or reload pages.
 
 | Exact endpoint | Snapshot result | Elapsed |
 | --- | --- | --- |
@@ -39,37 +39,13 @@ Every eligible public endpoint is raced concurrently at connection time, and the
 | `wss://relay.crostr.com/` | Timed out; skipped | 5004 ms |
 | `wss://wisp.solife.me/` | Timed out; skipped | 5004 ms |
 | `wss://anura.pro/wisp/` | Valid Wisp v1 | 1414 ms |
-| `wss://monkeh.1234-imwatchingyouopenthedoor.workers.dev/wisp/` | Valid Wisp v1 | 1377 ms |
 
-## Native Cloudflare Worker backup
+## Retired Cloudflare relay
 
-`handleWisp(request, env)` in `workers/wisp/index.mjs` handles `/wisp/`. The app shell stays on its separate Pages origin. The Worker handles only Wisp TCP on ports 80/443; it does not run the Node server or expose the repository filesystem.
+The owned Cloudflare Wisp adapter, its dedicated configuration and its protocol tests have been removed. `workers/app.mjs` returns an immediate HTTP 410 for `/wisp` and `/wisp/*`, including WebSocket upgrade requests. These paths remain in `run_worker_first` so obsolete clients receive the retirement response instead of static content. The Wisp-specific environment variables and rate-limit bindings are removed.
 
-Required configuration:
+Keep the shared Cloudflare Worker deployed: it still serves the isolated browser assets and the coding-help and music APIs. Removing that Worker would break the browser host and those features. The optional local Node gateway uses its independent `server-wisp.mjs` and `server-network.mjs`; it does not import the removed Worker adapter.
 
-```json
-{
-  "ENABLE_WISP": "true",
-  "WISP_ALLOWED_ORIGINS": "[\"https://monkeh.1234-imwatchingyouopenthedoor.workers.dev\"]"
-}
-```
+## Validation
 
-The origin list is a browser cross-origin restriction, not a secret or account authentication. The relay is intentionally reachable by this public application's users. Disable it with `ENABLE_WISP=false` if public access is no longer intended.
-
-The `WISP_RATE` binding permits twelve upgrade attempts per IP per minute; `WISP_GLOBAL_RATE` permits 120 per minute with a shared key. Missing/failing bindings or missing Cloudflare client-IP metadata fail closed. Throttled requests receive HTTP 429 with Retry-After. Cloudflare rate-limit bindings are location-scoped and approximate, so the shared key is not an account-wide exact spending cap.
-
-The implementation validates hostnames and checks a fixed DNS-over-HTTPS resolver's answer with `ipaddr.js`, then connects to the validated literal address. It rejects loopback/private/link-local/special addresses, IP literals supplied as hostnames, UDP, and non-web ports. Pending DNS and TCP work is canceled when its stream closes. It supports Wisp v1 and v2 framing with bounded flow control.
-
-Per WebSocket session, limits are four concurrent streams, twenty total stream openings, a one MiB frame, two MiB pending input, sixteen MiB transferred data, a ten-second connection deadline, and a five-minute lifetime. The total stream cap also bounds DNS/TCP operations. These are deliberate application limits, not claims about Cloudflare's maximum service capacity.
-
-Cloudflare explicitly [blocks outbound TCP to Cloudflare IP ranges](https://developers.cloudflare.com/workers/runtime-apis/tcp-sockets/#considerations). This excludes many websites, including example.com at the time of testing. It cannot be worked around by relabeling the destination or replacing a TCP stream with `fetch()`. The owned Worker therefore remains a limited fallback after the public endpoint race. The [Workers limits documentation](https://developers.cloudflare.com/workers/platform/limits/) also lists free-plan subrequest and CPU limits. Production HTTP and certificate-validated HTTPS checks passed on October 3; these checks do not prove unlimited capacity or availability.
-
-The adapter uses the documented [WebSocketPair API](https://developers.cloudflare.com/workers/runtime-apis/websockets/) and [outbound TCP API](https://developers.cloudflare.com/workers/runtime-apis/tcp-sockets/). It is an independent implementation, not the Mercury Worker demo intended only for small API clients.
-
-## Validation and GitHub Actions
-
-`node --test test/worker-wisp.test.mjs` exercises destination validation, DNS pinning, strict origins, v1/v2 negotiation, TCP forwarding, malformed messages, cancellation during DNS, flow control, frame/input/transfer limits, stream limits, and cleanup. The existing `Check` GitHub Actions workflow runs this test through `pnpm test`, so no persistent public runner is needed.
-
-Wrangler 4.147.0 successfully bundled the isolated adapter with `deploy --dry-run`. The isolated configuration at `workers/wisp/wrangler.jsonc` is for loopback testing on port 8788; it is not a second production deployment. Local native runtime checks established v1/v2 WebSockets, rejected private destinations and port 22, and transferred real HTTP and HTTPS data.
-
-[GitHub's current Actions terms](https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features#actions) prohibit treating Actions as a persistent serverless hosting service. Actions remains appropriate for bounded build and protocol tests. The repository does not set up a public Wisp tunnel, runner keepalive, repeated hosting jobs, or generated third-party accounts.
+`node --test test/worker-app.test.mjs test/static-config.test.mjs` verifies retired-route rejection, preservation of static/AI/music routing, and the external-only production endpoint list. The existing `Check` GitHub Actions workflow runs these tests through `pnpm test`. The removal itself does not recheck external endpoint availability; the table above remains the dated October 3 snapshot.
