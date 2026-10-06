@@ -59,6 +59,7 @@ function createPage({ protocol = 'http:', storageUnavailable = false } = {}) {
     console: { log() {}, warn() {}, error() {} },
     URL, TextEncoder, TextDecoder, AbortSignal, AbortController, setTimeout, clearTimeout,
     requestAnimationFrame() {},
+    setInterval() {},
     localStorage: {
       getItem() {
         if (storageUnavailable) throw new Error('Storage disabled');
@@ -69,6 +70,9 @@ function createPage({ protocol = 'http:', storageUnavailable = false } = {}) {
     navigator: { serviceWorker },
     document: {
       activeElement: null,
+      body: { style: { setProperty() {} } },
+      documentElement: { style: { setProperty() {} } },
+      querySelectorAll() { return []; },
       getElementById: element,
       createElement: makeElement,
       createDocumentFragment: makeElement,

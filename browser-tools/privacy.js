@@ -6,7 +6,7 @@ export const defaults = Object.freeze({
   background: 'none', backgroundUrl: '', cloak: 'monkeh', autoCloak: false,
   blobCloak: false, panicKey: '', panicUrl: 'https://www.google.com/',
   closeProtection: false, skipLoading: true, nativeDevtoolsGuard: true, detectDocked: false,
-  characterMasking: false, userAgent: '', particleEffect: 'none', particleDensity: 'normal',
+  characterMasking: true, displayTextVersion: 1, userAgent: '', particleEffect: 'none', particleDensity: 'normal',
   backgroundOpacity: 40, backgroundBlur: 0, glassMode: false, glassOpacity: 88, glassBlur: 16
 });
 export const searchEngines = Object.freeze({
@@ -49,9 +49,13 @@ export function frameSandbox(settings, proxied) {
   return flags.join(' ');
 }
 
+export function restorePrivacy(value) {
+  return normalizePrivacy(value && typeof value === 'object' && !Array.isArray(value) && value.displayTextVersion !== 1 ? { ...value, characterMasking: true } : value);
+}
+
 if (typeof window !== 'undefined') {
   let settings;
-  try { settings = normalizePrivacy(JSON.parse(localStorage.getItem(KEY))); }
+  try { settings = restorePrivacy(JSON.parse(localStorage.getItem(KEY))); }
   catch { settings = { ...defaults }; }
   let savedValue = JSON.stringify(settings);
   let pendingSave = false;
@@ -98,7 +102,7 @@ if (typeof window !== 'undefined') {
     get: () => ({ ...settings }),
     update,
     flush,
-    sync: value => update(value, { persist: false, replace: true }),
+    sync: value => update(restorePrivacy(value), { persist: false, replace: true }),
     sandbox: proxied => frameSandbox(settings, proxied),
     search: query => searchEngines[settings.searchEngine] + encodeURIComponent(query)
   });

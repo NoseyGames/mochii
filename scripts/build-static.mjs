@@ -17,7 +17,7 @@ export const staticFiles = Object.freeze([
   'browser-tools/runtime.js', 'browser-tools/remote-runtime.js',
   'browser-tools/proxy-network.js', 'browser-tools/proxy-host.js', 'browser-tools/proxy-bootstrap.js',
   'browser-tools/userscripts.js', 'browser-tools/privacy.js', 'browser-tools/ai-help.js',
-  'browser-tools/devtools-guard.js', 'browser-tools/preferences.js', 'browser-tools/preferences.css',
+  'browser-tools/devtools-guard.js', 'browser-tools/preferences.js', 'browser-tools/preferences.css', 'browser-tools/display-text.js',
   'browser-tools/game-catalog.js', 'browser-tools/game-catalog.json', 'browser-tools/game-catalog.css',
   'browser-tools/catalog-identity.js', 'browser-tools/music-catalog.js', 'browser-tools/music-catalog.css', 'browser-tools/music-catalog.json',
   'browser-tools/particles.js', 'browser-tools/particles.css', 'browser-tools/proxy-identity.js',

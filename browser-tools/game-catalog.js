@@ -1,4 +1,5 @@
 import { normalizeCatalogTitle } from './catalog-identity.js';
+import { readDisplayText } from './display-text.js';
 
 const REFERENCE_ORIGIN = 'https://photos.tram-gallery.ru';
 const CHERRI_ORIGIN = 'https://h35d5a9.jfs-autoelevadores.com.ar';
@@ -562,7 +563,7 @@ export function createGameCatalog(win, doc) {
       if (!ready) render();
       else updateStatus();
       if (!ready && node('games-status')) node('games-status').textContent = 'Catalogs could not be loaded. Use Refresh to try again.';
-      else if (outcomes[0].status === 'rejected' && node('games-status')) node('games-status').textContent += ' · Some sources are temporarily unavailable.';
+      else if (outcomes[0].status === 'rejected' && node('games-status')) node('games-status').textContent = readDisplayText(node('games-status')) + ' · Some sources are temporarily unavailable.';
       return games.length;
     })().finally(() => { loading = null; });
     return loading;

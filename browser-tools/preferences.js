@@ -1,5 +1,7 @@
 import { defaults, normalizePrivacy } from './privacy.js';
 import './devtools-guard.js';
+import { createDisplayMasker, maskCharacters } from './display-text.js';
+export { maskCharacters } from './display-text.js';
 
 export const cloakPresets = Object.freeze({ monkeh: ['mochii', 'm', '#444444'], google: ['Google', 'G', '#4285f4'], classroom: ['Google Classroom', 'C', '#137333'], clever: ['Clever', 'C', '#1565c0'], desmos: ['Desmos', 'D', '#248b48'], wikipedia: ['Wikipedia', 'W', '#777777'], gmail: ['Gmail', 'M', '#c5221f'], drive: ['Google Drive', 'D', '#188038'], newtab: ['New Tab', '+', '#777777'], bing: ['Bing', 'b', '#008373'] });
 export const fonts = Object.freeze({ default: ['Default', 'Inter, system-ui, sans-serif'], outfit: ['Outfit', 'Outfit, system-ui, sans-serif'], 'space-mono': ['Space Mono', '"Space Mono", monospace'], obscured: ['Obscured', '"Libre Barcode 128 Text", monospace'], codystar: ['Codystar', 'Codystar, sans-serif'], silkscreen: ['Silkscreen', 'Silkscreen, monospace'] });
@@ -18,12 +20,12 @@ export const userAgentPresets = Object.freeze([
   ['xbox', 'Xbox Series X', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; Xbox; Xbox Series X) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0']
 ].map(preset => Object.freeze(preset)));
 
-const lookalikes = Object.freeze({ a: 'а', c: 'с', e: 'е', o: 'о', p: 'р', x: 'х', y: 'у', s: 'ѕ', i: 'і', j: 'ј', h: 'һ', A: 'А', B: 'В', C: 'С', E: 'Е', H: 'Н', K: 'К', M: 'М', O: 'О', P: 'Р', T: 'Т', X: 'Х' });
-export function maskCharacters(value) {
-  return typeof value === 'string' ? [...value].map(character => lookalikes[character] || character).join('') : '';
-}
-
-export function createCharacterMasker(doc, elements = doc.querySelectorAll('.hero-content > .title, #settings-modal .modal-title, #settings-modal .setting-title, #general-preferences .preferences-section > summary, #games-popover .modal-title, #apps-popover .modal-title')) {
+export function createCharacterMasker(doc, elements) {
+  if (elements === undefined && doc.createTextNode) {
+    const controller = createDisplayMasker(doc);
+    return enabled => controller.setEnabled(enabled);
+  }
+  elements ||= doc.querySelectorAll('.hero-content > .title, #settings-modal .modal-title, #settings-modal .setting-title, #general-preferences .preferences-section > summary, #games-popover .modal-title, #apps-popover .modal-title');
   const labels = [...elements].filter(element => !element.children.length && !element.closest?.('input, textarea, select, [contenteditable], #browser-tools, #zone-viewer, .game-item, .music-item'))
     .map(element => ({ element, original: element.textContent }));
   let active = false;
@@ -100,6 +102,7 @@ export function mountPreferences(win = window) {
   const privacy = win.MonkehPrivacy;
   if (!privacy) return;
   let capturing = false;
+  let captureButton;
   let leaving = false;
   const baseTitle = doc.title;
   let favicon = doc.querySelector('link[rel~="icon"]');
@@ -240,10 +243,11 @@ export function mountPreferences(win = window) {
     field(cloaking, 'Auto cloak', 'autoCloak', 'checkbox', 'Use the chosen tab name and icon only when you switch away.');
     field(cloaking, 'Use a blob window', 'blobCloak', 'checkbox', 'Use a blob address instead of about:blank for the cloaked window.');
     button(cloaking, 'Open cloaked window', openCloaked);
-    field(cloaking, 'Character masking', 'characterMasking', 'checkbox', 'Use lookalike letters in interface headings and setting labels. Reversible; screen readers, search, game names, and viewed pages keep the original text.');
+    field(cloaking, 'Character masking', 'characterMasking', 'checkbox', 'Use lookalike letters throughout the interface and catalogs. Search, screen readers, editable text, addresses, and viewed pages keep their original content.');
     const safety = section('Shortcuts and behavior');
     const hotkey = doc.createElement('p'); hotkey.id = 'panic-key-label'; hotkey.className = 'setting-desc'; hotkey.dataset.preferenceGroup = 'panic'; safety.append(hotkey);
     const capture = button(safety, 'Capture shortcut', () => { capturing = true; win.MonkehDevtoolsGuard?.setEnabled(false); capture.textContent = 'Press a key combination…'; });
+    captureButton = capture;
     capture.dataset.preferenceGroup = 'panic';
     button(safety, 'Clear shortcut', () => { stopCapture(); privacy.update({ panicKey: '' }); }).dataset.preferenceGroup = 'panic';
     field(safety, 'Panic URL', 'panicUrl', 'url', 'The shortcut immediately leaves Monkeh for this HTTPS address.');
@@ -355,8 +359,7 @@ export function mountPreferences(win = window) {
     if (!capturing) return;
     capturing = false;
     win.MonkehDevtoolsGuard?.setEnabled(privacy.get().nativeDevtoolsGuard);
-    const button = [...(settingsRoot?.querySelectorAll('button') || [])].find(el => el.textContent === 'Press a key combination…');
-    if (button) button.textContent = 'Capture shortcut';
+    if (captureButton) captureButton.textContent = 'Capture shortcut';
   }
   bindSettingsDialog(win, { isCapturing: () => capturing, onClose: () => { stopCapture(); privacy.flush?.(); } });
   doc.addEventListener('visibilitychange', cloak);

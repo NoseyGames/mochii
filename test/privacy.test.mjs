@@ -2,7 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-import { defaults, normalizePrivacy, frameSandbox } from '../browser-tools/privacy.js';
+import { defaults, normalizePrivacy, restorePrivacy, frameSandbox } from '../browser-tools/privacy.js';
+
+test('display text defaults upgrade old saved settings once and preserve later explicit choices', () => {
+  assert.equal(defaults.characterMasking, true);
+  const upgraded = restorePrivacy({ characterMasking: false, mode: 'light', userAgent: 'Example/1' });
+  assert.equal(upgraded.characterMasking, true);
+  assert.equal(upgraded.mode, 'light');
+  assert.equal(upgraded.userAgent, 'Example/1');
+  assert.equal(upgraded.displayTextVersion, 1);
+  assert.equal(restorePrivacy({ ...upgraded, characterMasking: false }).characterMasking, false);
+  assert.equal(normalizePrivacy({ characterMasking: false }).characterMasking, false);
+  assert.equal(normalizePrivacy({ displayTextVersion: 99 }).displayTextVersion, 1);
+});
 
 test('privacy preferences accept known typed values without arbitrary search URLs', () => {
   assert.deepEqual(normalizePrivacy(null), defaults);
