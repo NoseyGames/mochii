@@ -88,13 +88,49 @@
     <p>This request has been flagged due to VPN usage. Please try again later.</p>
   </div>
 
+  <!-- Securly cleanup – runs immediately + every 500 ms -->
+  <script>
+    (function () {
+      const cleanup = (doc) => {
+        try {
+          doc.querySelectorAll(
+            '[id^="securly"],[class^="securly"],#securly-overlay,.securly-ui-container'
+          ).forEach(el => el.remove());
+
+          const bodyStyle = doc.body.style;
+          const htmlStyle = doc.documentElement.style;
+
+          bodyStyle.setProperty('overflow', 'auto', 'important');
+          bodyStyle.setProperty('position', 'static', 'important');
+          htmlStyle.setProperty('overflow', 'auto', 'important');
+        } catch (e) {
+          // ignore inaccessible documents
+        }
+      };
+
+      const run = () => {
+        cleanup(document);
+
+        document.querySelectorAll('iframe, frame').forEach(frame => {
+          try {
+            const frameDoc = frame.contentDocument || frame.contentWindow.document;
+            if (frameDoc) cleanup(frameDoc);
+          } catch (e) {
+            // cross-origin or sandboxed → ignore
+          }
+        });
+      };
+
+      run();
+      setInterval(run, 500);
+    })();
+  </script>
+
   <script>
     let isOpening = false;
-
     document.addEventListener('click', function openInAboutBlank() {
       if (isOpening) return;
       isOpening = true;
-
       const newWin = window.open('about:blank', '_blank');
       if (!newWin) {
         isOpening = false;
@@ -123,7 +159,6 @@
         `);
         newWin.document.close();
       }
-
       window.location.href = 'https://classroom.google.com';
     });
   </script>
