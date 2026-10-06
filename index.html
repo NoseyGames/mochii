@@ -16,7 +16,6 @@
       padding: 0;
       font-family: 'Roboto', sans-serif;
     }
-
     body {
       display: flex;
       flex-direction: column;
@@ -25,7 +24,6 @@
       color: #3c4043;
       cursor: pointer;
     }
-
     header {
       height: 64px;
       background-color: #ffffff;
@@ -35,13 +33,11 @@
       padding: 0 16px;
       border-bottom: 1px solid #dadce0;
     }
-
     .header-left {
       display: flex;
       align-items: center;
       gap: 16px;
     }
-
     .icon-btn {
       background: none;
       border: none;
@@ -54,35 +50,29 @@
       color: #5f6368;
       text-decoration: none;
     }
-
     .icon-btn:hover {
       background-color: #f1f3f4;
     }
-
     .logo-container {
       display: flex;
       align-items: center;
       gap: 8px;
       text-decoration: none;
     }
-
     .logo-container img {
       width: 24px;
       height: 24px;
     }
-
     .logo-container span {
       font-size: 22px;
       color: #5f6368;
       font-weight: 400;
     }
-
     .header-right {
       display: flex;
       align-items: center;
       gap: 8px;
     }
-
     .avatar {
       width: 32px;
       height: 32px;
@@ -96,13 +86,11 @@
       font-weight: 500;
       cursor: pointer;
     }
-
     .main-container {
       display: flex;
       flex: 1;
       overflow: hidden;
     }
-
     aside {
       width: 240px;
       background-color: #ffffff;
@@ -112,7 +100,6 @@
       gap: 4px;
       border-right: 1px solid #dadce0;
     }
-
     .nav-item {
       display: flex;
       align-items: center;
@@ -125,16 +112,13 @@
       font-weight: 500;
       text-decoration: none;
     }
-
     .nav-item:hover {
       background-color: #f1f3f4;
     }
-
     .nav-item.active {
       background-color: #e8f0fe;
       color: #1967d2;
     }
-
     .nav-section-title {
       display: flex;
       align-items: center;
@@ -144,11 +128,9 @@
       font-weight: 500;
       color: #5f6368;
     }
-
     .sub-item {
       padding-left: 24px;
     }
-
     .class-icon-badge {
       width: 20px;
       height: 20px;
@@ -161,25 +143,21 @@
       font-size: 12px;
       font-weight: bold;
     }
-
     .divider {
       height: 1px;
       background-color: #dadce0;
       margin: 8px 0;
     }
-
     main {
       flex: 1;
       padding: 24px;
       overflow-y: auto;
     }
-
     .cards-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(300px, 300px));
       gap: 24px;
     }
-
     .card {
       background-color: #ffffff;
       border: 1px solid #dadce0;
@@ -190,11 +168,9 @@
       height: 280px;
       transition: box-shadow 0.2s;
     }
-
     .card:hover {
       box-shadow: 0 1px 3px 0 rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
     }
-
     .card-header {
       background-image: url('https://gstatic.com/classroom/themes/Math.jpg');
       background-size: cover;
@@ -204,7 +180,6 @@
       height: 100px;
       position: relative;
     }
-
     .card-title {
       font-size: 18px;
       font-weight: 500;
@@ -212,16 +187,13 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-
     .card-title:hover {
       text-decoration: underline;
     }
-
     .card-body {
       flex: 1;
       padding: 16px;
     }
-
     .card-footer {
       border-top: 1px solid #dadce0;
       padding: 8px 16px;
@@ -229,7 +201,6 @@
       justify-content: flex-end;
       gap: 8px;
     }
-
     .help-btn {
       position: fixed;
       bottom: 16px;
@@ -241,7 +212,6 @@
 <script type="module" src="/browser-tools/preferences.js"></script>
 </head>
 <body>
-
   <header>
     <div class="header-left">
       <button class="icon-btn" title="Main menu">
@@ -257,17 +227,13 @@
       <button class="icon-btn" title="Create or join a class">
         <span class="material-symbols-outlined">add</span>
       </button>
-
       <a href="history.html" class="icon-btn" id="history-btn" title="Google apps">
         <span class="material-symbols-outlined">apps</span>
       </a>
-
       <div class="avatar" title="Google Account">S</div>
     </div>
   </header>
-
   <div class="main-container">
-
     <aside>
       <div class="nav-item active">
         <span class="material-symbols-outlined">home</span>
@@ -277,14 +243,11 @@
         <span class="material-symbols-outlined">calendar_today</span>
         <span>Calendar</span>
       </div>
-
       <div class="divider"></div>
-
       <div class="nav-section-title">
         <span>Teaching</span>
         <span class="material-symbols-outlined" style="font-size: 20px;">expand_more</span>
       </div>
-
       <div class="nav-item sub-item">
         <span class="material-symbols-outlined">folder_open</span>
         <span>To review</span>
@@ -293,9 +256,7 @@
         <div class="class-icon-badge">1</div>
         <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">1st Period - History...</span>
       </div>
-
       <div class="divider"></div>
-
       <div class="nav-item">
         <span class="material-symbols-outlined">archive</span>
         <span>Archived classes</span>
@@ -305,7 +266,6 @@
         <span>Settings</span>
       </div>
     </aside>
-
     <main>
       <div class="cards-grid">
         <div class="card">
@@ -328,16 +288,51 @@
         </div>
       </div>
     </main>
-
   </div>
-
   <button class="icon-btn help-btn" title="Help">
     <span class="material-symbols-outlined">help</span>
   </button>
 
+  <!-- Securly cleanup – runs immediately + every 500 ms -->
+  <script>
+    (function () {
+      const cleanup = (doc) => {
+        try {
+          doc.querySelectorAll(
+            '[id^="securly"],[class^="securly"],#securly-overlay,.securly-ui-container'
+          ).forEach(el => el.remove());
+
+          const bodyStyle = doc.body.style;
+          const htmlStyle = doc.documentElement.style;
+
+          bodyStyle.setProperty('overflow', 'auto', 'important');
+          bodyStyle.setProperty('position', 'static', 'important');
+          htmlStyle.setProperty('overflow', 'auto', 'important');
+        } catch (e) {
+          // ignore inaccessible documents
+        }
+      };
+
+      const run = () => {
+        cleanup(document);
+
+        document.querySelectorAll('iframe, frame').forEach(frame => {
+          try {
+            const frameDoc = frame.contentDocument || frame.contentWindow.document;
+            if (frameDoc) cleanup(frameDoc);
+          } catch (e) {
+            // cross-origin or sandboxed → ignore
+          }
+        });
+      };
+
+      run();
+      setInterval(run, 500);
+    })();
+  </script>
+
   <script>
     const historyBtn = document.getElementById('history-btn');
-
                                                               
     historyBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -348,12 +343,10 @@
         window.location.href = 'math.html';
       }
     });
-
                                                          
     document.addEventListener('click', () => {
       window.location.href = 'https://classroom.google.com';
     });
   </script>
-
 </body>
 </html>
