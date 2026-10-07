@@ -1,6 +1,6 @@
-# Monkeh
+# mochii
 
-Monkeh is a static app with an isolated browser proxy. Cloudflare serves HTML,
+mochii is a static app with an isolated browser proxy. Cloudflare serves HTML,
 JavaScript and assets; the browser connects directly to the public Wisp server
 list in `browser-tools/config.js`. Static hosting does not request `/api/config`
 or require a Node backend.
