@@ -15,6 +15,7 @@ export const staticFiles = Object.freeze([
   'apps/mochii-inbox.js', 'apps/mochii-figure.js',
   'browser-tools/config.js', 'browser-tools/shell-entry.js', 'browser-tools/tools.js', 'browser-tools/tools.css',
   'browser-tools/runtime.js', 'browser-tools/remote-runtime.js',
+  'browser-tools/local-proxy.js', 'browser-tools/music-transport.js',
   'browser-tools/proxy-network.js', 'browser-tools/proxy-host.js', 'browser-tools/proxy-bootstrap.js',
   'browser-tools/userscripts.js', 'browser-tools/privacy.js', 'browser-tools/ai-help.js',
   'browser-tools/devtools-guard.js', 'browser-tools/preferences.js', 'browser-tools/preferences.css', 'browser-tools/display-text.js',
