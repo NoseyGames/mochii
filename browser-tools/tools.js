@@ -340,7 +340,7 @@ async function connectFrame(force = false) {
   try {
     const source = new URL(frame.src, location.href);
     if (source.protocol === 'about:') return;
-    if (source.origin !== window.MonkehProxyOrigin || source.pathname !== '/proxy-host.html' || source.origin === location.origin) {
+    if (source.origin !== window.MonkehProxyOrigin || source.pathname !== '/proxy-host.html') {
       disconnect();
       setConnection(source.origin === location.origin ? 'Local app · tools paused' : 'Isolated content · tools unavailable');
       return;
@@ -349,7 +349,7 @@ async function connectFrame(force = false) {
     disconnect();
     currentDocument = frame.src;
     currentUrl = publicUrl(expectedUrl);
-    setConnection('Connecting to isolated page');
+    setConnection('Connecting to proxied page');
     const target = createRemoteRuntime(frame, window.MonkehProxyOrigin, {
       onPage: page => {
         if (runtime !== target) return;
@@ -363,14 +363,14 @@ async function connectFrame(force = false) {
         $('inspector-styles').replaceChildren();
         $('inspector-text').value = '';
         $('inspector-edit-status').textContent = '';
-        setConnection(page.isError ? 'Proxy error · tools connected' : 'Connected · isolated page', true);
+        setConnection(page.isError ? 'Proxy error · tools connected' : 'Connected · proxied page', true);
         $('inspector-tree').replaceChildren(element('div', 'bt-empty-state', 'Open Inspect to load this page’s elements.'));
         renderActiveTab();
         addEntry('info', ['Page connected. Console capture starts here.']);
                                                                                 
                                                                      
         if (store.list().some(script => script.enabled)) {
-          addEntry('warn', ['Automatic userscripts are paused for isolated pages. Review the page and use Run to send a script manually.']);
+          addEntry('warn', ['Automatic userscripts are paused for proxied pages. Review the page and use Run to send a script manually.']);
         }
       },
       onConsole: event => { if (runtime === target) addEntry(event.level, event.args, event.time); },
@@ -709,7 +709,7 @@ window.MonkehTools = {
       destination = new URL(url);
       const source = new URL(frame.src, location.href);
       if (!expectingDocument || !target?.hasHandshake || typeof target.navigate !== 'function' ||
-          source.origin !== window.MonkehProxyOrigin || source.pathname !== '/proxy-host.html' || source.origin === location.origin ||
+          source.origin !== window.MonkehProxyOrigin || source.pathname !== '/proxy-host.html' ||
           !['http:', 'https:'].includes(destination.protocol) || destination.username || destination.password ||
           destination.href.length > 4096 || [location.origin, source.origin].includes(destination.origin)) return false;
     } catch { return false; }

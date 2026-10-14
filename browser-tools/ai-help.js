@@ -37,19 +37,19 @@ if (form) {
     status.textContent = 'Asking coding help…';
     try {
       const config = await globalThis.MonkehConfig.fetchConfig();
-      const response = await fetch(new URL('/api/assist', config.proxyOrigin), {
+      const response = await fetch(new URL('/api/assist', config.mode === 'static' ? window.location.origin : config.proxyOrigin), {
         method: 'POST', mode: 'cors', credentials: 'omit', redirect: 'error',
         referrerPolicy: 'no-referrer', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: prompt, code: codeSnapshot }), signal
       });
-      if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Coding help is not available on this deployment yet.');
+      if (config.mode === 'static' && [404, 405].includes(response.status) || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Coding help is not available on this deployment yet.');
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || `Coding help returned HTTP ${response.status}.`);
       if (typeof result.answer !== 'string' || result.answer.length > 24000) throw new Error('Coding help returned an invalid response.');
       output.textContent = result.answer;
       status.textContent = 'Review suggestions before running code. Answers can be incorrect.';
     } catch (error) {
-      status.textContent = signal.aborted ? 'Request stopped or timed out. You can try again.' : error instanceof TypeError ? 'Cannot reach coding help. Check your connection; this deployment needs the Worker coding-help API.' : error.message;
+      status.textContent = signal.aborted ? 'Request stopped or timed out. You can try again.' : error instanceof TypeError ? 'Cannot reach coding help. Check your connection; this deployment needs the coding-help API.' : error.message;
     } finally { controller = null; submit.disabled = false; cancel.hidden = true; }
   });
 }

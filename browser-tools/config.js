@@ -1,19 +1,11 @@
-                                                                              
-                                                                     
+
+
 (() => {
-  const productionShellOrigins = Object.freeze([
-    'https://testingproductionubgdontgo.pages.dev',
-    'https://monkeh-noseygames.netlify.app',
-    'https://monkeh-browser.robert360254.chatgpt.site',
-  ]);
   const deployment = Object.freeze({
-    shellOrigin: productionShellOrigins[0],
-    shellOrigins: productionShellOrigins,
-    proxyOrigin: 'https://monkeh.1234-imwatchingyouopenthedoor.workers.dev',
     wispEndpoints: Object.freeze([
-                                                                            
-                                                                               
-                                                                              
+
+
+
       Object.freeze({ name: 'Mercury', url: 'wss://wisp.mercurywork.shop/' }),
       Object.freeze({ name: 'GL Series', url: 'wss://glseries.net/wisp/' }),
       Object.freeze({ name: 'Wispserver.dev', url: 'wss://wispserver.dev/wisp' }),
@@ -42,48 +34,26 @@
       Object.freeze({ name: 'Nostr', url: 'wss://nostr.me/relay' }),
       Object.freeze({ name: 'Crostr', url: 'wss://relay.crostr.com/' }),
       Object.freeze({ name: 'Solife', url: 'wss://wisp.solife.me/' }),
-                                                                                
+
       Object.freeze({ name: 'Anura', url: 'wss://anura.pro/wisp/' }),
     ]),
     windowsVm: null,
   });
 
   function staticConfig(origin = globalThis.location?.origin) {
-    let shellOrigins = deployment.shellOrigins;
-    let proxyOrigin = deployment.proxyOrigin;
-                                                                              
-    if (['http://localhost:4173', 'http://localhost:4174'].includes(origin)) {
-      shellOrigins = Object.freeze(['http://localhost:4173']);
-      proxyOrigin = 'http://localhost:4174';
-    } else if (['http://127.0.0.1:4173', 'http://127.0.0.1:4174'].includes(origin)) {
-      shellOrigins = Object.freeze(['http://127.0.0.1:4173']);
-      proxyOrigin = 'http://127.0.0.1:4174';
-    } else if (!shellOrigins.includes(origin) && origin !== proxyOrigin) {
-      throw new Error('This site address is not configured. Open ' + deployment.shellOrigin + '/math.html or update the origins in browser-tools/config.js.');
+    const address = new URL(origin);
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(address.hostname);
+    if (address.origin !== origin || address.username || address.password ||
+        address.protocol !== 'https:' && !(address.protocol === 'http:' && local)) {
+      throw new Error('Proxy browsing requires HTTPS or localhost.');
     }
     return Object.freeze({
-      mode: 'static', proxyOrigin, shellOrigins,
-      wispEndpoints: deployment.wispEndpoints, maxWispBackups: 31,
+      mode: 'static', wispEndpoints: deployment.wispEndpoints, maxWispBackups: 31,
       requiresAuthentication: false, windowsVm: deployment.windowsVm,
     });
   }
 
-  function redirectShell() {
-    if (globalThis.MonkehUseBackendConfig === true || !globalThis.location) return false;
-    const location = globalThis.location;
-    let shellOrigin;
-    try {
-      const config = staticConfig();
-      if (config.shellOrigins.includes(location.origin)) return false;
-      shellOrigin = config.shellOrigins[0];
-    } catch {
-                                                                                    
-      if (location.hostname?.endsWith('.testingproductionubgdontgo.pages.dev')) shellOrigin = deployment.shellOrigin;
-      else return false;
-    }
-    location.replace(shellOrigin + location.pathname + location.search + location.hash);
-    return true;
-  }
+  function redirectShell() { return false; }
 
   const maximumBytes = 65536;
   const routingError = 'The proxy backend is not connected: /api/config returned a web page instead of JSON. The site owner must route /api/config to the running Monkeh backend; static hosting alone cannot run the proxy.';

@@ -1,4 +1,5 @@
 import { normalizeCatalogTitle } from './catalog-identity.js';
+import { createMusicApi } from './music-transport.js';
 
 export const MUSIC_SOURCES = Object.freeze([
   { id: 'qobuz', label: 'Qobuz' }, { id: 'tidal', label: 'Tidal' }, { id: 'ytm', label: 'YouTube Music' },
@@ -292,12 +293,8 @@ export function mountMusicCatalog(win = window, doc = document, { fetcher = win.
   const footnote = element('p', 'music-footnote', 'Searches all five sources together. Matching names share one row; choose a version in the player. Favorites stay on this device.');
   card.append(header, form, controls, status, issues, list, pagination, playerBox, footnote); dialog.append(card); doc.body.append(dialog);
   const launcher = button('♫ Music', () => open(), 'Open music player'); launcher.classList.add('music-mini-player'); launcher.hidden = true; doc.body.append(launcher);
-  let apiOrigin;
-  const apiUrl = async path => {
-    if (resolveApi) return resolveApi(path);
-    if (!apiOrigin) apiOrigin = (await win.MonkehConfig.fetchConfig()).proxyOrigin;
-    return new URL(path, apiOrigin).href;
-  };
+  const musicApi = resolveApi ? null : createMusicApi({ win });
+  const apiUrl = resolveApi || musicApi.resolve;
   let seeded = false;
   let suspended = false;
   let showCovers = win.MonkehPrivacy?.get().showCovers !== false;
@@ -314,11 +311,21 @@ export function mountMusicCatalog(win = window, doc = document, { fetcher = win.
   let displayedTrack;
   let visibleTracks = [];
   const rows = new Map();
+  const loadCover = image => {
+    const source = image.dataset.src;
+    if (!source || image.dataset.loading === source) return;
+    if (!musicApi) { image.src = source; delete image.dataset.src; return; }
+    image.dataset.loading = source;
+    void musicApi.artwork(source).then(url => {
+      if (image.dataset.src !== source || !image.isConnected || !dialog.open || doc.hidden || suspended) return;
+      image.src = url;
+      delete image.dataset.src;
+    }).catch(() => { image.classList.add('music-art-missing'); }).finally(() => { delete image.dataset.loading; });
+  };
   const coverObserver = typeof win.IntersectionObserver === 'function' ? new win.IntersectionObserver(entries => {
     for (const entry of entries) {
       if (entry.isIntersecting && dialog.open && !doc.hidden && !suspended && entry.target.dataset.src) {
-        entry.target.src = entry.target.dataset.src;
-        delete entry.target.dataset.src;
+        loadCover(entry.target);
         coverObserver.unobserve(entry.target);
       }
     }
@@ -393,7 +400,7 @@ export function mountMusicCatalog(win = window, doc = document, { fetcher = win.
       position++;
       if (entry.image?.dataset.src && dialog.open && !doc.hidden && !suspended) {
         if (coverObserver) coverObserver.observe(entry.image);
-        else { entry.image.src = entry.image.dataset.src; delete entry.image.dataset.src; }
+        else loadCover(entry.image);
       }
     }
     for (const [key, entry] of rows) if (!keep.has(key)) { if (entry.image) coverObserver?.unobserve(entry.image); entry.row.remove(); rows.delete(key); }
