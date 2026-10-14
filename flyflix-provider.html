@@ -14,7 +14,9 @@
     async function startProvider() {
       try {
         const config = await globalThis.MonkehConfig.fetchConfig({ signal: AbortSignal.timeout(10000) });
-        if (config.proxyOrigin !== location.origin || !Array.isArray(config.shellOrigins) || config.shellOrigins.includes(location.origin)) {
+        const origin = new URL(location.origin);
+        const local = origin.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname);
+        if (config.mode === 'static' ? origin.protocol !== 'https:' && !local : config.proxyOrigin !== location.origin || !Array.isArray(config.shellOrigins) || config.shellOrigins.includes(location.origin)) {
           throw new Error('Flyflix must open on the separate proxy origin.');
         }
         location.replace('/proxy-host.html#' + encodeURIComponent('https://flyflix.net/'));

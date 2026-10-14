@@ -312,9 +312,11 @@
       networkPromise = (async () => {
         const config = await globalThis.MonkehConfig.fetchConfig();
         if (!Array.isArray(config.wispEndpoints) || !config.wispEndpoints.length || config.wispEndpoints.length > 32) throw new Error('Invalid proxy server configuration.');
-        const origin = new URL(config.proxyOrigin);
-        if (origin.origin !== config.proxyOrigin || origin.origin === location.origin || origin.username || origin.password || !['http:', 'https:'].includes(origin.protocol)) throw new Error('The proxy must use a separate browser origin.');
-        if (location.protocol === 'https:' && origin.protocol !== 'https:') throw new Error('The isolated proxy requires HTTPS.');
+        const localProxy = config.mode === 'static';
+        const configuredOrigin = localProxy ? location.origin : config.proxyOrigin;
+        const origin = new URL(configuredOrigin);
+        if (origin.origin !== configuredOrigin || (!localProxy && origin.origin === location.origin) || origin.username || origin.password || !['http:', 'https:'].includes(origin.protocol)) throw new Error('The proxy must use a separate browser origin.');
+        if (location.protocol === 'https:' && origin.protocol !== 'https:') throw new Error('The proxy requires HTTPS.');
         for (const entry of config.wispEndpoints) {
           const url = new URL(entry.url, origin);
           if (url.protocol === 'http:') url.protocol = 'ws:';
@@ -326,13 +328,13 @@
         authLink.href = origin.origin + '/api/health';
         authLink.hidden = !config.requiresAuthentication;
                                                                               
-        if (navigator.serviceWorker?.getRegistrations) {
+        if (!localProxy && navigator.serviceWorker?.getRegistrations) {
           const registrations = await navigator.serviceWorker.getRegistrations();
           for (const registration of registrations) {
             if (registration.active?.scriptURL === location.origin + '/sw.js') await registration.unregister();
           }
         }
-        updateStatus('Isolated browser ready', '#22c55e');
+        updateStatus('Browser ready', '#22c55e');
         document.getElementById('network-detail').textContent = `${config.wispEndpoints.length} configured server${config.wispEndpoints.length === 1 ? '' : 's'} · connects when you open a page`;
         return true;
       })().catch(error => {
@@ -614,7 +616,7 @@
       viewerTarget = { title, author, url, isProxied, loadCode };
       viewerIsProxied = isProxied;
       lastEndpoint = null;
-      if (!isProxied && window.MonkehProxyOrigin) updateStatus('Isolated browser ready', '#22c55e');
+      if (!isProxied && window.MonkehProxyOrigin) updateStatus('Browser ready', '#22c55e');
       document.getElementById('network-notice').hidden = true;
       const navigation = ++viewerNavigation;
       if (viewerRequest) viewerRequest.abort();
@@ -703,7 +705,7 @@
       showViewerProgress('');
       viewerIsProxied = false;
       lastEndpoint = null;
-      if (window.MonkehProxyOrigin) updateStatus('Isolated browser ready', '#22c55e');
+      if (window.MonkehProxyOrigin) updateStatus('Browser ready', '#22c55e');
       ++viewerNavigation;
       if (viewerRequest) viewerRequest.abort();
       viewerRequest = null;
