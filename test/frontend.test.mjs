@@ -518,3 +518,18 @@ test('Flyflix catalog launches the live website through the same proxy viewer', 
   assert.equal(element('viewer-frame').src, 'http://localhost:3001/proxy-host.html#https%3A%2F%2Fflyflix.net%2F');
   assert.equal(element('viewer-frame').srcdoc, '');
 });
+
+
+test('static mirrors open their local proxy host and retain the local service worker', async () => {
+  const { page, calls, element } = createPage({ protocol: 'https:' });
+  page.MonkehUseBackendConfig = false;
+  let unregisters = 0;
+  page.navigator.serviceWorker.getRegistrations = async () => [{ active: { scriptURL: page.location.origin + '/sw.js' }, async unregister() { unregisters++; } }];
+  page.fetch = async () => { throw new Error('Static configuration must not request an API'); };
+  await page.openViewer('Search', 'Web', 'https://example.com/', true);
+  assert.equal(page.MonkehProxyOrigin, page.location.origin);
+  assert.equal(element('viewer-frame').src, page.location.origin + '/proxy-host.html#https%3A%2F%2Fexample.com%2F');
+  assert.equal(unregisters, 0);
+  assert.equal(calls.registrations, 0);
+  assert.equal(element('proxy-auth-link').hidden, true);
+});

@@ -192,6 +192,34 @@ test('Flyflix opens the live website through the isolated proxy and rejects inse
   }
 });
 
+test('static Flyflix loads through the current mirror and authenticates its local proxy frame', async () => {
+  const listeners = new Map();
+  const channels = [];
+  const messages = [];
+  const page = contextFor(inlineScript(flyflix), {
+    MonkehUseBackendConfig: false,
+    location: new URL('https://new-mirror.example/flyflix.html'),
+    addEventListener: (name, listener) => listeners.set(name, listener),
+    MessageChannel: class {
+      constructor() { this.port1 = { start() {}, close() {} }; this.port2 = {}; channels.push(this); }
+    },
+    async fetch() { assert.fail('Static launcher must not fetch remote configuration'); }
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(vm.runInContext('frame.src', page), 'https://new-mirror.example/proxy-host.html#https%3A%2F%2Fflyflix.net%2F');
+  page.recordMessage = (...args) => messages.push(args);
+  const target = vm.runInContext('frame.contentWindow = { postMessage: recordMessage }; frame.contentWindow', page);
+  const handshake = { isTrusted: true, source: target, origin: page.location.origin, data: { type: 'monkeh-proxy:ready' } };
+  for (const change of [{ isTrusted: false }, { source: {} }, { origin: 'https://other-mirror.example' }, { data: { type: 'provider-rendered' } }]) listeners.get('message')({ ...handshake, ...change });
+  assert.equal(channels.length, 0);
+  listeners.get('message')(handshake);
+  assert.equal(channels.length, 1);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0][1], page.location.origin);
+  assert.equal(messages[0][2][0], channels[0].port2);
+  assert.throws(() => page.validateProviderOrigin('https://other-mirror.example', true), /configured proxy origin/);
+});
+
 test('Flyflix waits for deferred privacy settings before its first static-config navigation', async () => {
   const elements = new Map();
   const listeners = new Map();
@@ -286,5 +314,18 @@ test('old Flyflix provider links redirect only from the configured proxy origin'
     });
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(redirected, origin === 'https://proxy.test' ? '/proxy-host.html#https%3A%2F%2Fflyflix.net%2F' : undefined);
+  }
+});
+
+test('static Flyflix provider links use the same mirror and reject insecure nonlocal pages', async () => {
+  for (const origin of ['https://new-mirror.example', 'http://localhost:4173', 'http://insecure.example']) {
+    let redirected;
+    const page = contextFor(inlineScript(flyflixProvider), {
+      MonkehUseBackendConfig: false,
+      location: { origin, href: origin + '/flyflix-provider.html', replace(value) { redirected = value; } },
+      async fetch() { assert.fail('Static provider must not fetch remote configuration'); }
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(redirected, origin === 'http://insecure.example' ? undefined : '/proxy-host.html#https%3A%2F%2Fflyflix.net%2F');
   }
 });
