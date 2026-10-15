@@ -77,8 +77,10 @@ test('public pages and proxy dependencies are served with browser-usable types',
     ['/ultrav/uv.handler.js', /(?:text|application)\/javascript/i],
     ['/ultrav/uv.client.js', /(?:text|application)\/javascript/i],
     ['/bearmux/index.js', /(?:text|application)\/javascript/i],
+    ['/bearmux/index.js?v=2.1.9', /(?:text|application)\/javascript/i],
     ['/bearmux/worker.js', /(?:text|application)\/javascript/i],
     ['/bearmux/epoxy/index.mjs', /(?:text|application)\/javascript/i],
+    ['/bearmux/epoxy/index.mjs?v=2.1.28', /(?:text|application)\/javascript/i],
   ];
   for (const [path, contentType] of assets) {
     await t.test(path, async () => {

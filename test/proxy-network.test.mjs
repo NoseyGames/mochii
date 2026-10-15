@@ -220,6 +220,38 @@ test('activation failure selects the next backup', async () => {
   app.manager.dispose();
 });
 
+test('reachable servers with failed transport setup report a local runtime error and recover', async () => {
+  const failure = new Error('Incompatible client and worker protocol');
+  let broken = true;
+  const app = network({ activate: async () => { if (broken) throw failure; } });
+  await assert.rejects(app.manager.connect(), error => {
+    assert.equal(error.code, 'PROXY_TRANSPORT_FAILED');
+    assert.equal(error.cause, failure);
+    assert.match(error.message, /Servers responded/);
+    return true;
+  });
+  assert.equal(app.probed.length, 2);
+  assert.equal(app.manager.state.failureStage, 'transport');
+  assert.match(app.manager.state.error, /software could not start/);
+  assert.equal(app.time.count, 1);
+  await assert.rejects(app.manager.connect(), { code: 'PROXY_TRANSPORT_FAILED' });
+  assert.equal(app.probed.length, 2);
+  broken = false;
+  await app.manager.connect({ force: true });
+  assert.equal(app.manager.state.status, 'connected');
+  assert.equal(app.manager.state.failureStage, null);
+  assert.equal(app.manager.state.error, null);
+  app.manager.dispose();
+});
+
+test('unreachable servers remain distinct from failed transport initialization', async () => {
+  const app = network({ probe: unavailable });
+  await assert.rejects(app.manager.connect(), { code: 'PROXY_SERVERS_UNAVAILABLE' });
+  assert.equal(app.manager.state.failureStage, 'probe');
+  assert.match(app.manager.state.error, /None of the configured/);
+  app.manager.dispose();
+});
+
 test('health monitoring switches only after two consecutive failures', async () => {
   const down = new Set();
   const attempts = [];

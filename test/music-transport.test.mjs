@@ -95,12 +95,12 @@ test('lazy initialization coalesces parallel sources and covers, then reuses the
   await proxy.url('https://music.example/later', config);
   assert.equal(calls.filter(([name]) => name === 'register').length, 1);
   assert.equal(calls.filter(([name]) => name === 'network').length, 1);
-  assert.deepEqual(calls.find(([name]) => name === 'set'), ['set', '/bearmux/epoxy/index.mjs', [{ wisp: 'wss://wisp.example.test/' }]]);
+  assert.deepEqual(calls.find(([name]) => name === 'set'), ['set', '/bearmux/epoxy/index.mjs?v=2.1.28', [{ wisp: 'wss://wisp.example.test/' }]]);
   assert.equal(calls.filter(([name]) => name === 'dispose').length, 1);
 });
 
 test('music reuses an already configured browser transport without probing or resetting it', async () => {
-  const { win, calls, createNetwork } = fixture({ existing: '/bearmux/epoxy/index.mjs' });
+  const { win, calls, createNetwork } = fixture({ existing: '/bearmux/epoxy/index.mjs?v=2.1.28' });
   const proxy = createLocalProxy({ win, createNetwork });
   await proxy.url('https://music.example/a', config);
   assert.equal(calls.some(([name]) => ['set', 'network'].includes(name)), false);
@@ -114,13 +114,13 @@ test('standalone music lazily loads local runtime scripts in dependency order', 
   const loaded = [];
   const proxy = createLocalProxy({ win, createNetwork, loadScript: async (_, path) => {
     loaded.push(path);
-    if (path === '/bearmux/index.js') win.BareMux = runtime.BareMux;
+    if (path === '/bearmux/index.js?v=2.1.9') win.BareMux = runtime.BareMux;
     if (path === '/ultrav/uv.bundle.js') win.Ultraviolet = runtime.Ultraviolet;
     if (path === '/ultrav/uv.config.js') { assert(win.Ultraviolet); win.__uv$config = runtime.config; }
   } });
   assert.deepEqual(loaded, []);
   await proxy.url('https://music.example/a', config);
-  assert.deepEqual(loaded, ['/bearmux/index.js', '/ultrav/uv.bundle.js', '/ultrav/uv.config.js']);
+  assert.deepEqual(loaded, ['/bearmux/index.js?v=2.1.9', '/ultrav/uv.bundle.js', '/ultrav/uv.config.js']);
 });
 
 test('failed Wisp initialization releases probes and can be retried', async () => {

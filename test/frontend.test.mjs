@@ -533,3 +533,12 @@ test('static mirrors open their local proxy host and retain the local service wo
   assert.equal(calls.registrations, 0);
   assert.equal(element('proxy-auth-link').hidden, true);
 });
+
+test('network status distinguishes local proxy software failures from unreachable servers', () => {
+  const { page, element } = createPage();
+  page.networkStatusChanged({ status: 'unavailable', failureStage: 'transport', configuredCount: 2 });
+  assert.match(element('network-detail').textContent, /Proxy software could not start/);
+  assert.doesNotMatch(element('network-detail').textContent, /servers unavailable/);
+  page.networkStatusChanged({ status: 'unavailable', failureStage: 'probe', configuredCount: 2 });
+  assert.match(element('network-detail').textContent, /Proxy servers unavailable/);
+});
