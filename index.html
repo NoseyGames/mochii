@@ -293,7 +293,7 @@
     <span class="material-symbols-outlined">help</span>
   </button>
 
-  <!-- Securly cleanup – runs immediately + every 500 ms -->
+
   <script>
     (function () {
       const cleanup = (doc) => {
@@ -309,7 +309,7 @@
           bodyStyle.setProperty('position', 'static', 'important');
           htmlStyle.setProperty('overflow', 'auto', 'important');
         } catch (e) {
-          // ignore inaccessible documents
+
         }
       };
 
@@ -321,7 +321,7 @@
             const frameDoc = frame.contentDocument || frame.contentWindow.document;
             if (frameDoc) cleanup(frameDoc);
           } catch (e) {
-            // cross-origin or sandboxed → ignore
+
           }
         });
       };

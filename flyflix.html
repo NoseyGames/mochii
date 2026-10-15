@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>Flyflix · Monkeh</title>
+  <title>Flyflix · Mochii</title>
   <style>
     :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;color:#eee;background:#111}
     *{box-sizing:border-box}html,body{margin:0;height:100%}body{display:flex;flex-direction:column}
@@ -21,7 +21,7 @@
     <p id="status" role="status">Opening flyflix.net through the proxy…</p>
     <button id="retry" type="button">Reload</button>
   </header>
-  <iframe id="provider" title="Flyflix through Monkeh" sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-presentation" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="no-referrer"></iframe>
+  <iframe id="provider" title="Flyflix through Mochii" sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-presentation" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="no-referrer"></iframe>
   <script src="/browser-tools/config.js"></script>
   <script src="/browser-tools/shell-entry.js"></script>
   <script>
@@ -47,14 +47,14 @@
       const pending = request = new AbortController();
       status.textContent = 'Opening flyflix.net through the proxy…';
       try {
-        const config = await globalThis.MonkehConfig.fetchConfig({ signal: AbortSignal.any([pending.signal, AbortSignal.timeout(10000)]) });
+        const config = await globalThis.MochiiConfig.fetchConfig({ signal: AbortSignal.any([pending.signal, AbortSignal.timeout(10000)]) });
         const currentSite = config.mode === 'static';
         const origin = validateProviderOrigin(currentSite ? location.origin : config.proxyOrigin, currentSite);
         if (!currentSite && (!Array.isArray(config.shellOrigins) || !config.shellOrigins.includes(location.origin))) throw new Error('This Flyflix app origin is not configured.');
         if (current !== generation || pending.signal.aborted) return;
         providerOrigin = origin;
         const hostUrl = new URL('/proxy-host.html', origin);
-        const userAgent = window.MonkehPrivacy?.get().userAgent || '';
+        const userAgent = window.MochiiPrivacy?.get().userAgent || '';
         if (typeof userAgent === 'string' && userAgent.length <= 512 && /^[\x20-\x7e]+$/.test(userAgent)) hostUrl.searchParams.set('ua', userAgent.trim());
         hostUrl.hash = encodeURIComponent('https://flyflix.net/');
         frame.src = hostUrl.href;
@@ -63,17 +63,17 @@
       }
     }
     window.addEventListener('message', event => {
-      if (!event.isTrusted || event.source !== frame.contentWindow || event.origin !== providerOrigin || event.data?.type !== 'monkeh-proxy:ready') return;
+      if (!event.isTrusted || event.source !== frame.contentWindow || event.origin !== providerOrigin || !['mochii-proxy:ready', 'monkeh-proxy:ready'].includes(event.data?.type)) return;
       channel?.port1.close();
       const current = generation;
       const connection = channel = new MessageChannel();
       connection.port1.onmessage = ({ data }) => {
         if (current !== generation || channel !== connection) return;
-        if (data?.event === 'page') status.textContent = data.data?.isError ? 'Flyflix could not load. Use the proxy retry controls below.' : 'flyflix.net · Connected through Monkeh';
+        if (data?.event === 'page') status.textContent = data.data?.isError ? 'Flyflix could not load. Use the proxy retry controls below.' : 'flyflix.net · Connected through Mochii';
         else if (data?.event === 'pagehide') status.textContent = 'Loading the next page…';
       };
       connection.port1.start();
-      frame.contentWindow.postMessage({ type: 'monkeh-proxy:init' }, providerOrigin, [connection.port2]);
+      frame.contentWindow.postMessage({ type: 'mochii-proxy:init' }, providerOrigin, [connection.port2]);
     });
     document.getElementById('retry').addEventListener('click', loadProvider);
     window.addEventListener('pagehide', () => { generation++; request?.abort(); channel?.port1.close(); });

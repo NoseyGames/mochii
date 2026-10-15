@@ -31,6 +31,8 @@ function hostIdentity(client) {
 
 function identityKey(id) { return self.location.origin + '/__monkeh_identity__/' + encodeURIComponent(id); }
 
+function messageType(value) { return typeof value === 'string' && value.startsWith('monkeh:') ? 'mochii:' + value.slice(7) : value; }
+
 async function readIdentityRecord(response) {
 	if (!response) return null;
 	try {
@@ -66,9 +68,9 @@ async function identityMessage(event) {
 		const sender = await self.clients.get(event.source.id);
 		const data = event.data;
 		if (!/^[a-f0-9]{32}$/.test(data.nonce || '')) throw new Error();
-		if (data.type === 'monkeh:identity:client' && bootstrapNonce(sender) === data.nonce) {
+		if (messageType(data.type) === 'mochii:identity:client' && bootstrapNonce(sender) === data.nonce) {
 			reply.postMessage({ ok: true, clientId: sender.id });
-		} else if (data.type === 'monkeh:identity:bind' && hostIdentity(sender) !== null && typeof data.clientId === 'string' && data.clientId.length <= 128) {
+		} else if (messageType(data.type) === 'mochii:identity:bind' && hostIdentity(sender) !== null && typeof data.clientId === 'string' && data.clientId.length <= 128) {
 			const child = await self.clients.get(data.clientId);
 			if (!child || !/^[a-f0-9]{32}$/.test(data.nonce || '') || bootstrapNonce(child) !== data.nonce) throw new Error();
 			await rememberIdentity(child.id, sender.id);
@@ -80,8 +82,9 @@ async function identityMessage(event) {
 
 self.addEventListener('message', event => {
 	if (!event.source?.id) return;
-	if (event.ports?.length === 1 && ['monkeh:identity:client', 'monkeh:identity:bind'].includes(event.data?.type)) event.waitUntil(identityMessage(event));
-	else if (['monkeh:game:prepare', 'monkeh:game:cancel'].includes(event.data?.type) && (event.data.type === 'monkeh:game:cancel' || event.ports?.length === 1)) event.waitUntil(gameMessage(event));
+	const type = messageType(event.data?.type);
+	if (event.ports?.length === 1 && ['mochii:identity:client', 'mochii:identity:bind'].includes(type)) event.waitUntil(identityMessage(event));
+	else if (['mochii:game:prepare', 'mochii:game:cancel'].includes(type) && (type === 'mochii:game:cancel' || event.ports?.length === 1)) event.waitUntil(gameMessage(event));
 });
 
 function gameError(message) {
@@ -239,7 +242,7 @@ async function gameMessage(event) {
 		const sender = await self.clients.get(event.source.id);
 		if (!sender || hostIdentity(sender) === null || !/^[a-f0-9]{32}$/.test(event.data.nonce || '')) throw gameError('The game loading request was rejected.');
 		const previous = gameStages.get(sender.id);
-		if (event.data.type === 'monkeh:game:cancel') {
+		if (messageType(event.data.type) === 'mochii:game:cancel') {
 			if (previous?.nonce === event.data.nonce) discardGameStage(previous);
 			return;
 		}
@@ -247,14 +250,15 @@ async function gameMessage(event) {
 		for (const entry of gameStages.values()) if (entry.expires <= Date.now()) discardGameStage(entry);
 		if ([...gameStages.values()].some(entry => entry.nonce === event.data.nonce)) throw gameError('The game loading request was rejected.');
 		if (gameStages.size >= gameLimits.entries) throw gameError('Too many games are loading. Close another game and retry.');
-		record = { owner: sender.id, nonce: event.data.nonce, url: self.location.origin + '/__monkeh_game__/' + event.data.nonce, controller: new AbortController(), bytes: 0, expires: Date.now() + gameLimits.ttl, response: null };
+		const stagePrefix = event.data.type === 'monkeh:game:prepare' ? '/__monkeh_game__/' : '/__mochii_game__/';
+		record = { owner: sender.id, nonce: event.data.nonce, url: self.location.origin + stagePrefix + event.data.nonce, controller: new AbortController(), bytes: 0, expires: Date.now() + gameLimits.ttl, response: null };
 		gameStages.set(sender.id, record);
 		const timeout = new Promise((resolve, reject) => {
 			record.timer = setTimeout(() => { reject(gameError('The game source took too long to load. Try another proxy server.')); discardGameStage(record); }, gameLimits.ttl);
 		});
 		const cancelled = new Promise((resolve, reject) => record.controller.signal.addEventListener('abort', () => reject(gameError('Game loading was cancelled.')), { once: true }));
 		const prepare = async () => {
-			const config = await globalThis.MonkehConfig.fetchConfig();
+			const config = await (globalThis.MochiiConfig || globalThis.MonkehConfig).fetchConfig();
 			if (record.controller.signal.aborted) throw gameError('Game loading was cancelled.');
 			return fetchGameCode(record, gameTarget(event.data.url, config), config);
 		};
@@ -340,7 +344,7 @@ function identityScript(value) {
 
 function isProxyOrigin() {
 	if (!originCheck) {
-		originCheck = globalThis.MonkehConfig.fetchConfig().then(config => {
+		originCheck = (globalThis.MochiiConfig || globalThis.MonkehConfig).fetchConfig().then(config => {
 			return config.mode === 'static' || config.proxyOrigin === self.location.origin;
 		}).catch(() => { originCheck = null; return false; });
 	}
@@ -438,7 +442,7 @@ async function repairGameDocument(response) {
 function proxyPageCleanup() {
 	const win = window;
 	const doc = win.document;
-	const key = Symbol.for('monkeh.pageCleanup');
+	const key = Symbol.for('mochii.pageCleanup');
 	const previous = win[key];
 	if (previous?.document === doc) { previous.start(); return; }
 	previous?.dispose();
@@ -524,7 +528,7 @@ async function fetchThroughUV(event, game = null) {
 				};
 				if (game) {
 					nodes.push(script(`history.replaceState(null,'',${JSON.stringify(game.canonicalUrl).replace(/</g, '\\u003c')});`));
-					nodes.push({ tagName: 'meta', nodeName: 'meta', namespaceURI: 'http://www.w3.org/1999/xhtml', childNodes: [], attrs: [{ name: 'name', value: 'monkeh-game-code' }, { name: 'content', value: 'fetched' }], skip: true });
+					nodes.push({ tagName: 'meta', nodeName: 'meta', namespaceURI: 'http://www.w3.org/1999/xhtml', childNodes: [], attrs: [{ name: 'name', value: 'mochii-game-code' }, { name: 'content', value: 'fetched' }], skip: true });
 				}
 				if (userAgent) nodes.push(script(identityScript(userAgent)));
 				if (page || game) nodes.push(script('(' + proxyPageCleanup.toString() + ')();'));
@@ -580,7 +584,7 @@ async function handleCompatibilityRequest(event, requested) {
 
 self.addEventListener("fetch", (event) => {
 	const stage = new URL(event.request.url);
-	if (stage.origin === self.location.origin && stage.pathname.startsWith('/__monkeh_game__/')) {
+	if (stage.origin === self.location.origin && ['/__mochii_game__/', '/__monkeh_game__/'].some(prefix => stage.pathname.startsWith(prefix))) {
 		event.respondWith(preparedGameResponse(event));
 		return;
 	}

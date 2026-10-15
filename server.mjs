@@ -86,7 +86,7 @@ async function serve(req, res, config, proxyMode) {
     return;
   }
   if (!isAuthorized(req, config)) {
-    reply(req, res, 401, 'Authentication required', { 'WWW-Authenticate': 'Basic realm="Monkeh", charset="UTF-8"' });
+    reply(req, res, 401, 'Authentication required', { 'WWW-Authenticate': 'Basic realm="Mochii", charset="UTF-8"' });
     return;
   }
   if (proxyMode && /^\/api\/music\/(?:search|browse|stream)(?:\?|$)/.test(req.url || '') && ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
@@ -162,7 +162,7 @@ async function serve(req, res, config, proxyMode) {
     else if (pathname === '/browser-tools/config.js') {
                                                                                 
                                                                                 
-      res.end('globalThis.MonkehUseBackendConfig = true;\n' + await readFile(filename, 'utf8'));
+      res.end('globalThis.MochiiUseBackendConfig = true;\n' + await readFile(filename, 'utf8'));
     }
     else createReadStream(filename).on('error', () => res.destroy()).pipe(res);
   } catch (error) {
@@ -202,7 +202,7 @@ function createConfiguredServer({ env = process.env, wispOptions } = {}, proxyMo
       return;
     }
     if (!isAllowedHost(req, config)) { reject(421, 'Misdirected Request'); return; }
-    if (!isAuthorized(req, config)) { reject(401, 'Unauthorized', 'WWW-Authenticate: Basic realm="Monkeh", charset="UTF-8"\r\n'); return; }
+    if (!isAuthorized(req, config)) { reject(401, 'Unauthorized', 'WWW-Authenticate: Basic realm="Mochii", charset="UTF-8"\r\n'); return; }
     if (!isAllowedOrigin(req, config)) { reject(403, 'Forbidden'); return; }
     const protocols = req.headers['sec-websocket-protocol'];
     if (protocols && protocols.split(',').map(value => value.trim()).some(value => value !== 'wisp-v2')) {
@@ -227,18 +227,18 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const server = createAppServer();
     const proxyServer = createProxyServer();
     for (const instance of [server, proxyServer]) instance.on('error', error => {
-      console.error('Unable to start Monkeh:', error.message);
+      console.error('Unable to start Mochii:', error.message);
       process.exitCode = 1;
       server.close();
       proxyServer.close();
     });
     server.listen(port, host, () => {
-      console.log(`Monkeh listening on http://${displayHost}:${port} (app: /math.html)`);
+      console.log(`Mochii listening on http://${displayHost}:${port} (app: /math.html)`);
     });
     proxyServer.listen(proxyPort, host, () => console.log(`Isolated proxy listening on http://${displayHost}:${proxyPort} (browser origin: ${proxyOrigin.origin})`));
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { server.close(); proxyServer.close(); });
   } catch (error) {
-    console.error('Unable to start Monkeh:', error.message);
+    console.error('Unable to start Mochii:', error.message);
     process.exitCode = 1;
   }
 }

@@ -1,8 +1,9 @@
 {
-  "name": "monkeh",
+  "name": "mochii",
   "version": "1.0.0",
   "private": true,
-  "description": "Monkeh app with an isolated browser origin and bounded Wisp backend",
+  "license": "SEE LICENSE IN LICENSE",
+  "description": "Mochii app with an isolated browser origin and bounded Wisp backend",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
@@ -12,7 +13,8 @@
     "start": "node server.mjs",
     "build": "node scripts/build-static.mjs",
     "check": "node scripts/check-syntax.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "preview": "node scripts/serve-static.mjs"
   },
   "dependencies": {
     "@mercuryworkshop/bare-mux": "2.1.9",

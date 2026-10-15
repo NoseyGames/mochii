@@ -1,0 +1,94 @@
+Mochii Attribution License 1.0
+Copyright (c) 2026 NoseyGames
+
+1. What this license covers
+
+"Covered Material" means the original Mochii code and documentation for which
+NoseyGames owns copyright and grants permission under this license. It does not
+include third-party code, dependencies, imported catalogs, games, artwork,
+music, fonts, trademarks, or other material owned by someone else, even when
+included in the same repository or build. See docs/THIRD-PARTY-SOURCES.md.
+
+NoseyGames grants only rights it is entitled to grant. An existing third-party
+license continues to govern its material. This license does not replace that
+license, impose extra conditions on it, or restrict rights granted by it.
+
+2. Free permission
+
+Subject to the conditions below, you receive a worldwide, nonexclusive,
+royalty-free copyright license to use, run, copy, study, modify, combine,
+publish, distribute, sell, and sublicense the Covered Material, in original
+or modified form, for personal or commercial purposes. No payment to
+NoseyGames is required. You may charge for your copies, services, or work.
+
+Every recipient of a lawful copy also receives these permissions directly
+from NoseyGames, subject to this license. A sublicense cannot erase the
+conditions on the Covered Material or grant rights that you do not have.
+
+3. Preserve notices and describe authorship honestly
+
+Include this complete license and the copyright notice above with every
+distributed copy or substantial portion of the Covered Material. For a hosted
+application, make them reasonably accessible with its source or legal notices.
+Preserve applicable third-party notices under their own licenses.
+
+Do not knowingly make a materially false statement that you or another party
+originally authored or owns the copyright in Covered Material authored or
+owned by NoseyGames. Do not present a copy or modified version as entirely
+your original work when it still contains that Covered Material.
+
+You may accurately identify yourself as the author and copyright owner of your
+own original modifications, additions, or separate work. You may rename your
+fork and describe it as your project, provided you do not falsely claim the
+authorship or copyright ownership of the original Covered Material. This
+license transfers no ownership of your contributions to NoseyGames.
+
+4. Immediate termination for intentional false claims
+
+If you intentionally make a false claim prohibited by section 3, all
+permissions granted to you under this license terminate automatically and
+immediately when you make that claim, without a warning or cure period.
+
+After termination, stop using, copying, modifying, distributing, sublicensing,
+and hosting the Covered Material to the extent those acts require permission
+under this license. This includes the original Covered Material that remains
+inside your modified versions. You may continue to use your independently
+created material once it is separated from Covered Material for which you no
+longer have permission.
+
+Correcting or withdrawing the claim does not automatically restore this grant.
+It can be restored only with written permission from the relevant copyright
+holder. Obtaining another copy does not restore a terminated grant.
+
+Termination affects the offender's grant only. Recipients who remain in
+compliance keep their own licenses; their rights do not terminate merely
+because a person who supplied their copy lost permission.
+
+5. Rights that this license does not change
+
+Nothing here limits fair use, fair dealing, public-domain rights, mandatory
+statutory rights, or permission available under another applicable license.
+In particular, third-party copyleft terms, including their source obligations,
+termination rules, and reinstatement rights, remain unchanged. This custom
+license must not be used as an additional restriction on an AGPL-covered work.
+
+No right to falsely imply endorsement, affiliation, or trademark ownership is
+granted. Accurate attribution and legally permitted descriptive use remain
+allowed. No support, maintenance, or service availability is promised.
+
+6. Warranty and liability
+
+To the fullest extent allowed by applicable law, the Covered Material is
+supplied as it stands, without promises or warranties, express or implied,
+including warranties of merchantability, fitness for a particular purpose,
+title, or noninfringement. You bear the risk of using or distributing it.
+
+To that same extent, NoseyGames and other copyright holders granting this
+license are not liable for claims, losses, or damages arising from the Covered
+Material or its use, including lost profits, lost data, interruption, and
+direct, indirect, incidental, or consequential damage, under contract, tort,
+or another theory, even if told that such damage could occur. Rights and
+liability that the law does not allow to be excluded remain unaffected.
+
+This is a custom license. It is not presented as an OSI-approved license or
+as a guarantee that any particular provision is enforceable in every place.

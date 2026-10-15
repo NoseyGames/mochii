@@ -1,7 +1,7 @@
                                                                                
 services:
   - type: web
-    name: monkeh-shell
+    name: mochii-shell
     runtime: static
     branch: main
     autoDeployTrigger: checksPass

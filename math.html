@@ -26,6 +26,7 @@
   <script src="/browser-tools/shell-entry.js"></script>
   <script type="module" src="/browser-tools/preferences.js"></script>
   <script type="module" src="/browser-tools/game-catalog.js"></script>
+  <script type="module" src="/browser-tools/shell-ui.js"></script>
   <script type="module" src="/browser-tools/particles.js"></script>
   <link rel="stylesheet" href="/browser-tools/particles.css">
   <link rel="stylesheet" href="/browser-tools/preferences.css">
@@ -38,16 +39,16 @@
   <div class="app-viewport">
                                          
     <nav class="floating-nav">
-      <button class="nav-icon" title="Games" onclick="openGamesPopover()">
+      <button class="nav-icon" title="Games" aria-label="Games" onclick="openGamesPopover()">
         <span class="material-symbols-outlined">sports_esports</span>
       </button>
-      <button class="nav-icon" title="Apps & Sites" onclick="openAppsPopover()">
+      <button class="nav-icon" title="Apps & Sites" aria-label="Apps and sites" onclick="openAppsPopover()">
         <span class="material-symbols-outlined">desktop_windows</span>
       </button>
       <button class="nav-icon" title="Music" aria-label="Music" onclick="openMusicPopover(this)">
         <span class="material-symbols-outlined">music_note</span>
       </button>
-      <button class="nav-icon" title="Settings" onclick="openSettingsModal()">
+      <button class="nav-icon" title="Settings" aria-label="Settings" onclick="openSettingsModal()">
         <span class="material-symbols-outlined">settings</span>
       </button>
     </nav>
@@ -60,11 +61,14 @@
             type="text" 
             class="search-input" 
             id="hero-search" 
+            aria-label="Search or enter a website"
             placeholder="Search anything... (Press '/' to focus)" 
             autocomplete="off"
           />
           <span class="material-symbols-outlined search-icon">search</span>
         </div>
+        <div id="home-shortcuts" class="home-shortcuts" aria-label="Bookmarked sites"></div>
+        <button type="button" id="resume-viewer" class="viewer-btn resume-viewer" onclick="resumeViewer()" hidden>Return to page</button>
         <div class="status-badge" id="connection-status" role="status" aria-live="polite">
           <span class="status-indicator" style="background: orange;"></span>
           <span>Connecting to network...</span>
@@ -73,11 +77,11 @@
     </main>
   </div>
                               
-  <div class="overlay-backdrop" id="games-popover">
+  <div class="overlay-backdrop" id="games-popover" role="dialog" aria-modal="true" aria-labelledby="games-heading" aria-hidden="true" inert>
     <div class="modal-card">
       <div class="modal-header">
-        <h2 class="modal-title">Games Catalog</h2>
-        <button class="close-btn" onclick="closeGamesPopover()">
+        <h2 class="modal-title" id="games-heading">Games Catalog</h2>
+        <button class="close-btn" onclick="closeGamesPopover()" aria-label="Close games">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
@@ -86,10 +90,11 @@
           type="text" 
           class="modal-search-box" 
           id="popover-search-input" 
+          aria-label="Search games"
           placeholder="Search catalog..." 
           oninput="window.renderGames && window.renderGames()"
         />
-        <select class="modal-sort-select" id="popover-sort-select" onchange="window.renderGames && window.renderGames()">
+        <select class="modal-sort-select" id="popover-sort-select" aria-label="Sort games" onchange="window.renderGames && window.renderGames()">
           <option value="pop">Featured</option>
           <option value="az">Name (A-Z)</option>
           <option value="za">Name (Z-A)</option>
@@ -101,11 +106,11 @@
     </div>
   </div>
                              
-  <div class="overlay-backdrop" id="apps-popover">
+  <div class="overlay-backdrop" id="apps-popover" role="dialog" aria-modal="true" aria-labelledby="apps-heading" aria-hidden="true" inert>
     <div class="modal-card">
       <div class="modal-header">
-        <h2 class="modal-title">Apps & Sites</h2>
-        <button class="close-btn" onclick="closeAppsPopover()">
+        <h2 class="modal-title" id="apps-heading">Apps & Sites</h2>
+        <button class="close-btn" onclick="closeAppsPopover()" aria-label="Close apps">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
@@ -114,10 +119,11 @@
           type="text" 
           class="modal-search-box" 
           id="apps-search-input" 
+          aria-label="Search apps"
           placeholder="Search apps..." 
           oninput="window.renderApps && window.renderApps()"
         />
-        <select class="modal-sort-select" id="apps-sort-select" onchange="window.renderApps && window.renderApps()">
+        <select class="modal-sort-select" id="apps-sort-select" aria-label="Sort apps" onchange="window.renderApps && window.renderApps()">
           <option value="pop">Popularity</option>
           <option value="az">Name (A-Z)</option>
           <option value="za">Name (Z-A)</option>
@@ -143,6 +149,7 @@
           <div class="setting-info">
             <span class="setting-title">Proxy network</span>
             <span class="setting-desc" id="network-detail">Checking available servers…</span>
+            <details class="connection-details"><summary>Connection details</summary><p id="connection-diagnostics" class="setting-desc">Open a page or Music to connect. A reachable relay does not guarantee every website will load.</p><button type="button" class="viewer-btn" onclick="copyConnectionDetails()">Copy details</button><span id="connection-copy-status" role="status"></span></details>
             <a id="proxy-auth-link" class="setting-desc" target="_blank" rel="noopener noreferrer" hidden>Sign in to the proxy connection</a>
           </div>
           <button type="button" class="viewer-btn" onclick="retryProxyNetwork()">Reconnect</button>
@@ -166,6 +173,7 @@
         <span class="viewer-author" id="viewer-author">Author</span>
       </div>
       <div class="viewer-actions">
+        <button class="viewer-btn" onclick="hideViewer()" title="Return home and keep this page running">Home</button>
         <button class="viewer-btn" id="browser-tools-toggle" type="button" aria-expanded="false" aria-controls="browser-tools"><span class="material-symbols-outlined" aria-hidden="true">terminal</span> Tools</button>
         <button class="viewer-btn" onclick="toggleViewerFullscreen()">Fullscreen</button>
         <button class="viewer-btn viewer-close-btn" onclick="closeViewer()">Close</button>
@@ -174,6 +182,7 @@
     <div class="browser-toolbar">
       <button type="button" id="browser-reload" class="bt-icon-button" aria-label="Reload viewed page" title="Reload page"><span class="material-symbols-outlined" aria-hidden="true">refresh</span></button>
       <button type="button" id="browser-switch-server" class="bt-icon-button" aria-label="Switch proxy server without reloading" title="Switch proxy server without reloading the page" disabled><span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span></button>
+      <button type="button" id="browser-bookmark" class="bt-icon-button" aria-label="Bookmark current page" title="Bookmark current page"><span class="material-symbols-outlined" aria-hidden="true">bookmark_add</span></button>
       <form id="browser-address" autocomplete="off">
         <span class="material-symbols-outlined" aria-hidden="true">language</span>
         <input id="browser-url" aria-label="Browser address" placeholder="Enter a URL or search" spellcheck="false" />
@@ -281,6 +290,8 @@
     let endpointNames = new Map();
     let lastEndpoint = null;
     let viewerIsProxied = false;
+    let connectionReport = 'No relay selected.';
+    let destinationReport = '';
     function networkStatusChanged(state) {
       const name = endpointNames.get(state.activeEndpoint) || 'Proxy';
       const messages = {
@@ -291,6 +302,11 @@
       updateStatus(messages[state.status] || 'Proxy paused', state.status === 'connected' ? '#22c55e' : '#f59e0b');
       const detail = document.getElementById('network-detail');
       if (detail) detail.textContent = `${messages[state.status] || 'Paused'} · ${state.configuredCount} configured server${state.configuredCount === 1 ? '' : 's'}`;
+      const diagnostics = document.getElementById('connection-diagnostics');
+      let relay = 'Not selected';
+      try { relay = new URL(state.activeEndpoint).hostname; } catch {}
+      connectionReport = `Relay: ${relay}. Status: ${messages[state.status] || 'Paused'}. ${state.status === 'connected' ? 'Wisp connection established; destination HTTPS and media availability are checked separately.' : 'Stage: ' + (state.failureStage || 'connection') + '.'}`;
+      if (diagnostics) diagnostics.textContent = connectionReport + destinationReport;
       if (state.activeEndpoint && state.status === 'connected') {
         if (lastEndpoint && lastEndpoint !== state.activeEndpoint && viewerIsProxied) {
           document.getElementById('network-notice-text').textContent = `Switched to ${name}. Reload if this page stopped responding.`;
@@ -299,18 +315,30 @@
         lastEndpoint = state.activeEndpoint;
       }
     }
+    function destinationStatusChanged(page) {
+      let host;
+      try { host = new URL(page.url).hostname; } catch { return; }
+      destinationReport = ` Last page: ${host} · ${page.isError ? 'destination failed' : 'page connected'} at ${new Date().toLocaleTimeString()}.`;
+      const diagnostics = document.getElementById('connection-diagnostics');
+      if (diagnostics) diagnostics.textContent = connectionReport + destinationReport;
+    }
+    async function copyConnectionDetails() {
+      const status = document.getElementById('connection-copy-status');
+      try { await navigator.clipboard.writeText(document.getElementById('connection-diagnostics').textContent); status.textContent = 'Copied'; }
+      catch { status.textContent = 'Copy unavailable. Select the details above to copy them.'; }
+    }
     function retryProxyNetwork() {
-      if (viewerIsProxied) return window.MonkehTools?.reconnect?.();
-      window.MonkehProxyOrigin = null;
+      if (viewerIsProxied) return window.MochiiTools?.reconnect?.();
+      window.MochiiProxyOrigin = null;
       return initializeNetwork();
     }
     function initializeNetwork() {
       if (networkPromise) return networkPromise;
-      if (window.MonkehProxyOrigin) return Promise.resolve(true);
+      if (window.MochiiProxyOrigin) return Promise.resolve(true);
       networkErrorMessage = '';
       updateStatus('Checking browser configuration…', '#f59e0b');
       networkPromise = (async () => {
-        const config = await globalThis.MonkehConfig.fetchConfig();
+        const config = await globalThis.MochiiConfig.fetchConfig();
         if (!Array.isArray(config.wispEndpoints) || !config.wispEndpoints.length || config.wispEndpoints.length > 32) throw new Error('Invalid proxy server configuration.');
         const localProxy = config.mode === 'static';
         const configuredOrigin = localProxy ? location.origin : config.proxyOrigin;
@@ -323,7 +351,7 @@
           if (url.protocol === 'https:') url.protocol = 'wss:';
           endpointNames.set(url.href, String(entry.name || 'Proxy').slice(0, 80));
         }
-        window.MonkehProxyOrigin = origin.origin;
+        window.MochiiProxyOrigin = origin.origin;
         const authLink = document.getElementById('proxy-auth-link');
         authLink.href = origin.origin + '/api/health';
         authLink.hidden = !config.requiresAuthentication;
@@ -381,7 +409,7 @@
       } catch (_) {
                                                              
       }
-      return window.MonkehPrivacy?.search(trimmed) || 'https://duckduckgo.com/?q=' + encodeURIComponent(trimmed);
+      return window.MochiiPrivacy?.search(trimmed) || 'https://duckduckgo.com/?q=' + encodeURIComponent(trimmed);
     }
     function handleHeroSearch(query) {
       if (!query.trim()) return;
@@ -394,7 +422,8 @@
     window.addEventListener('keydown', (e) => {
       const activeElement = document.activeElement;
       if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey &&
-          !activeElement?.isContentEditable && !activeElement?.matches('input, textarea, select')) {
+          !activeElement?.isContentEditable && !activeElement?.matches('input, textarea, select') &&
+          !document.querySelector?.('[role="dialog"].active, #zone-viewer.active')) {
         e.preventDefault();
         const searchInput = document.getElementById('hero-search');
         if (searchInput) searchInput.focus();
@@ -490,10 +519,11 @@
       closeAppsPopover();
       const popover = document.getElementById('games-popover');
       if (popover) popover.classList.add('active');
-      if (window.MonkehGames) window.MonkehGames.open();
+      if (window.MochiiGames) window.MochiiGames.open();
       else document.getElementById('game-list').textContent = 'The catalog is starting. Reopen Games in a moment.';
     }
     function closeGamesPopover() {
+      window.MochiiGames?.close?.();
       const popover = document.getElementById('games-popover');
       if (popover) popover.classList.remove('active');
     }
@@ -545,7 +575,7 @@
             d.className = 'game-item';
             d.onclick = () => openViewer(t, a, u, false);
             d.innerHTML = `
-              ${v && window.MonkehPrivacy?.get().showCovers !== false ? `<img class="game-cover" src="${escapeHtml(v)}" alt="${escapeHtml(t)}" loading="lazy" onerror="this.style.display='none'">` : ''}
+              ${v && window.MochiiPrivacy?.get().showCovers !== false ? `<img class="game-cover" src="${escapeHtml(v)}" alt="${escapeHtml(t)}" loading="lazy" onerror="this.style.display='none'">` : ''}
               <div class="game-info">
                 <span class="game-title">${escapeHtml(t)}</span>
                 ${a ? `<span class="game-author">${escapeHtml(a)}</span>` : ''}
@@ -587,6 +617,7 @@
       if (popover) popover.classList.remove('active');
     }
     function openSettingsModal() {
+      closeGamesPopover(); closeAppsPopover(); window.MochiiBookmarks?.close(); window.MochiiMusic?.close?.();
       const modal = document.getElementById('settings-modal');
       if (modal) modal.classList.add('active');
     }
@@ -606,7 +637,7 @@
     function showViewerMessage(message) {
       const frame = document.getElementById('viewer-frame');
       frame.removeAttribute('sandbox');
-      frame.srcdoc = `<!doctype html><html data-monkeh-placeholder><body style="background:#111;color:#eee;font-family:sans-serif;display:grid;place-items:center;min-height:90vh;margin:0;padding:24px;text-align:center"><p>${escapeHtml(message)}</p></body></html>`;
+      frame.srcdoc = `<!doctype html><html data-mochii-placeholder><body style="background:#111;color:#eee;font-family:sans-serif;display:grid;place-items:center;min-height:90vh;margin:0;padding:24px;text-align:center"><p>${escapeHtml(message)}</p></body></html>`;
     }
     async function openViewer(title, author, url, isProxied = false, options = {}) {
       try { const target = new URL(url, window.location.href); if (/^https?:$/.test(target.protocol) && target.origin !== window.location.origin) isProxied = true; } catch {}
@@ -616,7 +647,7 @@
       viewerTarget = { title, author, url, isProxied, loadCode };
       viewerIsProxied = isProxied;
       lastEndpoint = null;
-      if (!isProxied && window.MonkehProxyOrigin) updateStatus('Browser ready', '#22c55e');
+      if (!isProxied && window.MochiiProxyOrigin) updateStatus('Browser ready', '#22c55e');
       document.getElementById('network-notice').hidden = true;
       const navigation = ++viewerNavigation;
       if (viewerRequest) viewerRequest.abort();
@@ -629,6 +660,8 @@
       document.getElementById('viewer-title').textContent = title;
       document.getElementById('viewer-author').textContent = author ? 'by ' + author : '';
       viewer.classList.add('active');
+      viewer.inert = false;
+      document.getElementById('resume-viewer').hidden = true;
       showViewerProgress(isProxied ? 'Connecting to the proxy…' : 'Opening page…');
       try {
         if (!url) throw new Error('This catalog entry has no playable URL.');
@@ -637,12 +670,12 @@
         if (target.username || target.password) throw new Error('Addresses containing login details cannot be opened.');
         if (isProxied) {
           if (target.origin === window.location.origin) throw new Error('App pages cannot be opened as proxy destinations.');
-          if (target.protocol === 'http:' && window.MonkehPrivacy?.get().httpsOnly !== false) throw new Error('HTTPS is required for entered addresses. Change this in Settings to open an HTTP page.');
-          const sandbox = window.MonkehPrivacy?.sandbox(true) || 'allow-scripts allow-same-origin allow-forms allow-pointer-lock';
+          if (target.protocol === 'http:' && window.MochiiPrivacy?.get().httpsOnly !== false) throw new Error('HTTPS is required for entered addresses. Change this in Settings to open an HTTP page.');
+          const sandbox = window.MochiiPrivacy?.sandbox(true) || 'allow-scripts allow-same-origin allow-forms allow-pointer-lock';
           const currentHost = new URL(frame.src || 'about:blank', location.href);
           const currentIdentity = currentHost.searchParams.get('ua') || '';
-          if (canReuseProxy && (currentHost.searchParams.get('loadCode') === '1') === loadCode && currentIdentity === (window.MonkehPrivacy?.get().userAgent || '') && frame.getAttribute?.('sandbox') === sandbox) {
-            const reused = await window.MonkehTools?.navigateRemote?.(target.href);
+          if (canReuseProxy && (currentHost.searchParams.get('loadCode') === '1') === loadCode && currentIdentity === (window.MochiiPrivacy?.get().userAgent || '') && frame.getAttribute?.('sandbox') === sandbox) {
+            const reused = await window.MochiiTools?.navigateRemote?.(target.href);
             if (navigation !== viewerNavigation) return;
             if (reused) { showViewerProgress(''); return; }
           }
@@ -651,23 +684,23 @@
           const ready = await initializeNetwork();
           if (navigation !== viewerNavigation) return;
           if (!ready) throw new Error(networkErrorMessage);
-          window.MonkehTools?.prepareNavigation(url, true);
-          window.MonkehTools?.expectDocument(target.href, true);
+          window.MochiiTools?.prepareNavigation(url, true);
+          window.MochiiTools?.expectDocument(target.href, true);
           frame.removeAttribute('srcdoc');
                                                                                 
                                                                             
-          frame.setAttribute('sandbox', window.MonkehPrivacy?.sandbox(true) || 'allow-scripts allow-same-origin allow-forms allow-pointer-lock');
-          const hostUrl = new URL('/proxy-host.html', window.MonkehProxyOrigin);
+          frame.setAttribute('sandbox', window.MochiiPrivacy?.sandbox(true) || 'allow-scripts allow-same-origin allow-forms allow-pointer-lock');
+          const hostUrl = new URL('/proxy-host.html', window.MochiiProxyOrigin);
           if (loadCode) hostUrl.searchParams.set('loadCode', '1');
-          const userAgent = window.MonkehPrivacy?.get().userAgent || '';
+          const userAgent = window.MochiiPrivacy?.get().userAgent || '';
           if (typeof userAgent === 'string' && userAgent.length <= 512 && /^[\x20-\x7e]+$/.test(userAgent)) hostUrl.searchParams.set('ua', userAgent.trim());
           hostUrl.hash = encodeURIComponent(target.href);
           frame.src = hostUrl.href;
         } else if (target.origin === window.location.origin) {
           if (!['/apps/auk.html', '/apps/vox.html', '/apps/desktop.html', '/apps/mochii-cloud.html', '/flyflix.html'].includes(target.pathname)) throw new Error('This local app is not in the trusted app list.');
                                                                                     
-          window.MonkehTools?.prepareNavigation(url, false);
-          window.MonkehTools?.expectDocument(target.href, false);
+          window.MochiiTools?.prepareNavigation(url, false);
+          window.MochiiTools?.expectDocument(target.href, false);
           frame.removeAttribute('srcdoc');
           frame.removeAttribute('sandbox');
           frame.src = target.href;
@@ -685,7 +718,7 @@
           viewerIsProxied = previousIsProxied;
           showViewerProgress(message, true);
         } else {
-          window.MonkehTools?.prepareNavigation(url, isProxied);
+          window.MochiiTools?.prepareNavigation(url, isProxied);
           frame.src = 'about:blank';
           showViewerMessage(message);
           showViewerProgress('');
@@ -699,20 +732,39 @@
       const { title, author, url, isProxied, loadCode } = viewerTarget;
       return openViewer(title, author, url, isProxied, { loadCode });
     }
+    function hideViewer() {
+      const viewer = document.getElementById('zone-viewer');
+      if (!viewerTarget || !viewerHasContent) return closeViewer();
+      viewer.classList.remove('active'); viewer.inert = true;
+      const resume = document.getElementById('resume-viewer');
+      resume.textContent = 'Return to ' + String(viewerTarget.title || 'page').slice(0, 80);
+      resume.hidden = false;
+      if (document.fullscreenElement) document.exitFullscreen?.().catch?.(() => {});
+      document.getElementById('hero-search')?.focus?.();
+    }
+    function resumeViewer() {
+      if (!viewerTarget || !viewerHasContent) return;
+      closeGamesPopover(); closeAppsPopover(); closeSettingsModal(); window.MochiiBookmarks?.close();
+      const viewer = document.getElementById('zone-viewer'); viewer.inert = false; viewer.classList.add('active');
+      document.getElementById('resume-viewer').hidden = true;
+      document.getElementById('viewer-frame')?.focus?.();
+    }
     function closeViewer() {
       viewerTarget = null;
       viewerHasContent = false;
+      document.getElementById('resume-viewer').hidden = true;
       showViewerProgress('');
       viewerIsProxied = false;
       lastEndpoint = null;
-      if (window.MonkehProxyOrigin) updateStatus('Browser ready', '#22c55e');
+      if (window.MochiiProxyOrigin) updateStatus('Browser ready', '#22c55e');
       ++viewerNavigation;
       if (viewerRequest) viewerRequest.abort();
       viewerRequest = null;
-      window.MonkehTools?.closeViewer();
+      window.MochiiTools?.closeViewer();
       const viewer = document.getElementById('zone-viewer');
       const frame = document.getElementById('viewer-frame');
       if (viewer) viewer.classList.remove('active');
+      if (viewer) viewer.inert = true;
       if (frame) {
         frame.removeAttribute('srcdoc');
         frame.src = 'about:blank';
@@ -746,7 +798,7 @@
     });
   </script>
 
-  <!-- Securly cleanup – runs immediately + every 500 ms -->
+
   <script>
     (function () {
       const cleanup = (doc) => {
@@ -762,7 +814,7 @@
           bodyStyle.setProperty('position', 'static', 'important');
           htmlStyle.setProperty('overflow', 'auto', 'important');
         } catch (e) {
-          // ignore inaccessible documents
+
         }
       };
 
@@ -774,7 +826,7 @@
             const frameDoc = frame.contentDocument || frame.contentWindow.document;
             if (frameDoc) cleanup(frameDoc);
           } catch (e) {
-            // cross-origin or sandboxed → ignore
+
           }
         });
       };

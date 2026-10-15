@@ -3,6 +3,8 @@ node_modules/
 .cache/
 .env
 .env.*
+.dev.vars
+.dev.vars.*
 !.env.example
 *.log
 test-results/
