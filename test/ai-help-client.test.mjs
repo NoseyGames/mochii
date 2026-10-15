@@ -11,7 +11,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-function harness(configPromise) {
+function harness(configPromise, responseFactory = () => new Response(JSON.stringify({ answer: '<script>Never execute this answer.</script>' }), { headers: { 'Content-Type': 'application/json' } })) {
   const elements = new Map();
   function get(id) {
     if (!elements.has(id)) elements.set(id, {
@@ -26,6 +26,7 @@ function harness(configPromise) {
   const context = vm.createContext({
     document: { getElementById: get },
     window: {
+      location: new URL('https://mirror.example/math'),
       MonkehPrivacy: { get: () => ({ aiEnabled: true }) },
       addEventListener(name, callback) { windowListeners.set(name, callback); },
     },
@@ -34,7 +35,7 @@ function harness(configPromise) {
     fetch: async (url, options) => {
       options.signal.throwIfAborted();
       requests.push({ url: url.href, body: JSON.parse(options.body), options });
-      return new Response(JSON.stringify({ answer: '<script>Never execute this answer.</script>' }), { headers: { 'Content-Type': 'application/json' } });
+      return responseFactory();
     },
   });
   vm.runInContext(source, context, { filename: 'ai-help.js' });
@@ -52,10 +53,26 @@ test('coding help sends only the question and code present when Ask was pressed'
   config.resolve({ proxyOrigin: 'https://proxy.example' });
   await pending;
   assert.equal(app.requests.length, 1);
+  assert.equal(app.requests[0].url, 'https://proxy.example/api/assist');
   assert.deepEqual(app.requests[0].body, { question: 'Explain this function', code: 'const publicExample = 1;' });
   assert.equal(app.requests[0].options.credentials, 'omit');
   assert.equal(app.requests[0].options.referrerPolicy, 'no-referrer');
   assert.equal(app.get('ai-output').textContent, '<script>Never execute this answer.</script>');
+});
+
+test('static coding help uses only the current mirror API and reports absent APIs clearly', async () => {
+  for (const response of [new Response('<!DOCTYPE html><title>Static site</title>', { headers: { 'Content-Type': 'text/html' } }), new Response('Not Found', { status: 404 }), Response.json({ error: 'Missing route' }, { status: 404 }), Response.json({ error: 'Method not allowed' }, { status: 405 })]) {
+    const app = harness(Promise.resolve({ mode: 'static', wispEndpoints: ['wss://relay.example/wisp/'] }), () => response);
+    app.get('ai-question').value = 'Explain this function';
+    await app.get('ai-help-form').emit('submit');
+    assert.equal(app.requests.length, 1);
+    assert.equal(app.requests[0].url, 'https://mirror.example/api/assist');
+    assert.equal(app.requests[0].options.credentials, 'omit');
+    assert.match(app.get('ai-status').textContent, /not available on this deployment/);
+    assert.equal(app.get('ai-output').textContent, '');
+    assert.equal(app.get('ai-submit').disabled, false);
+    assert.equal(app.get('ai-cancel').hidden, true);
+  }
 });
 
 test('disabling coding help while configuration loads cancels the pending request', async () => {

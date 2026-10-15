@@ -431,7 +431,8 @@ function deadline(promise, label, milliseconds = 15000) {
 
 async function controlledWorker() {
   const registration = await deadline(navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }), 'Service worker registration timed out.');
-  const updating = registration?.installing || registration?.waiting;
+  if (registration?.update && !registration.installing && !registration.waiting) await deadline(registration.update(), 'The proxy worker update check timed out. Reload this page.');
+  const updating = registration?.installing || registration?.waiting || (registration?.active !== navigator.serviceWorker.controller ? registration?.active : null);
   if (updating) {
     let listener;
     await deadline(new Promise((resolve, reject) => {
@@ -545,9 +546,12 @@ async function start() {
       return;
     }
     if (!config) {
-      const loadedConfig = await globalThis.MonkehConfig.fetchConfig();
+      const fetchedConfig = await globalThis.MonkehConfig.fetchConfig();
+      const loadedConfig = fetchedConfig.mode === 'static'
+        ? { ...fetchedConfig, proxyOrigin: location.origin, shellOrigins: [location.origin] }
+        : fetchedConfig;
       if (!Array.isArray(loadedConfig.shellOrigins) || loadedConfig.proxyOrigin !== location.origin ||
-          !Array.isArray(loadedConfig.wispEndpoints) || loadedConfig.wispEndpoints.length < 1 || loadedConfig.wispEndpoints.length > 32) throw new Error('The isolated proxy origin is misconfigured.');
+          !Array.isArray(loadedConfig.wispEndpoints) || loadedConfig.wispEndpoints.length < 1 || loadedConfig.wispEndpoints.length > 32) throw new Error('The browser proxy is misconfigured.');
       config = loadedConfig;
                                                                                  
       for (const origin of config.shellOrigins) window.parent.postMessage({ type: 'monkeh-proxy:ready' }, origin);
@@ -566,7 +570,7 @@ async function start() {
       network = createProxyNetwork({ endpoints, fallbackEndpoints,
                                                                            
                                                                             
-        activate: url => transport.setTransport('/bearmux/epoxy/index.mjs', [{ wisp: url }]),
+        activate: url => transport.setTransport('/bearmux/epoxy/index.mjs?v=2.1.28', [{ wisp: url }]),
         onStatus: state => { latestNetwork = state; send('network', state); }
       });
       if (navigator.onLine === false) await network.setOnline(false);

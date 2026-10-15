@@ -87,3 +87,18 @@ test('local HTTP development keeps shell and proxy on separate approved loopback
   }
   assert.equal(getFigureProxyUrl('117', { proxyOrigin: 'http://localhost:4174', shellOrigins: ['https://monkeh.example'] }, 'https://monkeh.example'), null);
 });
+
+test('static Figure launch stays on any current secure mirror without a configured proxy or shell list', () => {
+  const config = { mode: 'static', wispEndpoints: ['wss://relay.example/wisp/'] };
+  for (const origin of ['https://mirror-one.example', 'https://mirror-two.example:8443', 'http://localhost:4173', 'http://127.0.0.1:4173', 'http://[::1]:4173']) {
+    const url = new URL(getFigureProxyUrl('117', config, origin, 'Saved Browser/1'));
+    assert.equal(url.origin, origin);
+    assert.equal(url.pathname, '/proxy-host.html');
+    assert.equal(url.searchParams.get('ua'), 'Saved Browser/1');
+    assert.equal(decodeURIComponent(url.hash.slice(1)), getFigureLaunchUrl('117'));
+    assert.equal(getFigureProxyUrl('unknown', config, origin), null);
+  }
+  for (const origin of [undefined, null, '', 'http://mirror.example', 'https://user:pass@mirror.example', 'https://mirror.example/path', 'https://mirror.example?redirect=1', 'https://mirror.example#fragment', 'file://', 'javascript:alert(1)']) {
+    assert.equal(getFigureProxyUrl('117', config, origin), null);
+  }
+});

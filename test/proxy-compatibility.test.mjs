@@ -7,7 +7,7 @@ const source = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
 const origin = 'https://proxy.test';
 const proxied = url => origin + '/service/' + encodeURIComponent(url);
 
-function worker({ clientUrl = proxied('https://game.test/play/index.html'), configuredOrigin = origin, failClients = false } = {}) {
+function worker({ clientUrl = proxied('https://game.test/play/index.html'), configuredOrigin = origin, failClients = false, staticMode = false, upstreamResponse } = {}) {
   const events = new Map();
   const forwarded = [];
   const direct = [];
@@ -15,10 +15,10 @@ function worker({ clientUrl = proxied('https://game.test/play/index.html'), conf
     URL, Response, Proxy, Reflect,
     importScripts() {},
     __uv$config: { prefix: '/service/', encodeUrl: encodeURIComponent, decodeUrl: decodeURIComponent },
-    MonkehConfig: { async fetchConfig() { return { proxyOrigin: configuredOrigin }; } },
+    MonkehConfig: { async fetchConfig() { return staticMode ? { mode: 'static' } : { proxyOrigin: configuredOrigin }; } },
     UVServiceWorker: class {
       route({ request }) { return request.url.startsWith(origin + '/service/'); }
-      async fetch({ request }) { forwarded.push(request); return new Response('proxied'); }
+      async fetch({ request }) { forwarded.push(request); return upstreamResponse || new Response('proxied'); }
     },
     async fetch(request) { direct.push(request); return new Response('direct'); },
     self: {
@@ -86,7 +86,7 @@ test('compatibility routing preserves an explicit no-referrer privacy policy', a
 
 test('UV runtime assets and proxy pages are left to the local host', () => {
   const app = worker();
-  for (const path of ['/ultrav/uv.handler.js', '/ultrav/uv.config.js', '/bearmux/worker.js', '/bearmux/epoxy/index.mjs', '/browser-tools/runtime.js', '/proxy-host.html', '/proxy-host', '/proxy-bootstrap.html', '/proxy-bootstrap', '/sw.js', '/flyflix-provider.html']) {
+  for (const path of ['/ultrav/uv.handler.js', '/ultrav/uv.config.js', '/bearmux/worker.js', '/bearmux/index.js?v=2.1.9', '/bearmux/epoxy/index.mjs', '/bearmux/epoxy/index.mjs?v=2.1.28', '/browser-tools/runtime.js', '/proxy-host.html', '/proxy-host', '/proxy-bootstrap.html', '/proxy-bootstrap', '/sw.js', '/flyflix-provider.html']) {
     assert.equal(app.request(origin + path), undefined, path);
   }
   assert.equal(app.forwarded.length, 0);
@@ -135,4 +135,51 @@ test('already rewritten requests run through UV exactly once', async () => {
   assert.equal(app.forwarded.length, 1);
   assert.equal(app.forwarded[0].url, proxied('https://game.test/next'));
   assert.equal(app.direct.length, 0);
+});
+
+
+test('shared-origin shell and app clients keep their own pages, data and API requests local', async () => {
+  for (const path of ['/math.html', '/apps/mochii-cloud.html', '/proxy-host.html']) {
+    const app = worker({ clientUrl: origin + path, staticMode: true });
+    const requested = ['/math', '/api/music/browse', '/data/games.json', '/assets/icon.png'].map(path => origin + path);
+    for (const url of requested) assert.equal(await (await app.request(url)).text(), 'direct');
+    assert.equal(app.forwarded.length, 0, path);
+    assert.deepEqual(app.direct.map(request => request.url), requested, path);
+  }
+});
+
+test('shared-origin proxy clients still route escaped app-like paths to the original website', async () => {
+  const app = worker({ staticMode: true });
+  for (const path of ['/math.html', '/api/music/browse', '/assets/level.json?level=2']) {
+    assert.equal(await (await app.request(origin + path)).text(), 'proxied');
+    assert.equal(app.forwarded.at(-1).url, proxied('https://game.test' + path));
+  }
+  const controller = new AbortController();
+  await app.request(origin + '/api/save?slot=2', {
+    method: 'POST', body: 'progress=12', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: controller.signal,
+  });
+  const request = app.forwarded.at(-1);
+  assert.equal(request.url, proxied('https://game.test/api/save?slot=2'));
+  assert.equal(request.method, 'POST');
+  assert.equal(await request.text(), 'progress=12');
+  assert.equal(request.headers.get('Content-Type'), 'application/x-www-form-urlencoded');
+  controller.abort();
+  assert.equal(request.signal.aborted, true);
+  assert.equal(app.forwarded.length, 4);
+  assert.equal(app.direct.length, 0);
+});
+
+
+test('static music streams preserve byte ranges and partial audio without buffering', async () => {
+  const audio = new Uint8Array([1, 2, 3, 4]);
+  const app = worker({ staticMode: true, clientUrl: origin + '/math.html', upstreamResponse: new Response(audio, { status: 206, headers: { 'Content-Type': 'audio/mpeg', 'Content-Range': 'bytes 1024-1027/5000', 'Accept-Ranges': 'bytes' } }) });
+  const target = proxied('https://music.example/api/music/stream?id=123&source=tidal');
+  const response = await app.request(target, { headers: { Range: 'bytes=1024-1027' } }, { destination: 'audio' });
+  assert.equal(app.forwarded.length, 1);
+  assert.equal(app.direct.length, 0);
+  assert.equal(app.forwarded[0].url, target);
+  assert.equal(app.forwarded[0].headers.get('Range'), 'bytes=1024-1027');
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get('Content-Range'), 'bytes 1024-1027/5000');
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), audio);
 });

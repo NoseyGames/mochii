@@ -1,9 +1,10 @@
 # mochii
 
-mochii is a static app with an isolated browser proxy. Cloudflare serves HTML,
-JavaScript and assets; the browser connects directly to the public Wisp server
-list in `browser-tools/config.js`. Static hosting does not request `/api/config`
-or require a Node backend.
+mochii is a static app with browser proxy assets on the same site as the app.
+Each mirror serves its own HTML, JavaScript, Ultraviolet and service worker;
+the browser connects directly to the public Wisp server list in
+`browser-tools/config.js`. Static hosting does not request `/api/config`, use a
+fixed proxy origin or require a Node backend.
 
 ## Static deployment
 
@@ -19,21 +20,28 @@ optional bufferutil native build so pnpm 11's strict install succeeds.
 
 - Cloudflare Pages: build command `pnpm build`, output directory `dist`.
 - Cloudflare Worker: `npx wrangler deploy`; `wrangler.jsonc` builds and uploads
-  static assets plus the coding-help and music routes. No paid container is required.
+  static assets plus optional coding-help and music API routes. No paid container is required.
 - App: https://testingproductionubgdontgo.pages.dev/math.html
-- Isolated proxy host: https://monkeh.1234-imwatchingyouopenthedoor.workers.dev
+- Additional app mirror: https://monkeh.1234-imwatchingyouopenthedoor.workers.dev
 
-The same static output goes to the shell hosts and the isolated proxy host.
-Shell entry pages on the proxy host redirect to the primary app. Approved
-mirrors retain their own address; settings and saved scripts stay on that
-mirror's origin. The bridge accepts only the exact configured shell origins.
-Known Pages previews redirect to production; unknown mirrors cannot enable the
-proxy. When adding a host, update `shellOrigins` in `browser-tools/config.js`
-and the Worker's `ASSIST_ALLOWED_ORIGINS`, then deploy the app and Worker.
+Deploy the same static output to each HTTPS mirror. The browser opens
+`/proxy-host.html` and registers `/sw.js` on the mirror the visitor is using;
+there is no static origin allowlist or redirect to a primary host. A blocked
+former shared proxy hostname no longer prevents a reachable mirror from
+loading the browser, games, music or movies. Settings and saved scripts stay
+on each mirror's origin. Proxy messages still require the expected frame and
+the exact current origin.
 
-For a local static preview, serve dist on **localhost:4173 and localhost:4174**
-with any static HTTP server. Open http://localhost:4173/math.html. Both ports are
-required for isolation; the public server still needs an internet connection.
+For a local static preview, serve `dist` on **localhost:4173** with any static
+HTTP server, then open http://localhost:4173/math.html. One origin serves both
+the app and proxy assets; the external Wisp server still needs an internet
+connection.
+
+Static mode shares a browser origin with proxied content. Its frame sandbox
+and message checks are not browser-enforced origin isolation. Use a dedicated
+app hostname, with no logged-in administration tools or sensitive applications
+on that origin. The optional Node deployment below retains separate app and
+proxy origins.
 
 ## Servers and failover
 
@@ -55,8 +63,9 @@ Configured addresses are candidates, not a promise that every
 server is currently online or compatible. Public operators can impose limits,
 block destinations or stop service. See `docs/WISP-HOSTING.md` for probe results.
 Their policies govern outgoing traffic; the optional Node gateway's restrictions
-do not apply to those servers. The proxy host must be reachable as well as the
-server. The list is public code and must never contain credentials.
+do not apply to those servers. The current mirror, a compatible Wisp server
+and the destination must all be reachable. The list is public code and must
+never contain credentials.
 
 Pages render and accept input while resources are still loading. A small status
 indicator replaces the full-page loading cover; a slow resource does not blank
@@ -73,8 +82,8 @@ switching can recover from relay-specific failures but cannot prevent every
 upstream outage or block.
 
 See [hosting instructions](docs/HOSTING.md) for Cloudflare, Netlify, Vercel,
-Render and other static-host options. Each approved mirror uses the same isolated
-proxy host; additional shell addresses are not independent proxy backends.
+Render and other static-host options. Each mirror serves its own proxy assets;
+its outgoing connections still depend on the external Wisp pool.
 
 ## Browser tools
 
@@ -101,7 +110,9 @@ Popup and download permissions apply when the viewed frame is reopened or reload
 These are browser preferences, not anonymity or tracker-blocking guarantees.
 
 **Tools → Help** sends only the question and optional code shown in its form to
-Cloudflare Workers AI. Copying a userscript draft into the form is explicit;
+`/api/assist` on the current static mirror. This requires that mirror to serve
+the Worker coding-help API with its Cloudflare Workers AI binding. Copying a
+userscript draft into the form is explicit;
 page content, cookies, history, and saved scripts are never attached automatically.
 Answers are plain text and never execute. No API key is shipped to browsers.
 
@@ -110,12 +121,14 @@ origin checks, and rate limits. Keep this account on **Workers Free**: its daily
 10,000-neuron allowance stops inference when exhausted. A Paid account can bill
 beyond that allowance; the per-location rate limiter is not a global spending cap.
 Set `ENABLE_ASSIST=false` before changing to a paid account if billing is unwanted.
-Missing bindings and exhausted quotas show a recoverable error. Plain static or
-Node deployments without the Worker API can browse normally but have no AI help.
+Missing bindings and exhausted quotas show a recoverable error. Plain static
+mirrors without that local API show coding help as unavailable; they do not
+fall back to a fixed shared Worker. Browsing, music, games and movies do not
+require coding help. Optional Node deployments keep their configured API base.
 
 See [Wisp hosting notes](docs/WISP-HOSTING.md) for public-server verification
-and the retired Cloudflare relay. The shared Worker still serves the isolated
-browser assets, coding help and music; its obsolete `/wisp` routes return HTTP 410.
+and the retired Cloudflare relay. A Worker deployment serves its own app and
+proxy assets plus its APIs; its obsolete `/wisp` routes return HTTP 410.
 
 ## Apps and current limits
 
@@ -132,7 +145,7 @@ on each mirror. Monkeh does not create game accounts or verify a provider sessio
 Source provenance is recorded in [third-party sources](docs/THIRD-PARTY-SOURCES.md).
 
 A temporary Figure adapter matches 94 catalog games to Figure's hosted launcher.
-**Play with Figure** opens inside Mochii through Monkeh's isolated proxy host;
+**Play with Figure** opens inside Mochii through the current mirror's proxy;
 Figure manages account setup, notices, and queues in the player. The Mochii
 catalog does not store Figure credentials or claim that a game is ready. Games
 without a Figure match remain visible with playback unavailable. Streaming
@@ -179,7 +192,8 @@ pnpm test
 pnpm build
 ```
 
-Tests cover static configuration without API requests, origin isolation,
+Tests cover static configuration without API requests, current-origin routing,
+exact frame-message validation, optional Node origin isolation,
 curated asset packaging, real transport WASM, failover, tools, apps and optional
 Node security boundaries. See SECURITY-AUDIT.md for review scope and limits.
 
@@ -205,10 +219,12 @@ Music searches all five Cherri music sources concurrently, progressively merging
 matching titles into one row. Select an alternate source or artist version in the
 player. Favorites, volume, shuffle and repeat stay on this device. Only the selected
 audio is streamed; opening the library does not preload songs. A bundled discovery
-snapshot is refreshed by `node scripts/update-music-catalog.mjs`. Live search and
-playback use the isolated Worker's bounded `/api/music/*` relay and depend on the
-upstream music service. Configure `MUSIC_ALLOWED_ORIGINS` or the existing
-`ASSIST_ALLOWED_ORIGINS`; `MUSIC_RATE` limits each visitor to 120 requests/minute.
+snapshot is refreshed by `node scripts/update-music-catalog.mjs`. In static mode,
+live music API requests and selected audio are fetched through the current
+mirror's proxy runtime using the selected external Wisp server. Music does not
+depend on the old shared Worker's `/api/music/*` routes. The upstream music
+service and Wisp server must still be available. Deployments that explicitly
+use the optional music API retain its origin checks and rate limits.
 
 Settings includes dark/light modes, six fonts, accent colors, backgrounds, tab
 cloaking, a cloaked window, a panic shortcut, close protection, and animation
@@ -224,7 +240,7 @@ bounded effects that pause while browsing a page, while hidden, or when reduced
 motion is enabled. Character masking changes shell labels only and preserves
 readable accessibility labels and original search/catalog identities.
 
-External game and app URLs use the isolated proxy automatically, including
+External game and app URLs use the current mirror's proxy automatically, including
 Flyflix at `https://flyflix.net/`. A service-worker compatibility fallback also
 routes escaped HTTP(S) requests from identified UV documents through UV. It
 does not proxy WebRTC or guarantee compatibility with every site.

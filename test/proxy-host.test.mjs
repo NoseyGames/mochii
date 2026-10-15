@@ -1086,3 +1086,74 @@ test('closing a host during slow activation never performs late page navigation'
   assert.deepEqual(app.navigations, []);
   assert.equal(app.network.disposed, 1);
 });
+
+
+test('static proxy hosts accept only their same-origin parent bridge without configured origins', async () => {
+  const app = await harness({ fetchConfig: async () => Response.json({ mode: 'static', wispEndpoints: [{ name: 'Wisp', url: 'wss://relay.example/wisp/' }] }) });
+  assert.equal(app.activated, 1);
+  assert.deepEqual(app.navigations, ['/service/' + encodeURIComponent('https://example.com/')]);
+  assert.equal(app.contextWindow.parent.sent[0].origin, proxyOrigin);
+  for (const changes of [{ origin: shellOrigin }, { origin: 'https://other.example' }, { source: {} }, { isTrusted: false }, { ports: [] }]) {
+    const connection = app.init(port(), { origin: proxyOrigin, ...changes });
+    assert.equal(connection.starts, 0);
+  }
+  const connection = app.init(port(), { origin: proxyOrigin });
+  assert.equal(connection.starts, 1);
+  await connection.request({ id: 1, method: 'navigate', params: { url: proxyOrigin + '/math.html' } });
+  assert.match(connection.messages.find(value => value.id === 1).error, /App pages/);
+  app.contextWindow.fire('pagehide');
+});
+
+test('first navigation waits for an explicit update check and its newly discovered controller', async () => {
+  for (const alreadyActive of [false, true]) {
+    let completeUpdate;
+    let updates = 0;
+    const original = {};
+    const updating = { ...node(), state: alreadyActive ? 'activated' : 'installing' };
+    const registration = { active: original, update() { updates++; return new Promise(resolve => { completeUpdate = resolve; }); } };
+    const app = await harness({ workerRegistration: registration, workerController: original });
+    assert.equal(updates, 1);
+    assert.equal(app.network.connects, 1);
+    assert.equal(app.navigations.length, 0);
+    registration[alreadyActive ? 'active' : 'installing'] = updating;
+    completeUpdate(registration); await flush();
+    assert.equal(app.navigations.length, 0);
+    if (!alreadyActive) {
+      updating.state = 'activated'; updating.fire('statechange'); await flush();
+      assert.equal(app.navigations.length, 0);
+    }
+    app.serviceWorker.fire('controllerchange'); await flush();
+    assert.equal(app.navigations.length, 0);
+    app.serviceWorker.controller = updating;
+    app.serviceWorker.fire('controllerchange'); await flush();
+    assert.equal(app.navigations.length, 1);
+    assert.equal(updating.listeners.get('statechange').size, 0);
+    assert.equal(app.serviceWorker.listeners.get('controllerchange').size, 0);
+    app.contextWindow.fire('pagehide');
+    assert.equal(app.timers.size, 0);
+  }
+});
+
+test('failed or stalled update checks keep the old controller from navigating and allow a fresh retry', async () => {
+  for (const timeout of [false, true]) {
+    let rejectUpdate;
+    const original = {};
+    const registration = { active: original, update() { return new Promise((resolve, reject) => { rejectUpdate = reject; }); } };
+    const app = await harness({ workerRegistration: registration, workerController: original });
+    if (timeout) {
+      const entry = [...app.timers].find(([, timer]) => timer.ms === 15000);
+      assert.ok(entry);
+      app.timers.delete(entry[0]); entry[1].fn();
+    } else rejectUpdate(new Error('Update unavailable'));
+    await flush();
+    assert.equal(app.navigations.length, 0);
+    assert.equal(app.get('retry').hidden, false);
+    assert.match(app.get('status-message').textContent, timeout ? /update check timed out/i : /Update unavailable/);
+    assert.equal(app.timers.size, 0);
+    registration.update = async () => registration;
+    app.get('retry').fire('click'); await flush();
+    assert.equal(app.registrations, 2);
+    assert.equal(app.navigations.length, 1);
+    app.contextWindow.fire('pagehide');
+  }
+});

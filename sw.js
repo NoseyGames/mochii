@@ -341,7 +341,7 @@ function identityScript(value) {
 function isProxyOrigin() {
 	if (!originCheck) {
 		originCheck = globalThis.MonkehConfig.fetchConfig().then(config => {
-			return config.proxyOrigin === self.location.origin;
+			return config.mode === 'static' || config.proxyOrigin === self.location.origin;
 		}).catch(() => { originCheck = null; return false; });
 	}
 	return originCheck;
@@ -359,7 +359,7 @@ self.addEventListener("activate", (event) => {
 async function handleRequest(event) {
 	if (uv.route(event)) {
 		if (!await isProxyOrigin()) {
-			return new Response('Proxy browsing is available only on the isolated proxy origin. Reload Monkeh.', { status: 403, headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } });
+			return new Response('Proxy browsing is not enabled on this origin. Reload Mochii.', { status: 403, headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } });
 		}
 		return await fetchThroughUV(event);
 	}
@@ -561,7 +561,7 @@ async function handleCompatibilityRequest(event, requested) {
 	const original = proxiedDestination(client?.url);
 	if (!original) return fetch(event.request);
 	if (!await isProxyOrigin()) {
-		return new Response('Proxy browsing is available only on the isolated proxy origin. Reload Monkeh.', { status: 403, headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } });
+		return new Response('Proxy browsing is not enabled on this origin. Reload Mochii.', { status: 403, headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } });
 	}
 	const destination = requested.origin === self.location.origin
 		? new URL(requested.pathname + requested.search + requested.hash, original.origin)

@@ -10,7 +10,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 
                                                                                 
                                                                               
-function harness(saved = []) {
+function harness(saved = [], { local = false } = {}) {
   const allNodes = [];
   function node() {
     const listeners = new Map();
@@ -70,7 +70,7 @@ function harness(saved = []) {
   const location = new URL('https://monkeh.test/math.html');
   const window = node();
   window.localStorage = storage;
-  window.MonkehProxyOrigin = 'https://proxy.monkeh.test';
+  window.MonkehProxyOrigin = local ? location.origin : 'https://proxy.monkeh.test';
   const sessions = [];
   const confirmations = [];
   let confirmResult = true;
@@ -96,7 +96,7 @@ function harness(saved = []) {
     confirm(message) { confirmations.push(message); return confirmResult; },
   }, { filename: 'browser-tools/tools.js' });
   async function connect(url, existingDocument = null, details = {}) {
-    const proxied = `https://proxy.monkeh.test/proxy-host.html#${encodeURIComponent(url)}`;
+    const proxied = `${window.MonkehProxyOrigin}/proxy-host.html#${encodeURIComponent(url)}`;
     const pageDocument = existingDocument || { documentElement: node(), ...details };
     get('viewer-frame').src = proxied;
     get('viewer-frame').contentWindow = { get document() { throw new Error('Cross-origin DOM reads are forbidden'); } };
@@ -616,4 +616,19 @@ test('inspector coalesces pending snapshots and skips rendering when the user le
   await app.tab('inspector').fire('click');
   assert.equal(requests, 1, 'a completed snapshot can render when Inspect returns');
   assert.match(app.text('inspector-tree'), /html/);
+});
+
+
+test('current-origin proxy hosts support tools and navigation while shell apps remain excluded', async () => {
+  const app = harness([script()], { local: true });
+  await app.connect('https://example.com/');
+  assert.equal(app.sessions.length, 1);
+  assert.equal(app.sessions[0].evaluated.length, 0);
+  assert.equal(await app.window.MonkehTools.navigateRemote('https://next.example/'), true);
+  assert.equal(app.sessions[0].navigated, 'https://next.example/');
+  assert.equal(await app.window.MonkehTools.navigateRemote('https://monkeh.test/math.html'), false);
+  app.get('viewer-frame').src = 'https://monkeh.test/apps/auk.html';
+  await app.get('viewer-frame').fire('load');
+  assert.equal(app.sessions[0].disposed, true);
+  assert.equal(app.sessions.length, 1);
 });

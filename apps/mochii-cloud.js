@@ -408,7 +408,7 @@ export function mountMochii(doc = document, win = window) {
       const config = await win.MonkehConfig.fetchConfig({ signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]) });
       if (request.signal.aborted || generation !== launchGeneration || !player.open) return;
       const proxyUrl = getFigureProxyUrl(knownGame.id, config, win.location.origin, win.MonkehPrivacy?.get().userAgent);
-      if (!proxyUrl) throw new Error('The isolated proxy is not configured for this site.');
+      if (!proxyUrl) throw new Error('The proxy is not available for this site.');
       const frame = element('iframe');
       frame.title = `${knownGame.n} · Figure through Monkeh`;
       frame.setAttribute('sandbox', PLAYER_SANDBOX);

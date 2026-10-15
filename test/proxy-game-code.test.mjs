@@ -27,6 +27,7 @@ async function fixture(options = {}) {
     ['child-b', { id: 'child-b', url: origin + '/proxy-bootstrap.html?nonce=' + nextNonce }],
     ['remote', { id: 'remote', url: proxied('https://remote.example/') }],
     ['shell', { id: 'shell', url: shell + '/proxy-host.html' }],
+    ['app-shell', { id: 'app-shell', url: origin + '/math.html' }],
   ]);
   const cache = {
     async match(key) { return cached.has(key) ? new Response(cached.get(key)) : undefined; },
@@ -44,7 +45,7 @@ async function fixture(options = {}) {
     setTimeout(callback, delay) { const id = ++nextTimer; timers.set(id, { callback, due: now + delay }); return id; },
     clearTimeout(id) { timers.delete(id); },
     __uv$config: { prefix: '/service/', encodeUrl: encodeURIComponent, decodeUrl: decodeURIComponent },
-    MonkehConfig: { async fetchConfig() { return { proxyOrigin: origin, shellOrigins: [shell] }; } },
+    MonkehConfig: { async fetchConfig() { return options.staticMode ? { mode: 'static' } : { proxyOrigin: origin, shellOrigins: [shell] }; } },
     location: { origin },
     caches: { async open() { return cache; } },
     clients: { async get(id) { return clients.get(id); }, async matchAll() { return [...clients.values()]; }, async claim() {} },
@@ -381,4 +382,32 @@ test('Cloudflare extensionless host and bootstrap clients can prepare and execut
   assert.equal(response.status, 200);
   assert.ok((await response.text()).includes('monkeh-game-code'));
   assert.equal(app.requests.length, 1);
+});
+
+
+test('shared-origin static game stages remain restricted to their viewer and consume only once', async () => {
+  const app = await fixture({ staticMode: true });
+  assert.equal((await app.prepare('app-shell')).ok, false);
+  assert.equal(app.requests.length, 0);
+  assert.equal((await app.prepare()).ok, true);
+  assert.equal(app.requests.length, 1);
+  assert.equal((await app.navigate('child-b')).status, 403);
+  assert.equal((await app.navigate('app-shell')).status, 403);
+  assert.equal(app.size(), 1);
+  const response = await app.navigate();
+  assert.equal(response.status, 200);
+  assert.ok((await response.text()).includes(proxied('https://games.example/game/engine.js')));
+  assert.equal(app.requests.length, 1);
+  assert.equal(app.size(), 0);
+  assert.equal((await app.navigate()).status, 410);
+});
+
+test('shared-origin static games reject direct and redirected local destinations', async () => {
+  const app = await fixture({ staticMode: true, fetcher: () => new Response(null, { status: 302, headers: { Location: origin + '/math' } }) });
+  for (const path of ['/math.html', '/api/music/browse', '/sw.js']) assert.equal((await app.prepare('host-a', origin + path)).ok, false);
+  assert.equal(app.requests.length, 0);
+  assert.equal((await app.prepare()).ok, false);
+  assert.equal(app.requests.length, 1);
+  assert.equal(app.requests[0].url, target);
+  assert.equal(app.size(), 0);
 });

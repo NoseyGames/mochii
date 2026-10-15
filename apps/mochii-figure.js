@@ -105,10 +105,17 @@ export function getFigureLaunchUrl(gameId) {
 
 export function getFigureProxyUrl(gameId, config, shellOrigin, userAgent = '') {
   const target = getFigureLaunchUrl(gameId);
-  if (!target || !config || !Array.isArray(config.shellOrigins) || !config.shellOrigins.includes(shellOrigin)) return null;
+  if (!target || !config) return null;
   try {
-    const proxy = new URL(config.proxyOrigin);
     const shell = new URL(shellOrigin);
+    if (shell.origin !== shellOrigin || shell.username || shell.password) return null;
+    if (config.mode === 'static') {
+      const local = ['localhost', '127.0.0.1', '[::1]'].includes(shell.hostname);
+      if (shell.protocol !== 'https:' && !(shell.protocol === 'http:' && local)) return null;
+      return proxyViewUrl(shell.origin, target, userAgent);
+    }
+    if (!Array.isArray(config.shellOrigins) || !config.shellOrigins.includes(shellOrigin)) return null;
+    const proxy = new URL(config.proxyOrigin);
     const local = ['localhost', '127.0.0.1', '[::1]'].includes(proxy.hostname) && proxy.hostname === shell.hostname && shell.protocol === 'http:';
     if (proxy.protocol !== 'https:' && !(proxy.protocol === 'http:' && local)) return null;
     if (proxy.username || proxy.password || proxy.pathname !== '/' || proxy.search || proxy.hash) return null;

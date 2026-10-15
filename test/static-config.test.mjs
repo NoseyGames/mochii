@@ -31,67 +31,63 @@ function context(url) {
   return { page, get requests() { return requests; }, get redirect() { return redirect; } };
 }
 
-test('production and local static hosts share an immutable server list without API requests', async () => {
-  for (const [app, host] of [[shell, proxy], ['http://localhost:4173', 'http://localhost:4174'], ['http://127.0.0.1:4173', 'http://127.0.0.1:4174']]) {
-    for (const origin of [app, host]) {
-      const fixture = context(origin + '/math.html');
-      const config = await fixture.page.MonkehConfig.fetchConfig();
-      assert.equal(config.mode, 'static');
-      assert.equal(config.proxyOrigin, host);
-      assert.deepEqual(Array.from(config.shellOrigins), app === shell ? productionShells : [app]);
-      assert(Object.isFrozen(config.shellOrigins));
-      assert.equal(config.requiresAuthentication, false);
-      assert.equal(config.wispEndpoints.length, 29);
-      assert.equal(config.maxWispBackups, 31);
-      assert.equal(new Set(config.wispEndpoints.map(entry => new URL(entry.url).href)).size, config.wispEndpoints.length);
-      assert(Object.isFrozen(config.wispEndpoints));
-      for (const endpoint of config.wispEndpoints) {
-        assert(Object.isFrozen(endpoint));
-        const url = new URL(endpoint.url);
-        assert.equal(url.protocol, 'wss:');
-        assert.equal(url.username + url.password + url.hash, '');
-      }
-      assert.equal(fixture.requests, 0);
+const secureStaticOrigins = [
+  ...productionShells, proxy, 'https://abc123.testingproductionubgdontgo.pages.dev',
+  ...untrustedOrigins.filter(origin => origin.startsWith('https:')),
+  'http://localhost:4173', 'http://localhost:4174', 'http://localhost:8090',
+  'http://127.0.0.1:4173', 'http://127.0.0.1:4174', 'http://[::1]:8090',
+];
+
+test('static deployments share immutable external Wisp settings without origin configuration or API requests', async () => {
+  for (const origin of secureStaticOrigins) {
+    const fixture = context(origin + '/math.html');
+    const config = await fixture.page.MonkehConfig.fetchConfig();
+    assert.equal(config.mode, 'static', origin);
+    assert(Object.isFrozen(config));
+    for (const key of ['proxyOrigin', 'shellOrigin', 'shellOrigins']) assert.equal(Object.hasOwn(config, key), false, key);
+    assert.equal(config.requiresAuthentication, false);
+    assert.equal(config.wispEndpoints.length, 29);
+    assert.equal(config.maxWispBackups, 31);
+    assert.equal(new Set(config.wispEndpoints.map(entry => new URL(entry.url).href)).size, config.wispEndpoints.length);
+    assert(Object.isFrozen(config.wispEndpoints));
+    for (const endpoint of config.wispEndpoints) {
+      assert(Object.isFrozen(endpoint));
+      const url = new URL(endpoint.url);
+      assert.equal(url.protocol, 'wss:');
+      assert.equal(url.username + url.password + url.hash, '');
     }
+    assert.equal(fixture.requests, 0, origin);
   }
 });
 
-test('unknown mirrors fail closed and never try parsing a static fallback as JSON', async () => {
-  for (const origin of untrustedOrigins) {
-    const fixture = context(origin + '/math');
-    await assert.rejects(fixture.page.MonkehConfig.fetchConfig(), /not configured/, origin);
-    assert.equal(fixture.requests, 0);
+test('every secure mirror keeps its URL and navigation without a shell redirect', async () => {
+  for (const origin of secureStaticOrigins) {
+    const url = origin + '/math.html?view=apps#desktop';
+    const fixture = context(url);
+    await fixture.page.MonkehConfig.fetchConfig();
     assert.equal(fixture.page.MonkehConfig.redirectShell(), false, origin);
+    assert.equal(fixture.redirect, undefined, origin);
+    assert.equal(fixture.page.location.href, url);
+    assert.equal(fixture.requests, 0);
+  }
+});
+
+test('insecure public and opaque static deployments reject configuration without contacting an API', async () => {
+  for (const url of ['http://public.example/math', 'http://localhost.attacker.example/math', 'http://monkeh-noseygames.netlify.app/math', 'file:///math.html', 'data:text/html,test']) {
+    const fixture = context(url);
+    await assert.rejects(fixture.page.MonkehConfig.fetchConfig(), /HTTPS or localhost|Invalid URL/, url);
+    assert.equal(fixture.requests, 0);
+    assert.equal(fixture.page.MonkehConfig.redirectShell(), false);
     assert.equal(fixture.redirect, undefined);
   }
 });
 
-test('each confirmed production mirror stays on its own URL and shares the complete exact bridge allowlist', async () => {
-  for (const origin of [...productionShells, proxy]) {
-    const fixture = context(origin + '/math.html?view=apps#desktop');
-    const config = await fixture.page.MonkehConfig.fetchConfig();
-    assert.equal(config.proxyOrigin, proxy);
-    assert.deepEqual(Array.from(config.shellOrigins), productionShells);
-    assert(Object.isFrozen(config.shellOrigins));
-    if (productionShells.includes(origin)) {
-      assert.equal(fixture.page.MonkehConfig.redirectShell(), false);
-      assert.equal(fixture.redirect, undefined, 'listed shells remain independent entrypoints');
-    }
-    assert.equal(fixture.requests, 0);
+test('static configuration rejects credentials, paths and non-origin values', () => {
+  const fixture = context('https://mirror.example/math');
+  for (const value of ['https://user:pass@mirror.example', 'https://mirror.example/path', 'https://mirror.example?query=1', 'https://mirror.example#part', 'https://mirror.example/', 'null', '']) {
+    assert.throws(() => fixture.page.MonkehConfig.staticConfig(value), /HTTPS or localhost|Invalid URL/, String(value));
   }
-});
-
-test('local configurations keep only their own shell and proxy pair', async () => {
-  for (const hostname of ['localhost', '127.0.0.1']) {
-    for (const port of [4173, 4174]) {
-      const fixture = context(`http://${hostname}:${port}/math`);
-      const config = await fixture.page.MonkehConfig.fetchConfig();
-      assert.deepEqual(Array.from(config.shellOrigins), [`http://${hostname}:4173`]);
-      assert.equal(config.proxyOrigin, `http://${hostname}:4174`);
-      assert.equal(fixture.page.MonkehConfig.redirectShell(), port === 4174);
-      assert.equal(fixture.redirect, port === 4174 ? `http://${hostname}:4173/math` : undefined);
-    }
-  }
+  assert.equal(fixture.requests, 0);
 });
 
 test('the owner-supplied endpoint paths are preserved and all configured relays are external', async () => {
@@ -103,42 +99,29 @@ test('the owner-supplied endpoint paths are preserved and all configured relays 
   }
   assert.equal(config.wispEndpoints.some(entry => entry.fallback), false);
   assert.equal(config.wispEndpoints.some(entry => new URL(entry.url).hostname === new URL(proxy).hostname), false);
-  assert.equal(config.proxyOrigin, proxy, 'the isolated browser host remains available');
 });
 
-test('shell entry from proxy or Pages previews goes to canonical app preserving navigation', () => {
-  for (const origin of [proxy, 'https://abc123.testingproductionubgdontgo.pages.dev']) {
-    const fixture = context(origin + '/math?view=apps#desktop');
-    assert.equal(fixture.page.MonkehConfig.redirectShell(), true);
-    assert.equal(fixture.redirect, shell + '/math?view=apps#desktop');
-  }
-  const fixture = context(shell + '/math');
-  assert.equal(fixture.page.MonkehConfig.redirectShell(), false);
-  assert.equal(fixture.redirect, undefined);
-});
-
-test('static service worker proxies only on the isolated origin without an API', async () => {
+test('static service workers use each secure deployment without an API and reject insecure hosts', async () => {
   for (const [origin, expected] of [
-    ...productionShells.map(origin => [origin, 403]), [proxy, 200],
-    ['https://abc123.testingproductionubgdontgo.pages.dev', 403],
-    ['http://localhost:4173', 403], ['http://localhost:4174', 200],
-    ['http://127.0.0.1:4173', 403], ['http://127.0.0.1:4174', 200],
-    ...untrustedOrigins.map(origin => [origin, 403]),
+    ...secureStaticOrigins.map(origin => [origin, 200]),
+    ['http://public.example', 403], ['http://localhost.attacker.example', 403],
   ]) {
     const fixture = context(origin + '/sw.js');
     const events = new Map();
+    let proxyFetches = 0;
     fixture.page.importScripts = () => {};
     fixture.page.__uv$config = {};
     fixture.page.self = { location: fixture.page.location, addEventListener: (type, listener) => events.set(type, listener) };
     fixture.page.UVServiceWorker = class {
       route() { return true; }
-      fetch() { return new Response('proxy success'); }
+      fetch() { proxyFetches++; return new Response('proxy success'); }
     };
     vm.runInContext(workerSource, fixture.page);
     let response;
     events.get('fetch')({ request: { url: origin + '/service/test' }, respondWith(value) { response = value; } });
     assert.equal((await response).status, expected, origin);
-    assert.equal(fixture.requests, 0);
+    assert.equal(proxyFetches, expected === 200 ? 1 : 0, origin);
+    assert.equal(fixture.requests, 0, origin);
   }
 });
 

@@ -250,6 +250,22 @@ test('the Figure button starts only an embedded proxy session', async () => {
   assert.equal(app.popups.length, 0);
 });
 
+test('static Figure play uses the current mirror and keeps its iframe sandbox and saved browser identity', async () => {
+  const app = harness({ configFetch: async () => ({ mode: 'static', wispEndpoints: ['wss://relay.example/wisp/'] }) });
+  app.win.MonkehPrivacy = { get: () => ({ userAgent: 'Saved Browser/1' }) };
+  await app.mounted.launchFigure(GAMES[0]);
+  const frame = app.get('player-container').children[0];
+  const url = new URL(frame.src);
+  assert.equal(url.origin, app.win.location.origin);
+  assert.equal(url.pathname, '/proxy-host.html');
+  assert.equal(url.searchParams.get('ua'), 'Saved Browser/1');
+  assert.equal(decodeURIComponent(url.hash.slice(1)), getFigureLaunchUrl(GAMES[0].id));
+  assert.equal(frame.getAttribute('sandbox'), PLAYER_SANDBOX);
+  assert.equal(frame.referrerPolicy, 'no-referrer');
+  assert.equal(app.mounted.tracker.active.mode, 'embed');
+  assert.equal(app.popups.length, 0);
+});
+
 test('unmapped and invalid games cannot launch a guessed provider or open any external tab', async () => {
   const app = harness();
   const unmatched = GAMES.find(game => game.id === 'MC120');
