@@ -286,7 +286,7 @@
       const messages = {
         connected: `${name} connected`, connecting: 'Finding an available server…',
         degraded: 'Checking proxy connection…', offline: 'Your device is offline',
-        unavailable: 'Proxy servers unavailable — retrying', idle: 'Proxy ready to connect'
+        unavailable: state.failureStage === 'transport' ? 'Proxy software could not start — retrying' : 'Proxy servers unavailable — retrying', idle: 'Proxy ready to connect'
       };
       updateStatus(messages[state.status] || 'Proxy paused', state.status === 'connected' ? '#22c55e' : '#f59e0b');
       const detail = document.getElementById('network-detail');
