@@ -570,7 +570,7 @@ async function start() {
       network = createProxyNetwork({ endpoints, fallbackEndpoints,
                                                                            
                                                                             
-        activate: url => transport.setTransport('/bearmux/epoxy/index.mjs', [{ wisp: url }]),
+        activate: url => transport.setTransport('/bearmux/epoxy/index.mjs?v=2.1.28', [{ wisp: url }]),
         onStatus: state => { latestNetwork = state; send('network', state); }
       });
       if (navigator.onLine === false) await network.setOnline(false);

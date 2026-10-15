@@ -173,7 +173,7 @@ export function createProxyNetwork({
   let snapshot = Object.freeze({ status: online ? 'idle' : 'offline', activeEndpoint: null, configuredCount: urls.length, healthFailures: 0, retryAt: null, error: null });
 
   function publish(status, extra = {}) {
-    snapshot = Object.freeze({ status, activeEndpoint: active, configuredCount: urls.length, healthFailures, retryAt: null, error: null, ...extra });
+    snapshot = Object.freeze({ status, activeEndpoint: active, configuredCount: urls.length, healthFailures, retryAt: null, error: null, failureStage: null, ...extra });
                                                             
     try { onStatus(snapshot); } catch {                                        }
   }
@@ -196,7 +196,7 @@ export function createProxyNetwork({
     if (!active) {
       const earliest = Math.min(...[...failures.values()].map(record => record.until));
       delay = Math.min(maxRetryMs, Math.max(retryMs * 2 ** Math.min(Math.max(exhaustedCount - 1, 0), 20), earliest - now()));
-      publish('unavailable', { error: snapshot.error || 'No proxy is currently available.', retryAt: now() + delay });
+      publish('unavailable', { error: snapshot.error || 'No proxy is currently available.', retryAt: now() + delay, failureStage: snapshot.failureStage });
     }
                                                                            
     if (disposed || !online || pending || switching) return;
@@ -224,6 +224,9 @@ export function createProxyNetwork({
   }
   async function chooseEndpoint(signal, force = false, excluded = new Set()) {
     const startIndex = nextIndex;
+    let activationFailed = false;
+    let activationError;
+    const recordActivationFailure = error => { activationFailed = true; activationError = error; };
     const candidates = [];
     for (let step = 0; step < urls.length; step += 1) {
       assertCurrent(signal);
@@ -236,16 +239,20 @@ export function createProxyNetwork({
                                                                                   
                                                   
     for (const group of [candidates.filter(item => !fallbackUrls.has(item.url)), candidates.filter(item => fallbackUrls.has(item.url))]) {
-      const winner = await raceCandidates(group, signal);
+      const winner = await raceCandidates(group, signal, recordActivationFailure);
       if (winner) return winner;
     }
     assertCurrent(signal);
     exhaustedCount += 1;
-    const error = new Error(excluded.size ? 'No alternative proxy server is currently available.' : 'None of the configured proxy servers is available.');
-    publish('unavailable', { error: error.message });
+    const transportFailed = activationFailed || (!candidates.length && snapshot.failureStage === 'transport');
+    const error = transportFailed
+      ? new Error('Servers responded, but the browser proxy software could not start. Reload this page to update it.', { cause: activationError })
+      : new Error(excluded.size ? 'No alternative proxy server is currently available.' : 'None of the configured proxy servers is available.');
+    error.code = transportFailed ? 'PROXY_TRANSPORT_FAILED' : 'PROXY_SERVERS_UNAVAILABLE';
+    publish('unavailable', { error: error.message, failureStage: transportFailed ? 'transport' : 'probe' });
     throw error;
   }
-  async function raceCandidates(candidates, signal) {
+  async function raceCandidates(candidates, signal, onActivationFailure) {
     if (!candidates.length) return null;
     assertCurrent(signal);
     let remaining = candidates.length;
@@ -296,8 +303,9 @@ export function createProxyNetwork({
           publish('connected');
           assertCurrent(signal);
           return url;
-        } catch {
+        } catch (error) {
           assertCurrent(signal);
+          onActivationFailure(error);
           failed(url);
         }
       }

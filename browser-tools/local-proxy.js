@@ -58,7 +58,7 @@ export function createLocalProxy({ win = window, doc = win.document, createNetwo
   let ready = false;
   const loadRuntime = async () => {
     await Promise.all([
-      win.BareMux?.BareMuxConnection ? null : loadScript(doc, '/bearmux/index.js', timeout),
+      win.BareMux?.BareMuxConnection ? null : loadScript(doc, '/bearmux/index.js?v=2.1.9', timeout),
       win.Ultraviolet ? null : loadScript(doc, '/ultrav/uv.bundle.js', timeout),
     ]);
     if (!win.__uv$config) await loadScript(doc, '/ultrav/uv.config.js', timeout);
@@ -82,7 +82,7 @@ export function createLocalProxy({ win = window, doc = win.document, createNetwo
         online: win.navigator.onLine !== false,
         activate: async url => {
           if (await currentTransport()) return;
-          await transport.setTransport('/bearmux/epoxy/index.mjs', [{ wisp: url }]);
+          await transport.setTransport('/bearmux/epoxy/index.mjs?v=2.1.28', [{ wisp: url }]);
         },
       });
       try { await network.connect(); }
