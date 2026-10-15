@@ -1,9 +1,10 @@
 import { defaults, normalizePrivacy } from './privacy.js';
 import './devtools-guard.js';
 import { createDisplayMasker, maskCharacters } from './display-text.js';
+import { mountLibraryBackup } from './library-backup.js';
 export { maskCharacters } from './display-text.js';
 
-export const cloakPresets = Object.freeze({ monkeh: ['mochii', 'm', '#444444'], google: ['Google', 'G', '#4285f4'], classroom: ['Google Classroom', 'C', '#137333'], clever: ['Clever', 'C', '#1565c0'], desmos: ['Desmos', 'D', '#248b48'], wikipedia: ['Wikipedia', 'W', '#777777'], gmail: ['Gmail', 'M', '#c5221f'], drive: ['Google Drive', 'D', '#188038'], newtab: ['New Tab', '+', '#777777'], bing: ['Bing', 'b', '#008373'] });
+export const cloakPresets = Object.freeze({ mochii: ['mochii', 'm', '#444444'], google: ['Google', 'G', '#4285f4'], classroom: ['Google Classroom', 'C', '#137333'], clever: ['Clever', 'C', '#1565c0'], desmos: ['Desmos', 'D', '#248b48'], wikipedia: ['Wikipedia', 'W', '#777777'], gmail: ['Gmail', 'M', '#c5221f'], drive: ['Google Drive', 'D', '#188038'], newtab: ['New Tab', '+', '#777777'], bing: ['Bing', 'b', '#008373'] });
 export const fonts = Object.freeze({ default: ['Default', 'Inter, system-ui, sans-serif'], outfit: ['Outfit', 'Outfit, system-ui, sans-serif'], 'space-mono': ['Space Mono', '"Space Mono", monospace'], obscured: ['Obscured', '"Libre Barcode 128 Text", monospace'], codystar: ['Codystar', 'Codystar, sans-serif'], silkscreen: ['Silkscreen', 'Silkscreen, monospace'] });
 export const userAgentPresets = Object.freeze([
   ['default', 'Browser default', ''],
@@ -99,7 +100,7 @@ export function bindSettingsDialog(win, { onClose = () => {}, isCapturing = () =
 
 export function mountPreferences(win = window) {
   const doc = win.document;
-  const privacy = win.MonkehPrivacy;
+  const privacy = win.MochiiPrivacy;
   if (!privacy) return;
   let capturing = false;
   let captureButton;
@@ -181,7 +182,7 @@ export function mountPreferences(win = window) {
     leaving = true;
     let destination = win;
     try { if (win.top?.document) destination = win.top; } catch {}
-    destination.dispatchEvent(new win.CustomEvent('monkeh:leaving'));
+    destination.dispatchEvent(new win.CustomEvent('mochii:leaving'));
     destination.location.replace(privacy.get().panicUrl);
   }
   function openCloaked() {
@@ -190,7 +191,7 @@ export function mountPreferences(win = window) {
     popup.opener = null;
     const frame = popup.document.createElement('iframe');
     frame.src = new URL('/math.html', win.location.origin).href;
-    frame.title = 'Monkeh'; frame.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0';
+    frame.title = 'Mochii'; frame.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0';
     frame.allow = 'autoplay; fullscreen; gamepad'; frame.allowFullscreen = true;
     popup.document.body.append(frame);
     popup.document.title = cloakPresets[privacy.get().cloak][0];
@@ -239,28 +240,29 @@ export function mountPreferences(win = window) {
     const permissions = section('Privacy and permissions');
     for (const key of ['httpsOnly', 'allowPopups', 'allowDownloads', 'aiEnabled']) moveLegacy(permissions, key);
     const cloaking = section('Tab and cloaking');
-    field(cloaking, 'Tab cloak', 'cloak', Object.entries(cloakPresets).map(([key, [name]]) => [key, key === 'monkeh' ? 'Monkeh' : name]));
+    field(cloaking, 'Tab cloak', 'cloak', Object.entries(cloakPresets).map(([key, [name]]) => [key, key === 'mochii' ? 'Mochii' : name]));
     field(cloaking, 'Auto cloak', 'autoCloak', 'checkbox', 'Use the chosen tab name and icon only when you switch away.');
     field(cloaking, 'Use a blob window', 'blobCloak', 'checkbox', 'Use a blob address instead of about:blank for the cloaked window.');
     button(cloaking, 'Open cloaked window', openCloaked);
     field(cloaking, 'Character masking', 'characterMasking', 'checkbox', 'Use lookalike letters throughout the interface and catalogs. Search, screen readers, editable text, addresses, and viewed pages keep their original content.');
     const safety = section('Shortcuts and behavior');
     const hotkey = doc.createElement('p'); hotkey.id = 'panic-key-label'; hotkey.className = 'setting-desc'; hotkey.dataset.preferenceGroup = 'panic'; safety.append(hotkey);
-    const capture = button(safety, 'Capture shortcut', () => { capturing = true; win.MonkehDevtoolsGuard?.setEnabled(false); capture.textContent = 'Press a key combination…'; });
+    const capture = button(safety, 'Capture shortcut', () => { capturing = true; win.MochiiDevtoolsGuard?.setEnabled(false); capture.textContent = 'Press a key combination…'; });
     captureButton = capture;
     capture.dataset.preferenceGroup = 'panic';
     button(safety, 'Clear shortcut', () => { stopCapture(); privacy.update({ panicKey: '' }); }).dataset.preferenceGroup = 'panic';
-    field(safety, 'Panic URL', 'panicUrl', 'url', 'The shortcut immediately leaves Monkeh for this HTTPS address.');
+    field(safety, 'Panic URL', 'panicUrl', 'url', 'The shortcut immediately leaves Mochii for this HTTPS address.');
     const presets = doc.createElement('div'); presets.className = 'preference-actions'; presets.dataset.preferenceGroup = 'panic';
     for (const [name, url] of [['Classroom', 'https://classroom.google.com/'], ['Docs', 'https://docs.google.com/'], ['Google', 'https://www.google.com/'], ['Wikipedia', 'https://www.wikipedia.org/'], ['Gmail', 'https://mail.google.com/']]) button(presets, name, () => setPreferences({ panicUrl: url }));
     safety.append(presets); button(safety, 'Test panic shortcut', panic).dataset.preferenceGroup = 'panic';
     field(safety, 'Close protection', 'closeProtection', 'checkbox', 'Ask the browser to warn before you leave. Browsers may suppress this prompt.');
     field(safety, 'Skip loading animations', 'skipLoading', 'checkbox', 'Show content immediately and remove interface transitions.');
-    field(safety, 'Redirect native DevTools shortcuts', 'nativeDevtoolsGuard', 'checkbox', 'Show the error page for native DevTools shortcuts. Monkeh’s own browser tools stay available.');
+    field(safety, 'Redirect native DevTools shortcuts', 'nativeDevtoolsGuard', 'checkbox', 'Show the error page for native DevTools shortcuts. Mochii’s own browser tools stay available.');
     field(safety, 'Detect docked DevTools', 'detectDocked', 'checkbox', 'Experimental: browser side panels can look the same. Undocked DevTools cannot reliably be detected.');
     const data = section('Data and preferences');
     moveLegacy(data, 'clearConsoleOnClose');
-    const dataDescription = doc.createElement('p'); dataDescription.className = 'setting-desc'; dataDescription.textContent = 'Export or import these preferences. Game history, favorites, userscripts, passwords, and sessions are not included.'; data.append(dataDescription);
+    mountLibraryBackup(data, win, { notice });
+    const dataDescription = doc.createElement('p'); dataDescription.className = 'setting-desc'; dataDescription.textContent = 'For an older settings file, use the preferences-only controls below.'; data.append(dataDescription);
     button(data, 'Export preferences', () => {
       const url = win.URL.createObjectURL(new Blob([serializePreferences(privacy.get())], { type: 'application/json' }));
       const link = doc.createElement('a'); link.href = url; link.download = 'mochii-settings.json'; doc.body.append(link); link.click(); link.remove(); win.setTimeout(() => win.URL.revokeObjectURL(url), 1000); notice('Preferences exported.');
@@ -276,7 +278,8 @@ export function mountPreferences(win = window) {
     let beforeReset;
     button(data, 'Reset preferences', () => { beforeReset = privacy.get(); setPreferences(defaults); undoReset.hidden = false; notice('Preferences reset. You can undo this until you leave this page.'); });
     const undoReset = button(data, 'Undo reset', () => { if (beforeReset) setPreferences(beforeReset); beforeReset = null; undoReset.hidden = true; }); undoReset.hidden = true;
-    const info = section('Information'); const p = doc.createElement('p'); p.className = 'setting-desc'; p.textContent = 'Game catalogs preserve their source credits. Games run from their source hosts through Monkeh. Favorites, recent games and settings stay in this browser; there is no account sync.'; info.append(p);
+    const info = section('Information'); const p = doc.createElement('p'); p.className = 'setting-desc'; p.textContent = 'Game catalogs preserve their source credits. Games run from their source hosts through Mochii. Favorites, recent games and settings stay in this browser; there is no account sync.'; info.append(p);
+    const legal = doc.createElement('a'); legal.href = '/licenses/index.html'; legal.textContent = 'Licenses and source'; legal.target = '_blank'; legal.rel = 'noopener noreferrer'; info.append(legal);
     const empty = doc.createElement('p'); empty.className = 'setting-desc'; empty.id = 'settings-empty'; empty.textContent = 'No settings match your search.'; empty.hidden = true; settingsRoot.append(empty);
     const searchable = value => value.toLocaleLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
     for (const { body } of groups) {
@@ -312,10 +315,10 @@ export function mountPreferences(win = window) {
   let currentCloak;
   function cloak() {
     const settings = privacy.get();
-    const choice = settings.autoCloak && !doc.hidden ? 'monkeh' : settings.cloak;
+    const choice = settings.autoCloak && !doc.hidden ? 'mochii' : settings.cloak;
     if (choice === currentCloak) return;
     currentCloak = choice;
-    if (choice === 'monkeh') { doc.title = baseTitle; if (oldIcon) favicon.href = oldIcon; else favicon.removeAttribute('href'); return; }
+    if (choice === 'mochii') { doc.title = baseTitle; if (oldIcon) favicon.href = oldIcon; else favicon.removeAttribute('href'); return; }
     const [title, symbol, color] = cloakPresets[choice]; doc.title = title;
     favicon.href = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="6" fill="${color}"/><text x="16" y="23" text-anchor="middle" font-family="sans-serif" font-size="23" fill="white">${symbol}</text></svg>`);
   }
@@ -358,20 +361,21 @@ export function mountPreferences(win = window) {
   function stopCapture() {
     if (!capturing) return;
     capturing = false;
-    win.MonkehDevtoolsGuard?.setEnabled(privacy.get().nativeDevtoolsGuard);
+    win.MochiiDevtoolsGuard?.setEnabled(privacy.get().nativeDevtoolsGuard);
     if (captureButton) captureButton.textContent = 'Capture shortcut';
   }
   bindSettingsDialog(win, { isCapturing: () => capturing, onClose: () => { stopCapture(); privacy.flush?.(); } });
   doc.addEventListener('visibilitychange', cloak);
-  win.addEventListener('monkeh:privacy', apply);
-  win.addEventListener('monkeh:leaving', () => { leaving = true; });
+  win.addEventListener('mochii:privacy', apply);
+  win.addEventListener('mochii:leaving', () => { leaving = true; });
   win.addEventListener('blur', () => { stopCapture(); privacy.flush?.(); });
-  win.addEventListener('storage', event => { if (event.key === 'monkeh.privacy.v1' || event.key === null) { try { privacy.sync(JSON.parse(event.newValue)); } catch {} } });
+  win.addEventListener('storage', event => { if (event.key === 'mochii.privacy.v1' || event.key === null) { try { privacy.sync(JSON.parse(event.newValue)); } catch {} } });
   win.addEventListener('pageshow', () => { leaving = false; });
   win.addEventListener('beforeunload', event => { if (!leaving && privacy.get().closeProtection) { event.preventDefault(); event.returnValue = ''; } });
   win.addEventListener('keydown', event => {
     const key = hotkeyFor(event);
     if (capturing) { event.preventDefault(); event.stopImmediatePropagation(); if (!key) return; stopCapture(); privacy.update({ panicKey: key }); return; }
+    if (event.key === 'Escape' && doc.querySelector?.('[role="dialog"].active, #music-popover.active')) return;
     if (key && key === privacy.get().panicKey && !event.repeat && !event.isComposing && !event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) { event.preventDefault(); panic(); }
   }, true);
   apply();

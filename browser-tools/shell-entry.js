@@ -1,2 +1,2 @@
                                                                              
-globalThis.MonkehConfig.redirectShell();
+globalThis.MochiiConfig.redirectShell();

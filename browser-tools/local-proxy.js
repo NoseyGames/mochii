@@ -1,4 +1,5 @@
 import { createProxyNetwork } from './proxy-network.js';
+import { transportLockFor } from './transport-lock.js';
 
 const clients = new WeakMap();
 
@@ -52,8 +53,11 @@ export async function controlLocalWorker(win, timeout = 12000) {
 }
 
 export function createLocalProxy({ win = window, doc = win.document, createNetwork = createProxyNetwork, loadScript = script, timeout = 12000, startupTimeout = 25000 } = {}) {
+  const mutationLock = transportLockFor(win, { acquireTimeout: timeout, executionTimeout: startupTimeout });
   let starting;
   let connecting;
+  let switching;
+  let activeEndpoint;
   let transport;
   let ready = false;
   const loadRuntime = async () => {
@@ -64,46 +68,43 @@ export function createLocalProxy({ win = window, doc = win.document, createNetwo
     if (!win.__uv$config) await loadScript(doc, '/ultrav/uv.config.js', timeout);
     if (typeof win.BareMux?.BareMuxConnection !== 'function' || typeof win.__uv$config?.encodeUrl !== 'function' || win.__uv$config.prefix !== '/service/') throw new Error('The local proxy runtime is incomplete. Reload this page to retry.');
   };
-  const initializeTransport = async config => {
+  const initializeTransport = async (config, force = false) => {
     transport ||= new win.BareMux.BareMuxConnection('/bearmux/worker.js');
     const currentTransport = () => bounded(transport.getTransport(), 'The shared proxy connection did not respond.', timeout);
     const initialize = async () => {
-      if (await currentTransport()) return;
+      if (!force && await currentTransport()) return;
       if (!Array.isArray(config?.wispEndpoints) || !config.wispEndpoints.length || config.wispEndpoints.length > 32) throw new Error('No supported Wisp servers are configured.');
-      const endpoints = config.wispEndpoints.map(entry => {
+      let previous = activeEndpoint;
+      try { previous = win.sessionStorage?.getItem('mochii.proxy.active-wisp') || previous; } catch {}
+      const configured = config.wispEndpoints.map(entry => {
         const url = new URL(entry.url, win.location.href);
         if (url.protocol === 'http:') url.protocol = 'ws:';
         if (url.protocol === 'https:') url.protocol = 'wss:';
         return url.href;
       });
+      const endpoints = configured.filter(url => !force || url !== previous);
+      if (!endpoints.length) throw new Error('No different Wisp server is configured.');
       const network = createNetwork({
         endpoints,
-        fallbackEndpoints: endpoints.filter((_, index) => config.wispEndpoints[index].fallback === true),
+        fallbackEndpoints: configured.filter((url, index) => endpoints.includes(url) && config.wispEndpoints[index].fallback === true),
         online: win.navigator.onLine !== false,
+        onStatus: state => { try { win.networkStatusChanged?.(state); } catch {} },
         activate: async url => {
-          if (await currentTransport()) return;
+          if (!force && await currentTransport()) return;
           await transport.setTransport('/bearmux/epoxy/index.mjs?v=2.1.28', [{ wisp: url }]);
+          activeEndpoint = url;
+          try { win.sessionStorage?.setItem('mochii.proxy.active-wisp', url); } catch {}
         },
       });
       try { await network.connect(); }
       finally { network.dispose(); }
     };
-    if (!win.navigator.locks?.request) return initialize();
-    const controller = new AbortController();
-    const error = new Error('Another proxy connection is still starting. Wait briefly or reload this page.');
-    const timer = setTimeout(() => controller.abort(error), timeout);
-    try {
-      await win.navigator.locks.request('mochii-local-proxy-transport', { signal: controller.signal }, async () => {
-        clearTimeout(timer);
-        if (controller.signal.aborted) throw error;
-        await initialize();
-      });
-    } catch (failure) { throw controller.signal.aborted ? error : failure; }
-    finally { clearTimeout(timer); }
+    return mutationLock.run(initialize);
   };
   const connect = config => connecting ||= initializeTransport(config).finally(() => { connecting = null; });
-  const waitForStart = () => bounded(starting, 'The proxy connection is still starting. Wait briefly or reload this page.', startupTimeout);
+  const waitForStart = () => starting;
   const ensure = config => {
+    mutationLock.assertAvailable();
     if (starting) return waitForStart();
     if (!win.isSecureContext || !win.navigator?.serviceWorker || !win.SharedWorker) return Promise.reject(new Error('Music proxying requires HTTPS or localhost and a browser with SharedWorker support.'));
     if (ready && win.navigator.serviceWorker.controller) return Promise.resolve();
@@ -112,6 +113,11 @@ export function createLocalProxy({ win = window, doc = win.document, createNetwo
   };
   return Object.freeze({
     ensure,
+    async retry(config) {
+      await ensure(config);
+      switching ||= initializeTransport(config, true).finally(() => { switching = null; });
+      await switching;
+    },
     async url(value, config) {
       const target = new URL(value);
       if (!['https:', 'http:'].includes(target.protocol) || target.username || target.password || target.href.length > 8192 || target.origin === win.location.origin) throw new Error('Invalid proxy destination.');

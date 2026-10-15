@@ -51,7 +51,7 @@ export function createDevtoolsGuard(win, { enabled = true, detectDocked = false 
     if (!active || disposed || redirected || win.location.pathname === ERROR_PATH) return false;
     redirected = true;
     stopTimer();
-    win.dispatchEvent(new win.CustomEvent('monkeh:leaving', { detail: { reason: 'devtools-guard' } }));
+    win.dispatchEvent(new win.CustomEvent('mochii:leaving', { detail: { reason: 'devtools-guard' } }));
     win.location.replace(ERROR_PATH);
     return reason;
   }
@@ -60,7 +60,7 @@ export function createDevtoolsGuard(win, { enabled = true, detectDocked = false 
     if (!active || disposed || redirected || event.isTrusted !== true || !isNativeDevtoolsShortcut(event)) return;
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     const hotkey = [event.ctrlKey && 'Ctrl', event.altKey && 'Alt', event.shiftKey && 'Shift', event.metaKey && 'Meta', key].filter(Boolean).join('+');
-    if (hotkey === win.MonkehPrivacy?.get().panicKey && !event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    if (hotkey === win.MochiiPrivacy?.get().panicKey && !event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
     event.preventDefault();
     redirect('shortcut');
   }
@@ -122,7 +122,7 @@ export function createDevtoolsGuard(win, { enabled = true, detectDocked = false 
   }
 
   win.addEventListener('keydown', onKeydown, true);
-  win.addEventListener('monkeh:privacy', onPreferenceChange);
+  win.addEventListener('mochii:privacy', onPreferenceChange);
   doc.addEventListener('visibilitychange', onVisibilityChange);
   doc.addEventListener('fullscreenchange', onVisibilityChange);
   syncTimer();
@@ -143,16 +143,16 @@ export function createDevtoolsGuard(win, { enabled = true, detectDocked = false 
       disposed = true;
       stopTimer();
       win.removeEventListener('keydown', onKeydown, true);
-      win.removeEventListener('monkeh:privacy', onPreferenceChange);
+      win.removeEventListener('mochii:privacy', onPreferenceChange);
       doc.removeEventListener('visibilitychange', onVisibilityChange);
       doc.removeEventListener('fullscreenchange', onVisibilityChange);
     }
   });
 }
 
-if (typeof window !== 'undefined' && window.top === window && window.location.pathname !== ERROR_PATH && !window.MonkehDevtoolsGuard) {
-  const preferences = window.MonkehPrivacy?.get() || {};
-  window.MonkehDevtoolsGuard = createDevtoolsGuard(window, {
+if (typeof window !== 'undefined' && window.top === window && window.location.pathname !== ERROR_PATH && !window.MochiiDevtoolsGuard) {
+  const preferences = window.MochiiPrivacy?.get() || {};
+  window.MochiiDevtoolsGuard = window.MonkehDevtoolsGuard = createDevtoolsGuard(window, {
     enabled: preferences.nativeDevtoolsGuard !== false,
     detectDocked: preferences.detectDocked === true
   });

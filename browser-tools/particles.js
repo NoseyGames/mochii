@@ -11,7 +11,7 @@ export function makeParticles(effect, width, height, density = 'normal', random 
 
 export function mountParticles(win = window, doc = win.document) {
   const root = doc.querySelector('.app-viewport');
-  if (!root || !win.MonkehPrivacy) return null;
+  if (!root || !win.MochiiPrivacy) return null;
   const canvas = doc.createElement('canvas');
   canvas.className = 'shell-particles';
   canvas.setAttribute('aria-hidden', 'true');
@@ -66,7 +66,7 @@ export function mountParticles(win = window, doc = win.document) {
   function apply() {
     stop();
     if (disposed) return;
-    const settings = win.MonkehPrivacy.get();
+    const settings = win.MochiiPrivacy.get();
     preferenceKey = [settings.particleEffect, settings.particleDensity, settings.mode].join('|');
     effect = ['snow', 'rain', 'bubbles'].includes(settings.particleEffect) ? settings.particleEffect : 'none';
     if (blocked()) return;
@@ -85,19 +85,19 @@ export function mountParticles(win = window, doc = win.document) {
   observer?.observe(viewer, { attributes: true, attributeFilter: ['class'] });
   function resize() { win.clearTimeout(resizeTimer); resizeTimer = win.setTimeout(apply, 120); }
   function preferencesChanged() {
-    const settings = win.MonkehPrivacy.get();
+    const settings = win.MochiiPrivacy.get();
     if ([settings.particleEffect, settings.particleDensity, settings.mode].join('|') !== preferenceKey) apply();
   }
   function dispose() {
     disposed = true; stop(); win.clearTimeout(resizeTimer); observer?.disconnect();
     doc.removeEventListener('visibilitychange', apply); reduced.removeEventListener('change', apply);
-    win.removeEventListener('monkeh:privacy', preferencesChanged); win.removeEventListener('resize', resize);
+    win.removeEventListener('mochii:privacy', preferencesChanged); win.removeEventListener('resize', resize);
     win.removeEventListener('pagehide', hide); win.removeEventListener('pageshow', apply); canvas.remove();
   }
   function hide() { stop(); }
   doc.addEventListener('visibilitychange', apply);
   reduced.addEventListener('change', apply);
-  win.addEventListener('monkeh:privacy', preferencesChanged);
+  win.addEventListener('mochii:privacy', preferencesChanged);
   win.addEventListener('resize', resize);
   win.addEventListener('pagehide', hide);
   win.addEventListener('pageshow', apply);

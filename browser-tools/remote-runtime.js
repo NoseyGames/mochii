@@ -213,7 +213,7 @@ export function createRemoteRuntime(frame, origin, callbacks = {}, options = {})
     channel.port2.close?.();
   }
 
-  try { frame.contentWindow.postMessage({ type: 'monkeh-proxy:init' }, origin, [channel.port2]); }
+  try { frame.contentWindow.postMessage({ type: 'monkeh-proxy:init', protocol: 'mochii-proxy' }, origin, [channel.port2]); }
   catch (error) { dispose(); throw error; }
 
   return {

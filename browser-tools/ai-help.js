@@ -19,13 +19,13 @@ if (form) {
     status.textContent = 'Cleared.';
   });
   cancel.addEventListener('click', () => controller?.abort());
-  window.addEventListener('monkeh:privacy', event => {
+  window.addEventListener('mochii:privacy', event => {
     if (!event.detail.aiEnabled) controller?.abort();
   });
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (controller) return;
-    if (!window.MonkehPrivacy?.get().aiEnabled) { status.textContent = 'Coding help is disabled in Settings.'; return; }
+    if (!window.MochiiPrivacy?.get().aiEnabled) { status.textContent = 'Coding help is disabled in Settings.'; return; }
     const prompt = question.value.trim();
     const codeSnapshot = code.value;
     if (!prompt || prompt.length > 2000 || codeSnapshot.length > 6000) { status.textContent = 'Enter a question up to 2,000 characters and code up to 6,000 characters.'; return; }
@@ -36,7 +36,7 @@ if (form) {
     output.textContent = '';
     status.textContent = 'Asking coding help…';
     try {
-      const config = await globalThis.MonkehConfig.fetchConfig();
+      const config = await globalThis.MochiiConfig.fetchConfig();
       const response = await fetch(new URL('/api/assist', config.mode === 'static' ? window.location.origin : config.proxyOrigin), {
         method: 'POST', mode: 'cors', credentials: 'omit', redirect: 'error',
         referrerPolicy: 'no-referrer', headers: { 'Content-Type': 'application/json' },

@@ -32,6 +32,16 @@ html[data-skip-loading="true"] :is(.app-viewport, .overlay-backdrop), html[data-
 .preference-button { min-height: 34px; padding: 7px 10px; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main); background: var(--bg-card); font: inherit; font-size: 12px; cursor: pointer; }
 .preference-button:hover { border-color: var(--user-accent); background: var(--bg-card-hover); }
 .preference-search { width: 100%; min-height: 34px; padding: 7px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); color: var(--text-main); font-size: 12px; }
+.library-backup { display: grid; gap: 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; }
+.library-backup h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.library-backup p { margin: 0; line-height: 1.6; }
+.library-backup-choices { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.library-backup-choices label { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; cursor: pointer; }
+.library-backup-choices input { width: 16px; height: 16px; margin: 0; }
+.library-backup-preview { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+.library-backup-preview ul { margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.8; }
+.library-backup .preference-button:disabled { opacity: .5; cursor: default; }
+.library-backup-status:empty { display: none; }
 #general-preferences { display: flex; flex-direction: column; gap: 12px; }
 .settings-search { position: sticky; top: 0; z-index: 1; box-shadow: 0 0 0 6px var(--bg-card); }
 #settings-modal .modal-card { width: min(860px, 100%); }

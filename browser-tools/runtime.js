@@ -77,7 +77,7 @@ export function attachRuntime(targetWindow, { onConsole = () => {}, onSelect = (
     document = targetWindow.document;
     if (!document?.documentElement) throw new Error('Document is not ready.');
   } catch {
-    throw new Error('This page is not accessible yet. Reload it through the Monkeh browser and try again.');
+    throw new Error('This page is not accessible yet. Reload it through the Mochii browser and try again.');
   }
   let disposed = false;
   let navigationReported = false;
@@ -218,7 +218,7 @@ export function attachRuntime(targetWindow, { onConsole = () => {}, onSelect = (
     ensureDocument();
     if (picking) return;
     overlay = document.createElement('div');
-    overlay.setAttribute('data-monkeh-inspector', '');
+    overlay.setAttribute('data-mochii-inspector', '');
     overlay.setAttribute('aria-hidden', 'true');
     for (const [property, value] of Object.entries({
       all: 'initial', position: 'fixed', display: 'none', 'pointer-events': 'none',

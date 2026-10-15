@@ -1,4 +1,6 @@
-export const USERSCRIPTS_STORAGE_KEY = 'monkeh.userscripts.v1';
+import { readMigratedStorage } from './storage.js';
+
+export const USERSCRIPTS_STORAGE_KEY = 'mochii.userscripts.v1';
 
 const MAX_SCRIPTS = 50;
 let fallbackId = 0;
@@ -138,7 +140,7 @@ export function createUserscriptStore(storage) {
     warning = null;
     let raw;
     try {
-      raw = storage.getItem(USERSCRIPTS_STORAGE_KEY);
+      raw = readMigratedStorage(storage, USERSCRIPTS_STORAGE_KEY, 'monkeh.userscripts.v1');
     } catch {
       fail('Unable to read userscripts. Browser storage may be blocked.');
     }
