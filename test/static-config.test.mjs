@@ -11,10 +11,10 @@ const proxy = 'https://monkeh.1234-imwatchingyouopenthedoor.workers.dev';
 const mirrors = ['https://monkeh-noseygames.netlify.app', 'https://monkeh-browser.robert360254.chatgpt.site'];
 const productionShells = [shell, ...mirrors];
 const untrustedOrigins = [
-  'https://unknown.example', 'https://monkeh.vercel.app', 'https://monkeh-git-main-other.vercel.app',
-  'https://other-monkeh.netlify.app', 'https://deploy-preview-1--monkeh-noseygames.netlify.app',
+  'https://unknown.example', 'https://mochii.vercel.app', 'https://mochii-git-main-other.vercel.app',
+  'https://other-mochii.netlify.app', 'https://deploy-preview-1--monkeh-noseygames.netlify.app',
   'https://branch--monkeh-noseygames.netlify.app', 'https://monkeh-noseygames.netlify.app.attacker.example',
-  'https://monkeh-browser.other-user.chatgpt.site', 'https://different-project.robert360254.chatgpt.site',
+  'https://mochii-browser.other-user.chatgpt.site', 'https://different-project.robert360254.chatgpt.site',
   'https://preview.monkeh-browser.robert360254.chatgpt.site', 'https://monkeh-browser.robert360254.chatgpt.site.attacker.example',
   'http://monkeh-noseygames.netlify.app', 'https://monkeh-noseygames.netlify.app:8443',
   'https://attacker.testingproductionubgdontgo.pages.dev.attacker.example',
@@ -41,7 +41,7 @@ const secureStaticOrigins = [
 test('static deployments share immutable external Wisp settings without origin configuration or API requests', async () => {
   for (const origin of secureStaticOrigins) {
     const fixture = context(origin + '/math.html');
-    const config = await fixture.page.MonkehConfig.fetchConfig();
+    const config = await fixture.page.MochiiConfig.fetchConfig();
     assert.equal(config.mode, 'static', origin);
     assert(Object.isFrozen(config));
     for (const key of ['proxyOrigin', 'shellOrigin', 'shellOrigins']) assert.equal(Object.hasOwn(config, key), false, key);
@@ -64,8 +64,8 @@ test('every secure mirror keeps its URL and navigation without a shell redirect'
   for (const origin of secureStaticOrigins) {
     const url = origin + '/math.html?view=apps#desktop';
     const fixture = context(url);
-    await fixture.page.MonkehConfig.fetchConfig();
-    assert.equal(fixture.page.MonkehConfig.redirectShell(), false, origin);
+    await fixture.page.MochiiConfig.fetchConfig();
+    assert.equal(fixture.page.MochiiConfig.redirectShell(), false, origin);
     assert.equal(fixture.redirect, undefined, origin);
     assert.equal(fixture.page.location.href, url);
     assert.equal(fixture.requests, 0);
@@ -75,9 +75,9 @@ test('every secure mirror keeps its URL and navigation without a shell redirect'
 test('insecure public and opaque static deployments reject configuration without contacting an API', async () => {
   for (const url of ['http://public.example/math', 'http://localhost.attacker.example/math', 'http://monkeh-noseygames.netlify.app/math', 'file:///math.html', 'data:text/html,test']) {
     const fixture = context(url);
-    await assert.rejects(fixture.page.MonkehConfig.fetchConfig(), /HTTPS or localhost|Invalid URL/, url);
+    await assert.rejects(fixture.page.MochiiConfig.fetchConfig(), /HTTPS or localhost|Invalid URL/, url);
     assert.equal(fixture.requests, 0);
-    assert.equal(fixture.page.MonkehConfig.redirectShell(), false);
+    assert.equal(fixture.page.MochiiConfig.redirectShell(), false);
     assert.equal(fixture.redirect, undefined);
   }
 });
@@ -85,13 +85,13 @@ test('insecure public and opaque static deployments reject configuration without
 test('static configuration rejects credentials, paths and non-origin values', () => {
   const fixture = context('https://mirror.example/math');
   for (const value of ['https://user:pass@mirror.example', 'https://mirror.example/path', 'https://mirror.example?query=1', 'https://mirror.example#part', 'https://mirror.example/', 'null', '']) {
-    assert.throws(() => fixture.page.MonkehConfig.staticConfig(value), /HTTPS or localhost|Invalid URL/, String(value));
+    assert.throws(() => fixture.page.MochiiConfig.staticConfig(value), /HTTPS or localhost|Invalid URL/, String(value));
   }
   assert.equal(fixture.requests, 0);
 });
 
 test('the owner-supplied endpoint paths are preserved and all configured relays are external', async () => {
-  const config = await context(shell + '/math').page.MonkehConfig.fetchConfig();
+  const config = await context(shell + '/math').page.MochiiConfig.fetchConfig();
   const urls = config.wispEndpoints.map(entry => entry.url);
   for (const url of ['wss://wisp.mercurywork.shop/', 'wss://wispserver.dev/wisp', 'wss://admin.proxy.hydrovolter.com/scramjet/wisp/',
     'wss://henhouse.social/relay', 'wss://nostr.me/relay', 'wss://anura.pro/', 'wss://anura.pro/wisp/', 'wss://wisp.solife.me/']) {

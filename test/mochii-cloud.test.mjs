@@ -14,7 +14,7 @@ function memoryStorage(initial = null) {
   };
 }
 
-const proxyConfig = { proxyOrigin: 'https://proxy.example', shellOrigins: ['https://monkeh.example'] };
+const proxyConfig = { proxyOrigin: 'https://proxy.example', shellOrigins: ['https://mochii.example'] };
 
 function deferred() {
   let resolve; let reject;
@@ -68,9 +68,9 @@ function harness({ search = '', storage = memoryStorage(), configFetch = async (
     addEventListener(type, listener) { docListeners.set(type, listener); }
   };
   const win = {
-    localStorage: storage, location: new URL(`https://monkeh.example/apps/mochii-cloud.html${search}`),
+    localStorage: storage, location: new URL(`https://mochii.example/apps/mochii-cloud.html${search}`),
     navigator: { getGamepads: () => [] }, URL, AbortController,
-    MonkehConfig: { fetchConfig(options = {}) { configRequests.push(options); return configFetch(options); } },
+    MochiiConfig: { fetchConfig(options = {}) { configRequests.push(options); return configFetch(options); } },
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     history: { replaceState() {} }, scrollTo() {},
     setTimeout(fn) { const id = ++sequence; timers.set(id, fn); return id; }, clearTimeout(id) { timers.delete(id); },
@@ -252,7 +252,7 @@ test('the Figure button starts only an embedded proxy session', async () => {
 
 test('static Figure play uses the current mirror and keeps its iframe sandbox and saved browser identity', async () => {
   const app = harness({ configFetch: async () => ({ mode: 'static', wispEndpoints: ['wss://relay.example/wisp/'] }) });
-  app.win.MonkehPrivacy = { get: () => ({ userAgent: 'Saved Browser/1' }) };
+  app.win.MochiiPrivacy = { get: () => ({ userAgent: 'Saved Browser/1' }) };
   await app.mounted.launchFigure(GAMES[0]);
   const frame = app.get('player-container').children[0];
   const url = new URL(frame.src);
@@ -290,7 +290,7 @@ test('Figure launch ignores untrusted URL and title metadata and uses the verifi
 
 test('configuration failures leave a retryable modal without frames or phantom session time', async () => {
   for (const configFetch of [async () => { throw new Error('Configuration unavailable'); },
-    async () => ({ proxyOrigin: 'https://monkeh.example', shellOrigins: ['https://monkeh.example'] }),
+    async () => ({ proxyOrigin: 'https://mochii.example', shellOrigins: ['https://mochii.example'] }),
     async () => ({ proxyOrigin: 'https://proxy.example', shellOrigins: ['https://another-shell.example'] })]) {
     const app = harness({ configFetch });
     await app.mounted.launchFigure(GAMES[0]);

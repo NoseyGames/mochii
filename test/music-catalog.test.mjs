@@ -39,9 +39,9 @@ test('name dedupe combines source versions in one pass and preserves alternate a
 
 test('stream URLs are fixed API paths with encoded metadata and no arbitrary targets', () => {
   const path = musicStreamPath(track('1234', 'a?b&c'));
-  assert.equal(new URL(path, 'https://monkeh.test').pathname, '/api/music/stream');
-  assert.equal(new URL(path, 'https://monkeh.test').searchParams.get('title'), 'a?b&c');
-  assert.equal(new URL(path, 'https://monkeh.test').searchParams.get('url'), null);
+  assert.equal(new URL(path, 'https://mochii.test').pathname, '/api/music/stream');
+  assert.equal(new URL(path, 'https://mochii.test').searchParams.get('title'), 'a?b&c');
+  assert.equal(new URL(path, 'https://mochii.test').searchParams.get('url'), null);
   assert.throws(() => musicStreamPath(track(1, 'Title', 'unknown')));
   assert.throws(() => musicStreamPath(track('https://evil.test/audio')));
 });
@@ -112,7 +112,7 @@ class AudioFixture extends EventTarget {
 
 test('audio stays idle until selected; playback fallback never loads other songs', async () => {
   const audio = new AudioFixture(); const requests = [];
-  const player = createMusicPlayer({ audio, resolveUrl: async variant => { requests.push(variant.source); return 'https://monkeh.test' + musicStreamPath(variant); } });
+  const player = createMusicPlayer({ audio, resolveUrl: async variant => { requests.push(variant.source); return 'https://mochii.test' + musicStreamPath(variant); } });
   const tracks = normalized(track(1), track(2, 'a song', 'qobuz'), track(3, 'Other'));
   assert.equal(audio.preload, 'none'); assert.equal(audio.plays, 0); assert.deepEqual(requests, []);
   await player.play(tracks[0], tracks); assert.equal(audio.plays, 1); assert.deepEqual(requests, ['tidal']);
@@ -123,7 +123,7 @@ test('audio stays idle until selected; playback fallback never loads other songs
 });
 
 test('queue advances, repeats one, and stops at its end without autoplaying a fresh queue', async () => {
-  const audio = new AudioFixture(); const player = createMusicPlayer({ audio, resolveUrl: async () => 'https://monkeh.test/audio' });
+  const audio = new AudioFixture(); const player = createMusicPlayer({ audio, resolveUrl: async () => 'https://mochii.test/audio' });
   const tracks = normalized(track(1, 'First'), track(2, 'Second'));
   await player.play(tracks[0], tracks);
   audio.dispatchEvent(new Event('ended')); await tick(); assert.equal(player.snapshot().current.title, 'Second');
@@ -135,19 +135,69 @@ test('queue advances, repeats one, and stops at its end without autoplaying a fr
 
 test('an old asynchronous track resolution cannot replace a newer selection', async () => {
   const audio = new AudioFixture(); let release;
-  const player = createMusicPlayer({ audio, resolveUrl: variant => variant.id === '1' ? new Promise(resolve => { release = resolve; }) : Promise.resolve('https://monkeh.test/second') });
+  const player = createMusicPlayer({ audio, resolveUrl: variant => variant.id === '1' ? new Promise(resolve => { release = resolve; }) : Promise.resolve('https://mochii.test/second') });
   const tracks = normalized(track(1, 'First'), track(2, 'Second'));
   const old = player.play(tracks[0], tracks); await player.play(tracks[1], tracks);
-  release('https://monkeh.test/first'); await old;
-  assert.equal(audio.src, 'https://monkeh.test/second'); assert.equal(player.snapshot().current.title, 'Second');
+  release('https://mochii.test/first'); await old;
+  assert.equal(audio.src, 'https://mochii.test/second'); assert.equal(player.snapshot().current.title, 'Second');
 });
 
 test('page suspension cancels pending audio and resumes only after a new play gesture', async () => {
   const audio = new AudioFixture(); let release; let first = true;
-  const player = createMusicPlayer({ audio, resolveUrl: () => { if (first) { first = false; return new Promise(resolve => { release = resolve; }); } return Promise.resolve('https://monkeh.test/resumed'); } });
+  const player = createMusicPlayer({ audio, resolveUrl: () => { if (first) { first = false; return new Promise(resolve => { release = resolve; }); } return Promise.resolve('https://mochii.test/resumed'); } });
   const [song] = normalized(track(1));
-  const loading = player.play(song); player.suspend(); release('https://monkeh.test/stale'); await loading;
+  const loading = player.play(song); player.suspend(); release('https://mochii.test/stale'); await loading;
   assert.equal(audio.src, ''); assert.equal(audio.plays, 0); assert.equal(player.snapshot().current.key, song.key);
   audio.dispatchEvent(new Event('playing')); assert.equal(player.snapshot().playing, false);
-  await player.toggle(); assert.equal(audio.plays, 1); assert.equal(audio.src, 'https://monkeh.test/resumed');
+  await player.toggle(); assert.equal(audio.plays, 1); assert.equal(audio.src, 'https://mochii.test/resumed');
+});
+
+
+test('editable queue reorders around the current track without restarting it', async () => {
+  const audio = new AudioFixture(); const player = createMusicPlayer({ audio, resolveUrl: async () => '/audio' });
+  const songs = normalized(track(1, 'First'), track(2, 'Second'), track(3, 'Third'), track(4, 'Fourth'));
+  await player.play(songs[1], songs.slice(0, 3));
+  assert.equal(player.enqueue(songs[3], true), true);
+  assert.deepEqual(player.snapshot().queue.map(item => item.id), ['1', '2', '4', '3']);
+  player.move(0, 3);
+  assert.deepEqual(player.snapshot().queue.map(item => item.id), ['2', '4', '3', '1']);
+  assert.equal(player.snapshot().index, 0);
+  player.remove(2);
+  assert.equal(player.snapshot().current.id, '2');
+  assert.equal(audio.plays, 1);
+  await player.next(); assert.equal(player.snapshot().current.id, '4');
+  assert.equal(player.enqueue(songs[3], true), false);
+});
+
+test('saved playback never resolves a stream until Play and restores position after metadata', async () => {
+  const audio = new AudioFixture(); let requests = 0;
+  const player = createMusicPlayer({ audio, resolveUrl: async () => { requests++; return '/audio'; } });
+  const [song] = normalized(track(1));
+  player.restore({ track: song, queue: [song], position: 42 });
+  assert.equal(requests, 0); assert.equal(audio.plays, 0); assert.equal(audio.src, '');
+  assert.equal(player.snapshot().playing, false);
+  await player.toggle(); assert.equal(requests, 1); assert.equal(audio.plays, 1);
+  audio.dispatchEvent(new Event('loadedmetadata'));
+  assert.equal(audio.currentTime, 42);
+  player.suspend(); assert.equal(player.position(), 42);
+});
+
+test('connection and aggregator errors remain distinguishable without automatic replay', async () => {
+  let calls = 0;
+  await assert.rejects(fetchMusicJson(async () => { calls++; throw new TypeError('Failed to fetch'); }, '/api/music/browse'), error => error.kind === 'relay');
+  assert.equal(calls, 1);
+  await assert.rejects(fetchMusicJson(async () => Response.json({ error: 'rate limit' }, { status: 429 }), '/api/music/browse'), error => error.kind === 'provider' && /rate limit/.test(error.message));
+  await assert.rejects(fetchMusicJson(async () => new Response('<html>', { headers: { 'content-type': 'text/html' } }), '/api/music/browse'), error => error.kind === 'connection');
+  await assert.rejects(fetchMusicJson(async () => new Response('{bad', { headers: { 'content-type': 'application/json' } }), '/api/music/browse'), error => error.kind === 'provider');
+});
+
+
+test('a stalled audio request times out and a late result cannot replace the retry', async () => {
+  const audio = new AudioFixture(); let release; let calls = 0;
+  const player = createMusicPlayer({ audio, loadTimeout: 5, resolveUrl: () => ++calls === 1 ? new Promise(resolve => { release = resolve; }) : Promise.resolve('/retry') });
+  const [song] = normalized(track(1));
+  await player.play(song);
+  assert.equal(player.snapshot().loading, false); assert.match(player.snapshot().error, /too long/); assert.equal(audio.src, '');
+  await player.retry(); assert.equal(audio.src, '/retry');
+  release('/stale'); await tick(); assert.equal(audio.src, '/retry'); assert.equal(audio.plays, 1);
 });

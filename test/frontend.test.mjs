@@ -55,7 +55,7 @@ function createPage({ protocol = 'http:', storageUnavailable = false } = {}) {
     removeEventListener(type) { serviceWorkerListeners.delete(type); }
   };
   const page = {
-    MonkehUseBackendConfig: true,
+    MochiiUseBackendConfig: true,
     console: { log() {}, warn() {}, error() {} },
     URL, TextEncoder, TextDecoder, AbortSignal, AbortController, setTimeout, clearTimeout,
     requestAnimationFrame() {},
@@ -85,7 +85,7 @@ function createPage({ protocol = 'http:', storageUnavailable = false } = {}) {
     innerHeight: 100,
     addEventListener() {},
     async fetch() { return configResponse({ proxyOrigin: `${protocol}//localhost:3001`, wispEndpoints: [{ name: 'Primary', url: '/wisp/' }] }); },
-    createMonkehNetwork({ endpoints, activate, onStatus }) {
+    createMochiiNetwork({ endpoints, activate, onStatus }) {
       let active = null;
       return {
         async connect() {
@@ -129,7 +129,7 @@ test('shell configuration shares concurrent initialization and never creates a s
   const first = page.initializeNetwork();
   assert.equal(first, page.initializeNetwork());
   assert.equal(await first, true);
-  assert.equal(page.MonkehProxyOrigin, 'http://localhost:3001');
+  assert.equal(page.MochiiProxyOrigin, 'http://localhost:3001');
   assert.equal(calls.registrations, 0);
   assert.equal(calls.transports.length, 0);
 });
@@ -151,7 +151,7 @@ test('search waits for isolated origin configuration and then navigates the remo
 test('preparing a new proxy page leaves the current local app interactive until navigation is ready', async () => {
   const { page, element } = createPage();
   const prepared = [];
-  page.MonkehTools = { prepareNavigation: url => prepared.push(url), expectDocument() {} };
+  page.MochiiTools = { prepareNavigation: url => prepared.push(url), expectDocument() {} };
   await page.openViewer('Auk', '', '/apps/auk.html');
   const response = deferred();
   page.fetch = () => response.promise;
@@ -169,7 +169,7 @@ test('preparing a new proxy page leaves the current local app interactive until 
 test('a failed proxy setup for an external catalog entry preserves the current page and offers a retry', async () => {
   const { page, element } = createPage();
   const prepared = [];
-  page.MonkehTools = { prepareNavigation: url => prepared.push(url), expectDocument() {} };
+  page.MochiiTools = { prepareNavigation: url => prepared.push(url), expectDocument() {} };
   await page.openViewer('Auk', '', '/apps/auk.html');
   const request = deferred();
   page.fetch = () => request.promise;
@@ -188,7 +188,7 @@ test('a failed proxy setup for an external catalog entry preserves the current p
 test('accepted warm proxy navigation preserves the outer iframe and its document', async () => {
   const { page, element } = createPage();
   const prepared = [], navigated = [];
-  page.MonkehTools = {
+  page.MochiiTools = {
     prepareNavigation: url => prepared.push(url), expectDocument() {},
     async navigateRemote(url) { navigated.push(url); return true; },
   };
@@ -209,18 +209,18 @@ test('accepted warm proxy navigation preserves the outer iframe and its document
 
 test('changing browser identity recreates the proxy view before navigating', async () => {
   const { page, element } = createPage();
-  let userAgent = 'Monkeh-A/1.0';
+  let userAgent = 'Mochii-A/1.0';
   let reused = 0;
-  page.MonkehPrivacy = { get: () => ({ httpsOnly: true, userAgent }), sandbox: () => 'allow-scripts allow-same-origin allow-forms allow-pointer-lock' };
-  page.MonkehTools = { prepareNavigation() {}, expectDocument() {}, async navigateRemote() { reused++; return true; } };
+  page.MochiiPrivacy = { get: () => ({ httpsOnly: true, userAgent }), sandbox: () => 'allow-scripts allow-same-origin allow-forms allow-pointer-lock' };
+  page.MochiiTools = { prepareNavigation() {}, expectDocument() {}, async navigateRemote() { reused++; return true; } };
   await page.openViewer('First', '', 'https://first.example/', true);
-  assert.equal(new URL(element('viewer-frame').src).searchParams.get('ua'), 'Monkeh-A/1.0');
+  assert.equal(new URL(element('viewer-frame').src).searchParams.get('ua'), 'Mochii-A/1.0');
   await page.openViewer('Second', '', 'https://second.example/', true);
   assert.equal(reused, 1);
-  userAgent = 'Monkeh-B/1.0';
+  userAgent = 'Mochii-B/1.0';
   await page.openViewer('Third', '', 'https://third.example/', true);
   assert.equal(reused, 1);
-  assert.equal(new URL(element('viewer-frame').src).searchParams.get('ua'), 'Monkeh-B/1.0');
+  assert.equal(new URL(element('viewer-frame').src).searchParams.get('ua'), 'Mochii-B/1.0');
   userAgent = '';
   await page.openViewer('Default', '', 'https://default.example/', true);
   assert.equal(reused, 1);
@@ -230,7 +230,7 @@ test('changing browser identity recreates the proxy view before navigating', asy
 test('game code mode survives retry and only reuses a host with the same loading mode', async () => {
   const { page, element } = createPage();
   const reused = [];
-  page.MonkehTools = { prepareNavigation() {}, expectDocument() {}, async navigateRemote(url) { reused.push(url); return true; } };
+  page.MochiiTools = { prepareNavigation() {}, expectDocument() {}, async navigateRemote(url) { reused.push(url); return true; } };
   await page.openViewer('Web', '', 'https://web.example/', true);
   await page.openViewer('Game', '', 'https://games.example/first.html', true, { loadCode: true });
   const host = new URL(element('viewer-frame').src);
@@ -250,10 +250,10 @@ test('game code mode survives retry and only reuses a host with the same loading
 test('changed popup or download sandbox permissions force a cold proxy navigation', async () => {
   const { page, element } = createPage();
   let policy = 'allow-scripts allow-same-origin allow-forms allow-pointer-lock';
-  page.MonkehPrivacy = { get: () => ({ httpsOnly: true }), sandbox: () => policy };
+  page.MochiiPrivacy = { get: () => ({ httpsOnly: true }), sandbox: () => policy };
   const prepared = [];
   let reused = 0;
-  page.MonkehTools = {
+  page.MochiiTools = {
     prepareNavigation: url => prepared.push(url), expectDocument() {},
     async navigateRemote() { reused++; return true; },
   };
@@ -270,7 +270,7 @@ test('stale asynchronous warm reuse cannot replace a newer local app or its retr
   const { page, element } = createPage();
   const result = deferred();
   let attempts = 0;
-  page.MonkehTools = {
+  page.MochiiTools = {
     prepareNavigation() {}, expectDocument() {},
     navigateRemote() { attempts++; return result.promise; },
   };
@@ -292,7 +292,7 @@ test('stale asynchronous warm reuse cannot replace a newer local app or its retr
 test('an unavailable warm bridge falls back to a fresh isolated host', async () => {
   const { page, element } = createPage();
   let prepared = 0, attempts = 0;
-  page.MonkehTools = {
+  page.MochiiTools = {
     prepareNavigation() { prepared++; }, expectDocument() {},
     async navigateRemote() { attempts++; return false; },
   };
@@ -307,7 +307,7 @@ test('shell refuses a proxy configured on its own origin', async () => {
   const { page } = createPage();
   page.fetch = async () => configResponse({ proxyOrigin: 'http://localhost:3000', wispEndpoints: [{ url: '/wisp/' }] });
   assert.equal(await page.initializeNetwork(), false);
-  assert.equal(page.MonkehProxyOrigin, undefined);
+  assert.equal(page.MochiiProxyOrigin, undefined);
 });
 
 test('HTML from a missing API route shows a deployment error, blocks browsing, and can recover', async () => {
@@ -320,7 +320,7 @@ test('HTML from a missing API route shows a deployment error, blocks browsing, a
   assert.match(element('connection-status').innerHTML, /Proxy unavailable/);
   assert.match(element('network-detail').textContent, /api\/config/);
   assert.doesNotMatch(element('viewer-frame').srcdoc, /Unexpected token|App fallback/);
-  assert.equal(page.MonkehProxyOrigin, undefined);
+  assert.equal(page.MochiiProxyOrigin, undefined);
   page.fetch = workingFetch;
   await page.retryViewerNavigation();
   assert.equal(element('viewer-frame').src, 'http://localhost:3001/proxy-host.html#https%3A%2F%2Fexample.com%2F');
@@ -346,7 +346,7 @@ test('closing and reopening the viewer ignores stale proxy setup without abortin
   assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/auk.html');
   assert.equal(element('viewer-frame').srcdoc, '');
   assert.equal(element('viewer-title').textContent, 'Auk');
-  assert.equal(page.MonkehProxyOrigin, 'http://localhost:3001', 'the shared setup still completes for later navigation');
+  assert.equal(page.MochiiProxyOrigin, 'http://localhost:3001', 'the shared setup still completes for later navigation');
   await page.retryViewerNavigation();
   assert.equal(element('viewer-frame').src, 'http://localhost:3000/apps/auk.html', 'the stale completion does not restore its retry target');
   assert.equal(element('zone-viewer').classList.contains('active'), true);
@@ -462,7 +462,7 @@ test('external catalog entries always use the isolated proxy even with isProxied
   const requests = [];
   const configFetch = page.fetch;
   page.fetch = (...args) => { requests.push(args[0]); return configFetch(...args); };
-  page.MonkehPrivacy = { get: () => ({ httpsOnly: false }), sandbox: () => 'allow-scripts allow-same-origin allow-forms allow-pointer-lock' };
+  page.MochiiPrivacy = { get: () => ({ httpsOnly: false }), sandbox: () => 'allow-scripts allow-same-origin allow-forms allow-pointer-lock' };
   const frame = element('viewer-frame');
   for (const url of ['https://cdn.example/game.html', 'http://legacy.example/game.html']) {
     await page.openViewer('Game', '', url, false);
@@ -522,12 +522,12 @@ test('Flyflix catalog launches the live website through the same proxy viewer', 
 
 test('static mirrors open their local proxy host and retain the local service worker', async () => {
   const { page, calls, element } = createPage({ protocol: 'https:' });
-  page.MonkehUseBackendConfig = false;
+  page.MochiiUseBackendConfig = false;
   let unregisters = 0;
   page.navigator.serviceWorker.getRegistrations = async () => [{ active: { scriptURL: page.location.origin + '/sw.js' }, async unregister() { unregisters++; } }];
   page.fetch = async () => { throw new Error('Static configuration must not request an API'); };
   await page.openViewer('Search', 'Web', 'https://example.com/', true);
-  assert.equal(page.MonkehProxyOrigin, page.location.origin);
+  assert.equal(page.MochiiProxyOrigin, page.location.origin);
   assert.equal(element('viewer-frame').src, page.location.origin + '/proxy-host.html#https%3A%2F%2Fexample.com%2F');
   assert.equal(unregisters, 0);
   assert.equal(calls.registrations, 0);
@@ -541,4 +541,22 @@ test('network status distinguishes local proxy software failures from unreachabl
   assert.doesNotMatch(element('network-detail').textContent, /servers unavailable/);
   page.networkStatusChanged({ status: 'unavailable', failureStage: 'probe', configuredCount: 2 });
   assert.match(element('network-detail').textContent, /Proxy servers unavailable/);
+});
+
+test('returning home and opening catalogs keeps the live page and resumes without navigation', async () => {
+  const { page, element } = createPage();
+  await page.openViewer('Playing', '', '/apps/auk.html');
+  const frame = element('viewer-frame'), original = frame.src;
+  Object.defineProperty(frame, 'src', { get: () => original, set() { throw new Error('The active page must stay loaded'); } });
+  page.hideViewer();
+  assert.equal(element('zone-viewer').classList.contains('active'), false);
+  assert.equal(element('resume-viewer').hidden, false);
+  assert.equal(element('zone-viewer').inert, true);
+  page.openGamesPopover();
+  page.closeGamesPopover();
+  page.resumeViewer();
+  assert.equal(element('zone-viewer').classList.contains('active'), true);
+  assert.equal(element('zone-viewer').inert, false);
+  assert.equal(element('resume-viewer').hidden, true);
+  assert.equal(frame.src, original);
 });

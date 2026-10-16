@@ -27,10 +27,10 @@ function harness(configPromise, responseFactory = () => new Response(JSON.string
     document: { getElementById: get },
     window: {
       location: new URL('https://mirror.example/math'),
-      MonkehPrivacy: { get: () => ({ aiEnabled: true }) },
+      MochiiPrivacy: { get: () => ({ aiEnabled: true }) },
       addEventListener(name, callback) { windowListeners.set(name, callback); },
     },
-    MonkehConfig: { fetchConfig: () => configPromise },
+    MochiiConfig: { fetchConfig: () => configPromise },
     AbortController, AbortSignal, URL,
     fetch: async (url, options) => {
       options.signal.throwIfAborted();
@@ -80,7 +80,7 @@ test('disabling coding help while configuration loads cancels the pending reques
   const app = harness(config.promise);
   app.get('ai-question').value = 'Explain this function';
   const pending = app.get('ai-help-form').emit('submit');
-  app.windowListeners.get('monkeh:privacy')({ detail: { aiEnabled: false } });
+  app.windowListeners.get('mochii:privacy')({ detail: { aiEnabled: false } });
   config.resolve({ proxyOrigin: 'https://proxy.example' });
   await pending;
   assert.equal(app.requests.length, 0);

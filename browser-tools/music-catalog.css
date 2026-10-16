@@ -56,3 +56,31 @@
   .music-player-controls .music-button { padding: 7px 9px; }
   .music-footnote { display: none; }
 }
+
+.music-library, .music-queue { margin: 0 22px 8px; font-size: 12px; }
+.music-library > summary, .music-queue > summary { cursor: pointer; padding: 6px 0; color: var(--text-muted, #a6a8b2); }
+.music-library-controls { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 6px; }
+.music-library-controls input { flex: 1; min-width: 130px; color: inherit; background: var(--bg-main, #101216); border: 1px solid var(--border-color, #393b42); border-radius: 7px; padding: 7px 9px; font: inherit; }
+.music-library-controls .music-button { padding: 6px 9px; }
+.music-library-status { margin: 5px 0 0; color: var(--text-muted, #a6a8b2); }
+.music-library-status:empty { display: none; }
+.music-storage-status { color: #edba85; font-size: 12px; line-height: 1.5; margin: 0; padding: 5px 22px; }
+.music-track-actions { flex: 0 0 40px; width: 40px; max-width: 40px; padding: 5px; border: 0; background: transparent; }
+.music-queue { flex-shrink: 0; }
+.music-queue ol { list-style: none; margin: 0; padding: 0; max-height: 140px; overflow-y: auto; overscroll-behavior: contain; }
+.music-queue-row { display: flex; gap: 5px; align-items: center; padding: 3px 0; }
+.music-queue-row .music-button { font-size: 12px; padding: 5px 8px; }
+.music-queue-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.music-queue-row[data-current] .music-queue-title { border-color: var(--user-accent, #b4bdca); }
+.music-remember { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-muted, #a6a8b2); }
+.music-remember input { accent-color: var(--user-accent, #b4bdca); }
+.music-player > .music-button { grid-column: 1 / -1; justify-self: start; font-size: 12px; }
+.music-list { flex-basis: 250px; min-height: 90px; }
+@media(max-width: 560px) {
+  .music-library, .music-queue { margin-left: 14px; margin-right: 14px; }
+  .music-storage-status { padding-left: 14px; padding-right: 14px; }
+  .music-favorite { padding-left: 6px; padding-right: 6px; }
+}
+.music-imported-playback { grid-column: 1 / -1; border-top: 1px solid var(--border-color, #393b42); padding-top: 6px; }
+.music-imported-playback p { font-size: 12px; margin: 4px 0 8px; }
+.music-imported-playback .music-button { font-size: 12px; margin-right: 6px; }

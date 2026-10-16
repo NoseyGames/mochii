@@ -340,7 +340,7 @@ async function connectFrame(force = false) {
   try {
     const source = new URL(frame.src, location.href);
     if (source.protocol === 'about:') return;
-    if (source.origin !== window.MonkehProxyOrigin || source.pathname !== '/proxy-host.html') {
+    if (source.origin !== window.MochiiProxyOrigin || source.pathname !== '/proxy-host.html') {
       disconnect();
       setConnection(source.origin === location.origin ? 'Local app · tools paused' : 'Isolated content · tools unavailable');
       return;
@@ -350,13 +350,15 @@ async function connectFrame(force = false) {
     currentDocument = frame.src;
     currentUrl = publicUrl(expectedUrl);
     setConnection('Connecting to proxied page');
-    const target = createRemoteRuntime(frame, window.MonkehProxyOrigin, {
+    const target = createRemoteRuntime(frame, window.MochiiProxyOrigin, {
       onPage: page => {
         if (runtime !== target) return;
         generation++;
         selectedElement = null;
         editing = false;
         currentUrl = page.url;
+        if (!page.isError) window.MochiiGames?.rememberSource?.(expectedUrl);
+        window.destinationStatusChanged?.(page);
         $('browser-url').value = currentUrl;
         $('inspector-summary').textContent = 'Select an element';
         $('inspector-attributes').replaceChildren();
@@ -468,7 +470,7 @@ async function runScript(script, target = runtime, automatic = false) {
   try {
     if (!script.code.trim()) throw new Error('Write some JavaScript first.');
                                                                                 
-    const result = await target.evaluate(`(async function() {\n${script.code}\n}).call(window)\n//# sourceURL=monkeh-userscript-${(script.id || 'draft').replace(/[^\w-]/g, '')}.js`);
+    const result = await target.evaluate(`(async function() {\n${script.code}\n}).call(window)`);
     if (session !== generation) return;
     addEntry('info', [`${automatic ? 'Auto-ran' : 'Ran'} userscript: ${label}`, ...(result === undefined ? [] : [result])]);
     if (!automatic) scriptStatus(`Ran ${label} in this page${dirty ? ' · editor changes are not saved.' : '.'}`);
@@ -626,9 +628,9 @@ $('browser-address').addEventListener('submit', event => {
 $('browser-reload').addEventListener('click', async () => {
   if (!currentUrl) return;
   try {
-    const expectedSandbox = window.MonkehPrivacy?.sandbox?.(true);
+    const expectedSandbox = window.MochiiPrivacy?.sandbox?.(true);
     const changedPermissions = runtime?.isRemote && typeof expectedSandbox === 'string' && frame.getAttribute('sandbox') !== expectedSandbox;
-    const expectedIdentity = window.MonkehPrivacy?.get?.()?.userAgent || '';
+    const expectedIdentity = window.MochiiPrivacy?.get?.()?.userAgent || '';
     const changedIdentity = runtime?.isRemote && (new URL(frame.src || 'about:blank', location.href).searchParams.get('ua') || '') !== expectedIdentity;
     if (changedPermissions || changedIdentity) await window.retryViewerNavigation?.();
     else if (runtime) await runtime.reload();
@@ -696,11 +698,11 @@ resize.addEventListener('keydown', event => {
 window.addEventListener('resize', () => { if (!panel.hidden) setWidth(panel.getBoundingClientRect().width || 420); });
 frame.addEventListener('load', () => connectFrame());
 window.addEventListener('message', event => {
-  if (!expectingDocument || event.source !== frame.contentWindow || event.origin !== window.MonkehProxyOrigin || event.data?.type !== 'monkeh-proxy:ready') return;
+  if (!expectingDocument || event.source !== frame.contentWindow || event.origin !== window.MochiiProxyOrigin || !['mochii-proxy:ready', 'monkeh-proxy:ready'].includes(event.data?.type)) return;
   if (runtime?.hasHandshake || readyRetries++ >= 3) return;
   void connectFrame(true);
 });
-window.MonkehTools = {
+window.MochiiTools = window.MonkehTools = {
   clearConsole,
   async navigateRemote(url) {
     const target = runtime;
@@ -709,7 +711,7 @@ window.MonkehTools = {
       destination = new URL(url);
       const source = new URL(frame.src, location.href);
       if (!expectingDocument || !target?.hasHandshake || typeof target.navigate !== 'function' ||
-          source.origin !== window.MonkehProxyOrigin || source.pathname !== '/proxy-host.html' ||
+          source.origin !== window.MochiiProxyOrigin || source.pathname !== '/proxy-host.html' ||
           !['http:', 'https:'].includes(destination.protocol) || destination.username || destination.password ||
           destination.href.length > 4096 || [location.origin, source.origin].includes(destination.origin)) return false;
     } catch { return false; }
@@ -759,13 +761,24 @@ window.MonkehTools = {
   closeViewer() {
     expectingDocument = false; disconnect(); showPanel(false);
     let clearOnClose = true;
-    try { clearOnClose = window.MonkehPrivacy?.get?.().clearConsoleOnClose !== false; } catch {                                 }
+    try { clearOnClose = window.MochiiPrivacy?.get?.().clearConsoleOnClose !== false; } catch {                                 }
     if (clearOnClose) clearConsole();
     $('hero-search').focus();
   },
 };
 
 selectTab('console');
+window.addEventListener('mochii:library-import', event => {
+  if (!event.detail?.keys?.includes('mochii.userscripts.v1')) return;
+  const scripts = store.list();
+  if (dirty) {
+    renderScripts();
+    scriptStatus('Library updated. Your unsaved editor draft is unchanged. Imported scripts are disabled.');
+  } else {
+    editScript(scripts.find(script => script.id === selectedScriptId) || scripts[0]);
+    scriptStatus('Library updated. Imported scripts are disabled; review them before running.');
+  }
+});
 renderConsole();
 editScript(store.list()[0]);
 if (store.warning) scriptStatus(store.warning, true);

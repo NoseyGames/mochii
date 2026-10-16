@@ -35,6 +35,11 @@ export function createMusicApi({ win = globalThis, getConfig = () => (win.Mochii
   let pendingConfig;
   const configuration = () => pendingConfig ||= Promise.resolve().then(getConfig).catch(error => { pendingConfig = null; throw error; });
   return Object.freeze({
+    async retryRelay() {
+      const config = await configuration();
+      if (config.mode !== 'static') throw new Error('This music backend manages its own connection. Retry the search or select another source.');
+      await proxy.retry(config);
+    },
     async resolve(path) {
       const provider = musicProviderUrl(path);
       const config = await configuration();

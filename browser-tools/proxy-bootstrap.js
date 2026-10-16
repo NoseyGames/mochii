@@ -24,11 +24,11 @@ async function identify() {
         else reject(new Error('Proxy identity was rejected.'));
       };
       channel.port1.start();
-      navigator.serviceWorker.controller.postMessage({ type: 'monkeh:identity:client', nonce }, [channel.port2]);
+      navigator.serviceWorker.controller.postMessage({ type: 'monkeh:identity:client', protocol: 'mochii', nonce }, [channel.port2]);
     });
-    window.parent.postMessage({ type: 'monkeh-proxy:identity-ready', nonce, clientId: result }, location.origin);
+    window.parent.postMessage({ type: 'monkeh-proxy:identity-ready', protocol: 'mochii-proxy', nonce, clientId: result }, location.origin);
   } catch {
-    window.parent.postMessage({ type: 'monkeh-proxy:identity-ready', nonce, failed: true }, location.origin);
+    window.parent.postMessage({ type: 'monkeh-proxy:identity-ready', protocol: 'mochii-proxy', nonce, failed: true }, location.origin);
   } finally {
     clearTimeout(timer);
     if (listener) navigator.serviceWorker.removeEventListener('controllerchange', listener);

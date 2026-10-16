@@ -1,4 +1,6 @@
-const STORAGE_KEY = 'monkeh:mirror-reported:v1';
+import { readMigratedStorage } from './storage.js';
+
+const STORAGE_KEY = 'mochii:mirror-reported:v1';
 
 export function publicMirrorOrigin(raw) {
   try {
@@ -18,7 +20,7 @@ export async function reportMirror(win, endpoint, { fetcher = win.fetch.bind(win
   } catch { return false; }
   if (!origin || win.top !== win.self) return false;
   const identity = JSON.stringify([origin, reportUrl.href]);
-  try { if (win.localStorage.getItem(STORAGE_KEY) === identity) return true; } catch {}
+  try { if (readMigratedStorage(win.localStorage, STORAGE_KEY, 'monkeh:mirror-reported:v1') === identity) return true; } catch {}
   try {
     const response = await fetcher(reportUrl.href, {
       method: 'POST', mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error',

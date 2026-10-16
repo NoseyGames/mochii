@@ -1,9 +1,11 @@
-const KEY = 'monkeh.privacy.v1';
+import { readMigratedStorage } from './storage.js';
+
+const KEY = 'mochii.privacy.v1';
 export const defaults = Object.freeze({
   httpsOnly: true, allowPopups: false, allowDownloads: true,
   clearConsoleOnClose: true, showCovers: true, aiEnabled: true,
   searchEngine: 'duckduckgo', mode: 'dark', font: 'default', accent: '#a6abb1',
-  background: 'none', backgroundUrl: '', cloak: 'monkeh', autoCloak: false,
+  background: 'none', backgroundUrl: '', cloak: 'mochii', autoCloak: false,
   blobCloak: false, panicKey: '', panicUrl: 'https://www.google.com/',
   closeProtection: false, skipLoading: true, nativeDevtoolsGuard: true, detectDocked: false,
   characterMasking: true, displayTextVersion: 1, userAgent: '', particleEffect: 'none', particleDensity: 'normal',
@@ -21,9 +23,10 @@ export function normalizePrivacy(value) {
     if (typeof defaults[key] === 'boolean' && typeof value[key] === 'boolean') result[key] = value[key];
   }
   if (Object.hasOwn(searchEngines, value.searchEngine)) result.searchEngine = value.searchEngine;
-  for (const [key, allowed] of Object.entries({ mode: ['dark', 'light'], font: ['default', 'outfit', 'space-mono', 'obscured', 'codystar', 'silkscreen'], background: ['none', 'hive', 'grid', 'synthwave', 'cat', 'doubleu', 'custom'], cloak: ['monkeh', 'google', 'classroom', 'clever', 'desmos', 'wikipedia', 'gmail', 'drive', 'newtab', 'bing'], particleEffect: ['none', 'snow', 'rain', 'bubbles'], particleDensity: ['low', 'normal'] })) {
+  for (const [key, allowed] of Object.entries({ mode: ['dark', 'light'], font: ['default', 'outfit', 'space-mono', 'obscured', 'codystar', 'silkscreen'], background: ['none', 'hive', 'grid', 'synthwave', 'cat', 'doubleu', 'custom'], cloak: ['mochii', 'google', 'classroom', 'clever', 'desmos', 'wikipedia', 'gmail', 'drive', 'newtab', 'bing'], particleEffect: ['none', 'snow', 'rain', 'bubbles'], particleDensity: ['low', 'normal'] })) {
     if (allowed.includes(value[key])) result[key] = value[key];
   }
+  if (value.cloak === 'monkeh') result.cloak = 'mochii';
   if (typeof value.userAgent === 'string' && value.userAgent.length <= 512 && /^[\x20-\x7e]*$/.test(value.userAgent)) result.userAgent = value.userAgent.trim();
   for (const [key, min, max] of [['backgroundOpacity', 0, 100], ['backgroundBlur', 0, 24], ['glassOpacity', 40, 100], ['glassBlur', 0, 32]]) {
     if (typeof value[key] === 'number' && Number.isFinite(value[key])) result[key] = Math.max(min, Math.min(max, Math.round(value[key])));
@@ -55,7 +58,7 @@ export function restorePrivacy(value) {
 
 if (typeof window !== 'undefined') {
   let settings;
-  try { settings = restorePrivacy(JSON.parse(localStorage.getItem(KEY))); }
+  try { settings = restorePrivacy(JSON.parse(readMigratedStorage(localStorage, KEY, 'monkeh.privacy.v1'))); }
   catch { settings = { ...defaults }; }
   let savedValue = JSON.stringify(settings);
   let pendingSave = false;
@@ -94,11 +97,11 @@ if (typeof window !== 'undefined') {
         saveTimer = window.setTimeout(flush, 180);
       } else { pendingSave = true; flush(); }
     }
-    if (changed) window.dispatchEvent(new CustomEvent('monkeh:privacy', { detail: { ...settings } }));
+    if (changed) window.dispatchEvent(new CustomEvent('mochii:privacy', { detail: { ...settings } }));
     if (coversChanged) { window.renderGames?.(); window.renderApps?.(); }
     return { ...settings };
   }
-  window.MonkehPrivacy = Object.freeze({
+  window.MochiiPrivacy = Object.freeze({
     get: () => ({ ...settings }),
     update,
     flush,
@@ -106,6 +109,7 @@ if (typeof window !== 'undefined') {
     sandbox: proxied => frameSandbox(settings, proxied),
     search: query => searchEngines[settings.searchEngine] + encodeURIComponent(query)
   });
+  window.MonkehPrivacy = window.MochiiPrivacy;
   function bind() {
     for (const input of document.querySelectorAll('[data-privacy]')) {
       const key = input.dataset.privacy;

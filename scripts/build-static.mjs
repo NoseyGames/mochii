@@ -15,16 +15,24 @@ export const staticFiles = Object.freeze([
   'apps/mochii-inbox.js', 'apps/mochii-figure.js',
   'browser-tools/config.js', 'browser-tools/shell-entry.js', 'browser-tools/tools.js', 'browser-tools/tools.css',
   'browser-tools/runtime.js', 'browser-tools/remote-runtime.js',
-  'browser-tools/local-proxy.js', 'browser-tools/music-transport.js',
+  'browser-tools/local-proxy.js', 'browser-tools/music-transport.js', 'browser-tools/transport-lock.js',
+  'browser-tools/dialog-controller.js', 'browser-tools/bookmarks.js', 'browser-tools/shell-ui.js',
+  'browser-tools/music-library.js', 'browser-tools/library-backup.js',
   'browser-tools/proxy-network.js', 'browser-tools/proxy-host.js', 'browser-tools/proxy-bootstrap.js',
-  'browser-tools/userscripts.js', 'browser-tools/privacy.js', 'browser-tools/ai-help.js',
+  'browser-tools/userscripts.js', 'browser-tools/privacy.js', 'browser-tools/storage.js', 'browser-tools/ai-help.js',
   'browser-tools/devtools-guard.js', 'browser-tools/preferences.js', 'browser-tools/preferences.css', 'browser-tools/display-text.js',
   'browser-tools/game-catalog.js', 'browser-tools/game-catalog.json', 'browser-tools/game-catalog.css',
   'browser-tools/catalog-identity.js', 'browser-tools/music-catalog.js', 'browser-tools/music-catalog.css', 'browser-tools/music-catalog.json',
   'browser-tools/particles.js', 'browser-tools/particles.css', 'browser-tools/proxy-identity.js',
-  'browser-tools/mirror-report.js', 'monkeh-mirror.json', 'mirror-report.json',
+  'browser-tools/mirror-report.js', 'mochii-mirror.json', 'monkeh-mirror.json', 'mirror-report.json',
   'ultrav/uv.bundle.js', 'ultrav/uv.client.js', 'ultrav/uv.handler.js',
   'ultrav/uv.sw.js', 'ultrav/uv.config.js',
+  'LICENSE', 'licenses/index.html', 'licenses/NOTICE.txt', 'licenses/sources.json',
+  'licenses/BARE-MUX-LICENSE.txt', 'licenses/EPOXY-LICENSE.txt',
+  'licenses/ULTRAVIOLET-LICENSE.txt', 'licenses/ULTRAVIOLET-DEPENDENCIES.txt',
+  'licenses/sources/bare-mux-2.1.9.zip', 'licenses/sources/epoxy-transport-2.1.28.zip',
+  'licenses/sources/epoxy-tls-2.1.18-1.zip', 'licenses/sources/epoxy-tls-embedded-build-e2d1d4e.zip',
+  'licenses/sources/ultraviolet-3.2.10.zip',
 ]);
 
 export const vendorFiles = Object.freeze([
@@ -36,7 +44,7 @@ export const vendorFiles = Object.freeze([
   ['@mercuryworkshop/epoxy-transport', 'dist/index.mjs', 'bearmux/epoxy/index.mjs'],
 ]);
 
-const notFound = '<!doctype html>\n<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found — Monkeh</title><body><h1>Page not found</h1><p>This address does not match a Monkeh page.</p><p><a href="/">Return to Monkeh</a></p></body></html>\n';
+const notFound = '<!doctype html>\n<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found — Mochii</title><body><h1>Page not found</h1><p>This address does not match a Mochii page.</p><p><a href="/">Return to Mochii</a></p></body></html>\n';
 
 export async function buildStatic(rootDirectory = projectRoot) {
   const root = await realpath(resolve(rootDirectory));

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { desktopProfileUrl, validateDesktopGateway, openDesktopInMonkeh, mountDesktopLauncher } from '../apps/desktop.js';
-globalThis.MonkehUseBackendConfig = true;
+import { desktopProfileUrl, validateDesktopGateway, openDesktopInMochii, mountDesktopLauncher } from '../apps/desktop.js';
+globalThis.MochiiUseBackendConfig = true;
 
 function harness(config = {}) {
   const nodes = new Map();
@@ -12,7 +12,7 @@ function harness(config = {}) {
   const opened = [];
   const calls = [];
   const timers = new Set();
-  const location = { origin: 'https://monkeh.example' };
+  const location = { origin: 'https://mochii.example' };
   const context = {
     location,
     parent: { location, handleHeroSearch: url => { opened.push(url); } },
@@ -39,17 +39,17 @@ test('desktop gateway rejects executable URLs, credentials, malformed configurat
   assert.deepEqual(validateDesktopGateway({ url: 'https://desktop.example/guacamole/#/', label: ' My PC ' }), { url: 'https://desktop.example/guacamole/#/', label: 'My PC' });
 });
 
-test('desktop opens via the same-origin Monkeh parent without direct navigation fallback', () => {
+test('desktop opens via the same-origin Mochii parent without direct navigation fallback', () => {
   const app = harness();
-  assert.equal(openDesktopInMonkeh(desktopProfileUrl('windows2000'), app.context), true);
+  assert.equal(openDesktopInMochii(desktopProfileUrl('windows2000'), app.context), true);
   assert.deepEqual(app.opened, [desktopProfileUrl('windows2000')]);
-  assert.throws(() => openDesktopInMonkeh('javascript:alert(1)', app.context), /HTTPS/);
+  assert.throws(() => openDesktopInMochii('javascript:alert(1)', app.context), /HTTPS/);
   app.context.parent = app.context;
-  assert.equal(openDesktopInMonkeh(desktopProfileUrl('windows2000'), app.context), false);
+  assert.equal(openDesktopInMochii(desktopProfileUrl('windows2000'), app.context), false);
   app.context.parent = { location: { origin: 'https://other.example' }, handleHeroSearch() { assert.fail('Cross-origin parent must not launch'); } };
-  assert.equal(openDesktopInMonkeh(desktopProfileUrl('windows2000'), app.context), false);
+  assert.equal(openDesktopInMochii(desktopProfileUrl('windows2000'), app.context), false);
   Object.defineProperty(app.context, 'parent', { get() { throw new Error('cross origin'); } });
-  assert.equal(openDesktopInMonkeh(desktopProfileUrl('windows2000'), app.context), false);
+  assert.equal(openDesktopInMochii(desktopProfileUrl('windows2000'), app.context), false);
 });
 
 test('launcher performs no third-party navigation until a user clicks and deduplicates clicks', async () => {
@@ -95,7 +95,7 @@ test('configuration failures preserve the working emulator launcher', async () =
 
 test('an HTML configuration fallback leaves the optional gateway hidden and emulator buttons usable', async () => {
   const app = harness();
-  app.context.fetch = async () => new Response('<!DOCTYPE html><title>Monkeh</title>', { headers: { 'Content-Type': 'text/html' } });
+  app.context.fetch = async () => new Response('<!DOCTYPE html><title>Mochii</title>', { headers: { 'Content-Type': 'text/html' } });
   const mounted = mountDesktopLauncher(app.doc, app.context);
   await mounted.ready;
   assert.equal(app.get('gateway-card').hidden, true);
@@ -112,7 +112,7 @@ test('standalone launch gives recovery instructions and leaves buttons usable', 
   await mounted.ready;
   app.get('launch-windows2000').click();
   assert.equal(app.get('standalone-help').hidden, false);
-  assert.match(app.get('launch-status').textContent, /inside Monkeh/);
+  assert.match(app.get('launch-status').textContent, /inside Mochii/);
   assert.equal(app.get('launch-windows2000').disabled, false);
   assert.deepEqual(app.opened, []);
   mounted.dispose();

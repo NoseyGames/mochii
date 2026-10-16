@@ -10,7 +10,7 @@ const nonce = 'a'.repeat(32);
 const nextNonce = 'b'.repeat(32);
 const sources = Object.fromEntries(['sw.js', 'ultrav/uv.sw.js', 'ultrav/uv.bundle.js'].map(path => [path, readFileSync(new URL('../' + path, import.meta.url), 'utf8')]));
 const proxied = value => origin + '/service/' + encodeURIComponent(value);
-const staged = value => origin + '/__monkeh_game__/' + value;
+const staged = value => origin + '/__mochii_game__/' + value;
 const sourceHtml = '<!doctype html><html><head><title>A game</title></head><body><script src="engine.js"></script><img src="assets/icon.png"><script>window.gameStarted = true;</script></body></html>';
 
 async function fixture(options = {}) {
@@ -45,7 +45,7 @@ async function fixture(options = {}) {
     setTimeout(callback, delay) { const id = ++nextTimer; timers.set(id, { callback, due: now + delay }); return id; },
     clearTimeout(id) { timers.delete(id); },
     __uv$config: { prefix: '/service/', encodeUrl: encodeURIComponent, decodeUrl: decodeURIComponent },
-    MonkehConfig: { async fetchConfig() { return options.staticMode ? { mode: 'static' } : { proxyOrigin: origin, shellOrigins: [shell] }; } },
+    MochiiConfig: { async fetchConfig() { return options.staticMode ? { mode: 'static' } : { proxyOrigin: origin, shellOrigins: [shell] }; } },
     location: { origin },
     caches: { async open() { return cache; } },
     clients: { async get(id) { return clients.get(id); }, async matchAll() { return [...clients.values()]; }, async claim() {} },
@@ -88,13 +88,13 @@ async function fixture(options = {}) {
     return await result;
   }
   if (options.bindIdentity !== false) {
-    await message('host-a', { type: 'monkeh:identity:bind', clientId: 'child-a', nonce });
-    await message('host-b', { type: 'monkeh:identity:bind', clientId: 'child-b', nonce: nextNonce });
+    await message('host-a', { type: 'mochii:identity:bind', clientId: 'child-a', nonce });
+    await message('host-b', { type: 'mochii:identity:bind', clientId: 'child-b', nonce: nextNonce });
   }
   return {
     context, requests, clients, cached, message, navigate,
-    prepare(sender = 'host-a', url = target, token = nonce) { return message(sender, { type: 'monkeh:game:prepare', url, nonce: token }); },
-    cancel(sender = 'host-a', token = nonce) { return message(sender, { type: 'monkeh:game:cancel', nonce: token }, false); },
+    prepare(sender = 'host-a', url = target, token = nonce) { return message(sender, { type: 'mochii:game:prepare', url, nonce: token }); },
+    cancel(sender = 'host-a', token = nonce) { return message(sender, { type: 'mochii:game:cancel', nonce: token }, false); },
     size() { return vm.runInContext('gameStages.size', context); },
     bytes() { return vm.runInContext('gameBytes', context); },
     async tick(milliseconds) {
@@ -121,7 +121,7 @@ test('game preparation uses the real UV HTML pipeline once, preserves assets and
   assert.ok(body.includes(proxied('https://games.example/game/assets/icon.png')));
   assert.ok(body.includes('self.__uv$cookies'));
   assert.ok(body.includes('GameBrowser/1'));
-  assert.ok(body.includes('<meta name="monkeh-game-code" content="fetched">'));
+  assert.ok(body.includes('<meta name="mochii-game-code" content="fetched">'));
   assert.equal(body.match(/function proxyPageCleanup\(\)/g)?.length, 1);
   assert.ok(body.indexOf('function proxyPageCleanup()') < body.indexOf('window.gameStarted'));
   const firstScript = /<script\b[^>]*>([\s\S]*?)<\/script>/.exec(body)[1];
@@ -152,6 +152,30 @@ test('default-UA views use staged documents and another view or asset fetch cann
   assert.ok(body.includes('<title>A game</title>'));
   assert.equal(app.requests.length, 1);
   assert.equal(app.size(), 0);
+});
+
+test('legacy game messages preserve single-use staging, ownership and nonce-bound cancellation', async () => {
+  const app = await fixture();
+  const prepare = { type: 'monkeh:game:prepare', url: target, nonce };
+  for (const sender of ['remote', 'shell', 'missing']) assert.equal((await app.message(sender, prepare)).ok, false);
+  const result = await app.message('host-a', prepare);
+  assert.equal(result.ok, true);
+  assert.equal(result.url, origin + '/__monkeh_game__/' + nonce);
+  assert.equal((await app.navigate('child-a', staged(nonce))).status, 410);
+  assert.equal((await app.navigate('child-b', result.url)).status, 403);
+  assert.equal((await app.navigate('child-a', result.url, 'script')).status, 403);
+  assert.equal(app.size(), 1);
+  assert.equal((await app.navigate('child-a', result.url)).status, 200);
+  assert.equal((await app.navigate('child-a', result.url)).status, 410);
+  assert.equal(app.requests.length, 1);
+  await app.message('host-a', prepare);
+  for (const [sender, token] of [['host-b', nonce], ['remote', nonce], ['host-a', nextNonce]]) {
+    await app.message(sender, { type: 'monkeh:game:cancel', nonce: token }, false);
+    assert.equal(app.size(), 1);
+  }
+  await app.message('host-a', { type: 'monkeh:game:cancel', nonce }, false);
+  assert.equal(app.size(), 0);
+  assert.equal((await app.navigate('child-a', result.url)).status, 410);
 });
 
 test('game preparation follows bounded manual redirects using the final URL for relative asset rewriting', async () => {
@@ -208,7 +232,7 @@ test('HTML source downloads become inline executable game documents after prepar
   const response = await app.navigate('', staged(nonce));
   assert.equal(response.headers.get('content-disposition'), 'inline');
   assert.equal(response.headers.get('content-type'), 'text/html; charset=utf-8');
-  assert.ok((await response.text()).includes('monkeh-game-code'));
+  assert.ok((await response.text()).includes('mochii-game-code'));
   assert.equal(app.requests.length, 1);
 });
 
@@ -328,7 +352,7 @@ test('navigation with an empty clientId consumes the capability once and binds r
   const ready = await app.prepare();
   const response = await app.navigate('', ready.url, 'iframe', 'new-game');
   assert.equal(response.status, 200);
-  assert.ok((await response.text()).includes('monkeh-game-code'));
+  assert.ok((await response.text()).includes('mochii-game-code'));
   assert.equal(app.requests.length, 1);
   app.clients.set('new-game', { id: 'new-game', url: ready.canonicalUrl });
   await app.navigate('new-game', proxied('https://games.example/game/engine.js'), 'script', '');
@@ -374,13 +398,13 @@ test('Cloudflare extensionless host and bootstrap clients can prepare and execut
   const app = await fixture();
   app.clients.set('host-a', { id: 'host-a', url: origin + '/proxy-host?ua=Cloudflare%2F1&loadCode=1' });
   app.clients.set('child-a', { id: 'child-a', url: origin + '/proxy-bootstrap?nonce=' + nonce });
-  assert.equal((await app.message('host-a', { type: 'monkeh:identity:bind', clientId: 'child-a', nonce })).ok, true);
+  assert.equal((await app.message('host-a', { type: 'mochii:identity:bind', clientId: 'child-a', nonce })).ok, true);
   const ready = await app.prepare();
   assert.equal(ready.ok, true);
   assert.equal(app.requests[0].headers['user-agent'], 'Cloudflare/1');
   const response = await app.navigate('', ready.url);
   assert.equal(response.status, 200);
-  assert.ok((await response.text()).includes('monkeh-game-code'));
+  assert.ok((await response.text()).includes('mochii-game-code'));
   assert.equal(app.requests.length, 1);
 });
 

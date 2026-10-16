@@ -70,7 +70,7 @@ function documentFixture() {
   }
   const icon = element('link'); icon.rel = 'icon'; icon.href = '/favicon.svg'; head.append(icon);
   return {
-    ...events(), all, head, body, documentElement: root, title: 'Monkeh Browser', hidden: false,
+    ...events(), all, head, body, documentElement: root, title: 'Mochii Browser', hidden: false,
     createElement: element,
     getElementById: id => all.find(item => item.id === id) || null,
     querySelector: selector => selector === 'link[rel~="icon"]' ? icon : selector.startsWith('[data-privacy=') ? all.find(item => item.dataset.privacy === selector.match(/^\[data-privacy="([^"]+)"\]$/)?.[1]) || null : null,
@@ -92,8 +92,8 @@ function fixture(patch = {}) {
   let settings = normalizePrivacy(patch);
   const win = {
     ...events(), document: doc, CustomEvent,
-    location: { origin: 'https://monkeh.example', replace: url => redirects.push(url) },
-    URL: { createObjectURL(blob) { blobs.push(blob); return 'blob:https://monkeh.example/session'; }, revokeObjectURL: url => revoked.push(url) },
+    location: { origin: 'https://mochii.example', replace: url => redirects.push(url) },
+    URL: { createObjectURL(blob) { blobs.push(blob); return 'blob:https://mochii.example/session'; }, revokeObjectURL: url => revoked.push(url) },
     setTimeout(callback, delay) { timeouts.push({ callback, delay }); },
     open(url, target) {
       const popup = { opener: win, document: documentFixture(), location: { replace: next => { popup.redirect = next; } } };
@@ -101,15 +101,15 @@ function fixture(patch = {}) {
       return popup;
     }
   };
-  win.MonkehPrivacy = {
+  win.MochiiPrivacy = {
     get: () => ({ ...settings }),
-    update(next, options) { updates.push({ next, options }); settings = normalizePrivacy({ ...settings, ...next }); writes.push({ ...settings }); win.emit('monkeh:privacy', { detail: { ...settings } }); return { ...settings }; },
-    sync(next) { settings = normalizePrivacy(next); win.emit('monkeh:privacy', { detail: { ...settings } }); return { ...settings }; }
+    update(next, options) { updates.push({ next, options }); settings = normalizePrivacy({ ...settings, ...next }); writes.push({ ...settings }); win.emit('mochii:privacy', { detail: { ...settings } }); return { ...settings }; },
+    sync(next) { settings = normalizePrivacy(next); win.emit('mochii:privacy', { detail: { ...settings } }); return { ...settings }; }
   };
   const app = mountPreferences(win);
   return {
     win, doc, app, redirects, popups, blobs, revoked, timeouts, writes, updates,
-    update: win.MonkehPrivacy.update,
+    update: win.MochiiPrivacy.update,
     button(label) { return doc.all.find(item => item.tagName === 'BUTTON' && item.textContent === label); },
     input(key) { return doc.all.find(item => item.dataset.preference === key); }
   };
@@ -138,7 +138,7 @@ test('selected appearance settings apply and custom background stays inactive un
 test('auto cloak changes the tab title and icon only while the page is hidden', () => {
   const f = fixture({ cloak: 'classroom', autoCloak: true });
   const icon = f.doc.querySelector('link[rel~="icon"]');
-  assert.equal(f.doc.title, 'Monkeh Browser');
+  assert.equal(f.doc.title, 'Mochii Browser');
   assert.equal(icon.href, '/favicon.svg');
   f.doc.hidden = true;
   f.doc.emit('visibilitychange');
@@ -146,7 +146,7 @@ test('auto cloak changes the tab title and icon only while the page is hidden', 
   assert.ok(icon.href.startsWith('data:image/svg+xml,'));
   f.doc.hidden = false;
   f.doc.emit('visibilitychange');
-  assert.equal(f.doc.title, 'Monkeh Browser');
+  assert.equal(f.doc.title, 'Mochii Browser');
   assert.equal(icon.href, '/favicon.svg');
   f.update({ autoCloak: false, cloak: 'google' });
   assert.equal(f.doc.title, 'Google');
@@ -159,12 +159,12 @@ test('URL setting fields reject invalid input before saving and recover when cor
   input.emit('change');
   assert.match(input.customValidity, /complete HTTPS URL/);
   assert.equal(input.reported, true);
-  assert.equal(f.win.MonkehPrivacy.get().backgroundUrl, '');
+  assert.equal(f.win.MochiiPrivacy.get().backgroundUrl, '');
   input.value = 'https://images.example/bg.png';
   input.emit('input');
   input.emit('change');
   assert.equal(input.customValidity, '');
-  assert.equal(f.win.MonkehPrivacy.get().backgroundUrl, input.value);
+  assert.equal(f.win.MochiiPrivacy.get().backgroundUrl, input.value);
 });
 
 test('captured panic shortcut saves once and does not navigate until used again', () => {
@@ -173,7 +173,7 @@ test('captured panic shortcut saves once and does not navigate until used again'
   const capture = f.win.emit('keydown', { key: 'P', ctrlKey: true, shiftKey: true });
   assert.equal(capture.prevented, true);
   assert.equal(capture.stopped, true);
-  assert.equal(f.win.MonkehPrivacy.get().panicKey, 'Ctrl+Shift+p');
+  assert.equal(f.win.MochiiPrivacy.get().panicKey, 'Ctrl+Shift+p');
   assert.deepEqual(f.redirects, []);
   assert.ok(f.button('Capture shortcut'));
   f.win.emit('keydown', { key: 'P', ctrlKey: true, shiftKey: true });
@@ -204,26 +204,26 @@ test('clear shortcut restores normal keyboard behavior and privacy changes updat
 test('capture pauses the native guard and restores the saved choice when focus leaves', () => {
   const f = fixture({ nativeDevtoolsGuard: true });
   const enabled = [];
-  f.win.MonkehDevtoolsGuard = { setEnabled: value => enabled.push(value) };
+  f.win.MochiiDevtoolsGuard = { setEnabled: value => enabled.push(value) };
   f.button('Capture shortcut').emit('click');
   assert.deepEqual(enabled, [false]);
   f.win.emit('blur');
   assert.deepEqual(enabled, [false, true]);
   assert.ok(f.button('Capture shortcut'));
   f.win.emit('keydown', { key: 'p' });
-  assert.equal(f.win.MonkehPrivacy.get().panicKey, '');
+  assert.equal(f.win.MochiiPrivacy.get().panicKey, '');
 });
 
 test('intentional native guard departure bypasses the close warning', () => {
   const f = fixture({ closeProtection: true });
   assert.equal(f.win.emit('beforeunload').prevented, true);
-  f.win.emit('monkeh:leaving', { detail: { reason: 'devtools-guard' } });
+  f.win.emit('mochii:leaving', { detail: { reason: 'devtools-guard' } });
   assert.equal(f.win.emit('beforeunload').prevented, false);
 });
 
 test('returning from the back-forward cache restores close protection after an intentional departure', () => {
   const f = fixture({ closeProtection: true });
-  f.win.emit('monkeh:leaving');
+  f.win.emit('mochii:leaving');
   assert.equal(f.win.emit('beforeunload').prevented, false);
   f.win.emit('pageshow', { persisted: true });
   assert.equal(f.win.emit('beforeunload').prevented, true);
@@ -235,7 +235,7 @@ test('panic from the cloaked shell navigates the accessible outer window', () =>
   const outerEvents = [];
   f.win.top = { document: {}, dispatchEvent: event => outerEvents.push(event.type), location: { replace: url => outerRedirects.push(url) } };
   f.win.emit('keydown', { key: 'Escape' });
-  assert.deepEqual(outerEvents, ['monkeh:leaving']);
+  assert.deepEqual(outerEvents, ['mochii:leaving']);
   assert.deepEqual(outerRedirects, ['https://classroom.google.com/']);
   assert.deepEqual(f.redirects, []);
 });
@@ -250,7 +250,7 @@ test('cloaked popup contains only the local shell and detaches its opener', () =
   assert.equal(popup.opener, null);
   assert.equal(popup.document.title, 'Wikipedia');
   const frame = popup.document.body.children.find(item => item.tagName === 'IFRAME');
-  assert.equal(frame.src, 'https://monkeh.example/math.html');
+  assert.equal(frame.src, 'https://mochii.example/math.html');
   assert.equal(frame.allow, 'autoplay; fullscreen; gamepad');
   assert.equal(frame.allowFullscreen, true);
   assert.match(f.doc.getElementById('privacy-status').textContent, /not network visibility/);
@@ -263,12 +263,12 @@ test('blob cloak revokes its object URL after giving the popup time to load', as
   assert.equal(f.blobs[0].type, 'text/html');
   const markup = await f.blobs[0].text();
   assert.match(markup, /<title>Google<\/title>/);
-  assert.match(markup, /src="https:\/\/monkeh.example\/math.html"/);
-  assert.equal(f.popups[0].popup.redirect, 'blob:https://monkeh.example/session');
+  assert.match(markup, /src="https:\/\/mochii.example\/math.html"/);
+  assert.equal(f.popups[0].popup.redirect, 'blob:https://mochii.example/session');
   assert.equal(f.timeouts[0].delay, 60000);
   assert.deepEqual(f.revoked, []);
   f.timeouts[0].callback();
-  assert.deepEqual(f.revoked, ['blob:https://monkeh.example/session']);
+  assert.deepEqual(f.revoked, ['blob:https://mochii.example/session']);
 });
 
 test('blocked cloaked popup reports a recoverable message without starting a blob', () => {
@@ -281,23 +281,23 @@ test('blocked cloaked popup reports a recoverable message without starting a blo
 
 test('storage changes update settings while malformed storage is ignored', () => {
   const f = fixture();
-  f.win.emit('storage', { key: 'monkeh.privacy.v1', newValue: JSON.stringify({ mode: 'light', cloak: 'drive' }) });
+  f.win.emit('storage', { key: 'mochii.privacy.v1', newValue: JSON.stringify({ mode: 'light', cloak: 'drive' }) });
   assert.equal(f.doc.documentElement.dataset.mode, 'light');
   assert.equal(f.doc.title, 'Google Drive');
-  assert.doesNotThrow(() => f.win.emit('storage', { key: 'monkeh.privacy.v1', newValue: '{not JSON' }));
+  assert.doesNotThrow(() => f.win.emit('storage', { key: 'mochii.privacy.v1', newValue: '{not JSON' }));
   f.win.emit('storage', { key: 'unrelated', newValue: JSON.stringify({ mode: 'dark' }) });
   assert.equal(f.doc.documentElement.dataset.mode, 'light');
   assert.deepEqual(f.writes, []);
 });
 
 test('removing preferences or clearing browser storage restores defaults in the other tab', () => {
-  for (const key of ['monkeh.privacy.v1', null]) {
+  for (const key of ['mochii.privacy.v1', null]) {
     const f = fixture({ mode: 'light', cloak: 'google', panicKey: 'Escape', closeProtection: true });
     f.win.emit('storage', { key, newValue: null });
     assert.equal(f.doc.documentElement.dataset.mode, 'dark');
-    assert.equal(f.doc.title, 'Monkeh Browser');
-    assert.equal(f.win.MonkehPrivacy.get().panicKey, '');
-    assert.equal(f.win.MonkehPrivacy.get().closeProtection, false);
+    assert.equal(f.doc.title, 'Mochii Browser');
+    assert.equal(f.win.MochiiPrivacy.get().panicKey, '');
+    assert.equal(f.win.MochiiPrivacy.get().closeProtection, false);
     assert.equal(f.input('closeProtection').checked, false);
     assert.deepEqual(f.writes, []);
   }
@@ -329,17 +329,17 @@ test('user-agent presets and custom input save validated strings while particle 
   const f = fixture();
   const select = f.doc.getElementById('user-agent-preset');
   select.value = 'android'; select.emit('change');
-  assert.equal(f.win.MonkehPrivacy.get().userAgent, userAgentPresets.find(preset => preset[0] === 'android')[2]);
-  assert.equal(f.input('userAgent').value, f.win.MonkehPrivacy.get().userAgent);
+  assert.equal(f.win.MochiiPrivacy.get().userAgent, userAgentPresets.find(preset => preset[0] === 'android')[2]);
+  assert.equal(f.input('userAgent').value, f.win.MochiiPrivacy.get().userAgent);
   const input = f.input('userAgent');
   input.value = 'Example/1.0'; input.emit('change');
   assert.equal(select.value, 'custom');
-  assert.equal(f.win.MonkehPrivacy.get().userAgent, 'Example/1.0');
+  assert.equal(f.win.MochiiPrivacy.get().userAgent, 'Example/1.0');
   input.value = 'bad\r\nHeader: yes'; input.emit('change');
   assert.match(input.customValidity, /printable ASCII/);
-  assert.equal(f.win.MonkehPrivacy.get().userAgent, 'Example/1.0');
+  assert.equal(f.win.MochiiPrivacy.get().userAgent, 'Example/1.0');
   select.value = 'default'; select.emit('change');
-  assert.equal(f.win.MonkehPrivacy.get().userAgent, '');
+  assert.equal(f.win.MochiiPrivacy.get().userAgent, '');
   assert.equal(f.input('particleDensity').disabled, true);
   f.update({ particleEffect: 'bubbles', particleDensity: 'low' });
   assert.equal(f.input('particleEffect').value, 'bubbles');
@@ -394,16 +394,16 @@ test('visual numeric fields reject invalid entries and reset preferences can be 
   const blur = f.input('backgroundBlur');
   blur.value = '100'; blur.emit('change');
   assert.match(blur.customValidity, /0 to 24/);
-  assert.equal(f.win.MonkehPrivacy.get().backgroundBlur, 0);
+  assert.equal(f.win.MochiiPrivacy.get().backgroundBlur, 0);
   blur.value = '12'; blur.emit('input'); blur.emit('change');
   assert.equal(f.doc.documentElement.style.values['--background-blur'], '12px');
   f.button('Reset preferences').emit('click');
-  assert.equal(f.win.MonkehPrivacy.get().mode, 'dark');
-  assert.equal(f.win.MonkehPrivacy.get().userAgent, '');
+  assert.equal(f.win.MochiiPrivacy.get().mode, 'dark');
+  assert.equal(f.win.MochiiPrivacy.get().userAgent, '');
   assert.equal(f.button('Undo reset').hidden, false);
   f.button('Undo reset').emit('click');
-  assert.equal(f.win.MonkehPrivacy.get().mode, 'light');
-  assert.equal(f.win.MonkehPrivacy.get().userAgent, 'Safe/1');
+  assert.equal(f.win.MochiiPrivacy.get().mode, 'light');
+  assert.equal(f.win.MochiiPrivacy.get().userAgent, 'Safe/1');
   assert.equal(f.button('Undo reset').hidden, true);
 });
 
@@ -419,11 +419,11 @@ test('uncommitted text and partial numeric drafts survive unrelated settings and
   assert.equal(agent.value, 'My unfinished');
   assert.equal(background.value, 'https://images.');
   assert.equal(blur.value, '');
-  assert.equal(f.win.MonkehPrivacy.get().backgroundBlur, 5);
-  f.win.MonkehPrivacy.sync({ userAgent: 'Another tab/2' });
+  assert.equal(f.win.MochiiPrivacy.get().backgroundBlur, 5);
+  f.win.MochiiPrivacy.sync({ userAgent: 'Another tab/2' });
   assert.equal(agent.value, 'My unfinished');
   agent.emit('change');
-  assert.equal(f.win.MonkehPrivacy.get().userAgent, 'My unfinished');
+  assert.equal(f.win.MochiiPrivacy.get().userAgent, 'My unfinished');
   const select = f.doc.getElementById('user-agent-preset');
   agent.value = 'Bad\nHeader'; agent.emit('change');
   select.value = 'default'; select.emit('change');
@@ -444,7 +444,7 @@ test('appearance previews apply during input while invalid numeric drafts do not
   const before = f.updates.length;
   for (const value of ['', '1.5', '-1', '25']) { blur.value = value; blur.emit('input'); }
   assert.equal(f.updates.length, before);
-  assert.equal(f.win.MonkehPrivacy.get().backgroundBlur, 12);
+  assert.equal(f.win.MochiiPrivacy.get().backgroundBlur, 12);
   blur.value = '13'; blur.emit('change');
   assert.equal(f.updates.at(-1).options, undefined);
 });
@@ -484,11 +484,11 @@ test('settings search retains the controls needed to use matching settings', () 
 test('clearing an already empty shortcut restores the native guard after capture', () => {
   const f = fixture({ nativeDevtoolsGuard: true });
   const enabled = [];
-  f.win.MonkehDevtoolsGuard = { setEnabled: value => enabled.push(value) };
+  f.win.MochiiDevtoolsGuard = { setEnabled: value => enabled.push(value) };
   f.button('Capture shortcut').emit('click');
   f.button('Clear shortcut').emit('click');
   assert.deepEqual(enabled, [false, true]);
-  assert.equal(f.win.MonkehPrivacy.get().panicKey, '');
+  assert.equal(f.win.MochiiPrivacy.get().panicKey, '');
   assert(f.button('Capture shortcut'));
 });
 

@@ -1,10 +1,52 @@
-# mochii
+# Mochii
 
-mochii is a static app with browser proxy assets on the same site as the app.
+Mochii is a static app with browser proxy assets on the same site as the app.
 Each mirror serves its own HTML, JavaScript, Ultraviolet and service worker;
 the browser connects directly to the public Wisp server list in
 `browser-tools/config.js`. Static hosting does not request `/api/config`, use a
 fixed proxy origin or require a Node backend.
+
+## Local preview
+
+Run `npm run preview` from this folder, then open
+[http://127.0.0.1:4173/math](http://127.0.0.1:4173/math).
+The command rebuilds `dist`, serves only those public files, and disables local
+asset caching. Music, games, and movies share this origin and use the selected
+Wisp connection. Keep the command running while using the preview. The optional
+`npm start` command runs the separate Node backend instead.
+
+## Personal library
+
+- Home keeps the current browser page or game loaded. Use **Return to** to reopen
+  it, or **Close** to end that view. **Reopen last game** launches the last URL;
+  game checkpoints depend on the game itself.
+- Bookmarks provide editable home shortcuts. Games remember searches, filters,
+  source choices and scroll position. Documented control and multiplayer filters
+  distinguish known support from unknown compatibility.
+- Music supports named playlists, an editable queue, system media controls and
+  optional playback memory. Restored playback waits for Play. **Retry another
+  server** is an explicit recovery action for a failed connection.
+- Settings includes connection details and a selective library backup. Preview
+  the categories before exporting or importing. Imports merge saved lists,
+  support Undo, and keep imported userscripts disabled. Credentials and proxy
+  sessions are excluded. Preferences and libraries remain on each device/origin.
+- Dialogs support Escape, keyboard focus containment and returning focus to the
+  opening control. Advanced filters and playlist tools stay collapsed by default.
+
+## License
+
+Original Mochii code is free to use, modify and redistribute, including for
+commercial purposes, under the [Mochii Attribution License](LICENSE). Keep the
+license and credit the original authors honestly. Intentionally claiming that
+you wrote or own someone else's covered original code immediately terminates
+your permission under that license. You may accurately claim your own changes.
+Third-party code and content retain their own terms; see
+[third-party notices and source information](docs/THIRD-PARTY-SOURCES.md).
+
+Existing hosting addresses, saved-data migration keys, cached-client protocol
+aliases, and the mirror notification ledger retain compatibility with earlier
+deployments. Product labels, new settings and APIs use Mochii. Do not rename the
+deployed Worker resources or reset the notification ledger as a branding change.
 
 ## Static deployment
 
@@ -53,7 +95,7 @@ Exact endpoint paths are retained; a Wisp address does not need a trailing slash
 The client supports 32 addresses and races eligible public endpoints concurrently.
 The first valid Wisp greeting whose transport activates wins; failed, timed-out,
 and non-Wisp connections are skipped. Unused probes are closed immediately.
-The retired Monkeh Wisp endpoint is not in the pool. Transport changes are serialized.
+The retired Mochii Wisp endpoint is not in the pool. Transport changes are serialized.
 The client checks availability every 30 seconds and switches after two failures.
 **Retry** immediately races the connection again. It pauses
 while offline and resumes when the network returns. Switching connections cannot
@@ -74,7 +116,7 @@ permissions allow. Console output stays bounded and avoids hidden DOM updates.
 
 If an upstream connection ends with `tls handshake eof`, the error notice offers
 **Switch server and reopen address**. It excludes that relay and opens the last
-address entered in Monkeh as a fresh GET. The toolbar's **Switch proxy server**
+address entered in Mochii as a fresh GET. The toolbar's **Switch proxy server**
 changes the transport without reloading the page. Neither action automatically
 replays submitted forms or disables certificate checks. A successful Wisp
 handshake does not guarantee that a particular destination will accept TLS;
@@ -141,7 +183,7 @@ cannot be eliminated by static hosting.
 **Apps → Mochii Cloud** opens the redesigned cloud-gaming catalog. Its 106
 entries retain the upstream game metadata, search, details, themes, controller
 navigation and launch options. Recent sessions and settings are stored locally
-on each mirror. Monkeh does not create game accounts or verify a provider session.
+on each mirror. Mochii does not create game accounts or verify a provider session.
 Source provenance is recorded in [third-party sources](docs/THIRD-PARTY-SOURCES.md).
 
 A temporary Figure adapter matches 94 catalog games to Figure's hosted launcher.
@@ -161,7 +203,7 @@ address can read it through Maildrop, so it is unsuitable for passwords or
 lasting account recovery. The inbox does not create third-party game accounts.
 
 Desktops launches the official v86 Windows 2000/98 browser emulators through
-Monkeh. These require no account, but are not modern Windows cloud VMs. Save the
+Mochii. These require no account, but are not modern Windows cloud VMs. Save the
 guest state before leaving. Guest networking is disabled and is separate from
 the proxy used to load the emulator page. `deployment.windowsVm` can be set to a
 validated HTTPS gateway configuration for a machine you already have; the app
@@ -249,4 +291,4 @@ Native DevTools shortcuts redirect to `oops.html` by default. The optional
 docked-panel heuristic can mistake browser side panels for DevTools and is off
 by default. Undocked/menu-open DevTools and cross-origin iframe keyboard focus
 cannot reliably be detected. This is a UI deterrent, not source-code protection;
-Monkeh's own browser inspector remains available.
+Mochii's own browser inspector remains available.

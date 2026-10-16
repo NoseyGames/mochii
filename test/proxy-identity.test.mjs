@@ -19,7 +19,7 @@ function worker(clients = new Map(), stored = new Map(), options = {}) {
   const requests = [];
   const responses = [];
   const injections = [];
-  const cacheCalls = { reads: 0, writes: 0, opens: 0 };
+  const cacheCalls = { reads: 0, writes: 0, opens: 0, names: [] };
   const cache = {
     async match(key) { cacheCalls.reads++; key = typeof key === 'string' ? key : key.url; return stored.has(key) ? new Response(stored.get(key)) : undefined; },
     async put(key, response) { cacheCalls.writes++; if (options.failWrite) throw new Error('Quota exceeded'); stored.set(key, await response.text()); },
@@ -48,13 +48,14 @@ function worker(clients = new Map(), stored = new Map(), options = {}) {
     SharedWorker: class {}, localStorage: {},
     navigator: { userAgent: 'Real browser' }, crossOriginIsolated: false, console,
     __uv$config: { prefix: '/service/', encodeUrl: encodeURIComponent, decodeUrl: decodeURIComponent },
-    MonkehConfig: { async fetchConfig() { return { proxyOrigin: origin }; } },
-    Ultraviolet, location: { origin }, caches: { async open() { cacheCalls.opens++; if (options.failOpen) throw new Error('Storage unavailable'); return cache; } },
+    MochiiConfig: { async fetchConfig() { return { proxyOrigin: origin }; } },
+    Ultraviolet, location: { origin }, caches: { async open(name) { cacheCalls.opens++; cacheCalls.names.push(name); if (options.failOpen) throw new Error('Storage unavailable'); return cache; } },
     clients: { async get(id) { return clients.get(id); }, async matchAll() { return [...clients.values()]; }, async claim() {} },
     addEventListener(name, listener) { events.set(name, listener); },
     importScripts(path) { if (path === '/ultrav/uv.sw.js') vm.runInContext(uvSource, context); }
   });
   context.self = context;
+  if (options.legacyConfig) { context.MonkehConfig = context.MochiiConfig; delete context.MochiiConfig; }
   if (options.realRewriter) {
     vm.runInContext(bundleSource, context);
     const OriginalUltraviolet = context.Ultraviolet;
@@ -94,6 +95,47 @@ test('user-agent values are bounded ASCII header text and stay outside the encod
   assert.equal(decodeURIComponent(url.hash.slice(1)), 'https://example.com/?a=1#two');
 });
 
+test('cached pre-rebrand identities retain their owner without rewriting storage or trusting a closed view', async () => {
+  const clients = new Map([
+    ['host', { id: 'host', url: proxyViewUrl(origin, 'https://example.com/', 'Legacy Browser/1') }],
+    ['child', { id: 'child', url: proxied('https://example.com/') }],
+  ]);
+  const key = origin + '/__monkeh_identity__/child';
+  const stored = new Map([[key, JSON.stringify({ owner: 'host', createdAt: Date.now() })]]);
+  const before = stored.get(key);
+  const app = worker(clients, stored, { legacyConfig: true });
+  assert.equal((await app.request('child', '', 'script')).headers['user-agent'], 'Legacy Browser/1');
+  assert.deepEqual(app.cacheCalls.names, ['monkeh-proxy-identity-v2']);
+  assert.equal(app.cacheCalls.writes, 0);
+  assert.equal(stored.get(key), before);
+  clients.delete('host');
+  assert.equal((await app.request('child', '', 'script')).headers['user-agent'], 'Real browser');
+});
+
+test('legacy identity messages preserve the exact client, origin and nonce restrictions', async () => {
+  const nonce = '1234567890abcdef1234567890abcdef';
+  const clients = new Map([
+    ['host', { id: 'host', url: proxyViewUrl(origin, 'https://example.com/', 'Legacy Browser/1') }],
+    ['child', { id: 'child', url: origin + '/proxy-bootstrap.html?nonce=' + nonce }],
+    ['remote', { id: 'remote', url: proxied('https://example.com/') }],
+    ['foreign', { id: 'foreign', url: 'https://shell.test/proxy-host.html' }],
+  ]);
+  const app = worker(clients);
+  const bind = { type: 'monkeh:identity:bind', clientId: 'child', nonce };
+  for (const [sender, data] of [
+    ['remote', bind], ['foreign', bind], ['missing', bind],
+    ['host', { ...bind, nonce: 'b'.repeat(32) }],
+    ['host', { ...bind, clientId: 'remote' }],
+    ['remote', { type: 'monkeh:identity:client', nonce }],
+  ]) assert.equal((await app.message(sender, data)).ok, false);
+  assert.equal((await app.message('child', { type: 'monkeh:identity:client', nonce })).clientId, 'child');
+  assert.equal((await app.message('host', bind)).ok, true);
+  assert.equal((await app.request('child', '', 'script')).headers['user-agent'], 'Legacy Browser/1');
+  clients.set('child', { id: 'child', url: proxied('https://example.com/') });
+  assert.equal((await app.message('host', bind)).ok, false);
+  assert.equal(await app.message('host', { ...bind, type: 'monkeh:identity:admin' }), undefined);
+});
+
 test('controlled child bootstrap binds Chromium first navigation to the correct owner without leaking bootstrap state', async () => {
   const nonce = '1234567890abcdef1234567890abcdef';
   const clients = new Map([
@@ -104,9 +146,9 @@ test('controlled child bootstrap binds Chromium first navigation to the correct 
   ]);
   const stored = new Map();
   const app = worker(clients, stored);
-  assert.equal((await app.message('bootstrap-a', { type: 'monkeh:identity:client', nonce })).clientId, 'bootstrap-a');
-  assert.equal((await app.message('host-a', { type: 'monkeh:identity:bind', clientId: 'bootstrap-a', nonce })).ok, true);
-  assert.equal((await app.message('host-b', { type: 'monkeh:identity:bind', clientId: 'bootstrap-b', nonce: 'a'.repeat(32) })).ok, true);
+  assert.equal((await app.message('bootstrap-a', { type: 'mochii:identity:client', nonce })).clientId, 'bootstrap-a');
+  assert.equal((await app.message('host-a', { type: 'mochii:identity:bind', clientId: 'bootstrap-a', nonce })).ok, true);
+  assert.equal((await app.message('host-b', { type: 'mochii:identity:bind', clientId: 'bootstrap-b', nonce: 'a'.repeat(32) })).ok, true);
   const restarted = worker(clients, stored);
   await Promise.all([restarted.request('bootstrap-a', 'page-a'), restarted.request('bootstrap-b', 'page-b')]);
   const requests = restarted.requests;
@@ -125,10 +167,10 @@ test('bootstrap messages reject remote senders, wrong nonces and already navigat
     ['remote', { id: 'remote', url: proxied('https://example.com/') }]
   ]);
   const app = worker(clients);
-  const bind = { type: 'monkeh:identity:bind', clientId: 'child', nonce };
+  const bind = { type: 'mochii:identity:bind', clientId: 'child', nonce };
   for (const [sender, data] of [
     ['remote', bind], ['host', { ...bind, nonce: 'b'.repeat(32) }], ['host', { ...bind, clientId: 'remote' }],
-    ['remote', { type: 'monkeh:identity:client', nonce: null }], ['missing', bind]
+    ['remote', { type: 'mochii:identity:client', nonce: null }], ['missing', bind]
   ]) assert.equal((await app.message(sender, data)).ok, false);
   assert.equal((await app.request('remote', '', 'script')).headers['user-agent'], 'Real browser');
 });
@@ -140,8 +182,8 @@ test('Cloudflare extensionless host and bootstrap URLs retain exact identity che
     ['child', { id: 'child', url: origin + '/proxy-bootstrap?nonce=' + nonce }]
   ]);
   const app = worker(clients);
-  assert.equal((await app.message('child', { type: 'monkeh:identity:client', nonce })).clientId, 'child');
-  const bind = { type: 'monkeh:identity:bind', clientId: 'child', nonce };
+  assert.equal((await app.message('child', { type: 'mochii:identity:client', nonce })).clientId, 'child');
+  const bind = { type: 'mochii:identity:bind', clientId: 'child', nonce };
   assert.equal((await app.message('host', bind)).ok, true);
   assert.equal((await app.request('child', 'page')).headers['user-agent'], 'Clean/1');
   for (const path of ['/proxy-host/', '/proxy-host-extra', '/apps/proxy-host']) {

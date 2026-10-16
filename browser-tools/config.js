@@ -56,7 +56,7 @@
   function redirectShell() { return false; }
 
   const maximumBytes = 65536;
-  const routingError = 'The proxy backend is not connected: /api/config returned a web page instead of JSON. The site owner must route /api/config to the running Monkeh backend; static hosting alone cannot run the proxy.';
+  const routingError = 'The proxy backend is not connected: /api/config returned a web page instead of JSON. The site owner must route /api/config to the running Mochii backend; static hosting alone cannot run the proxy.';
 
   async function cancelBody(response) {
     try { await response.body?.cancel(); } catch {                                  }
@@ -105,14 +105,14 @@
     if (!response.ok) {
       await cancelBody(response);
       if (response.status === 401 || response.status === 403) throw new Error('Proxy access was denied. Sign in to the proxy connection and retry.');
-      if (response.status === 404) throw new Error('The proxy backend is not connected: /api/config was not found. The site owner must route it to the running Monkeh backend.');
+      if (response.status === 404) throw new Error('The proxy backend is not connected: /api/config was not found. The site owner must route it to the running Mochii backend.');
       throw new Error(`Proxy configuration returned HTTP ${response.status}. Check the backend and retry.`);
     }
     const type = (response.headers.get('content-type') || '').split(';', 1)[0].trim().toLowerCase();
     if (response.redirected || !/^application\/(?:json|[\w.+-]+\+json)$/.test(type)) {
       await cancelBody(response);
       if (type === 'text/html' || type === 'application/xhtml+xml') throw new Error(routingError);
-      if (response.redirected) throw new Error('Proxy configuration was redirected. Sign in if required, and have the site owner route /api/config directly to the Monkeh backend.');
+      if (response.redirected) throw new Error('Proxy configuration was redirected. Sign in if required, and have the site owner route /api/config directly to the Mochii backend.');
       throw new Error('The proxy backend returned a non-JSON configuration. The site owner must check the /api/config route and its Content-Type.');
     }
     const text = await readText(response);
@@ -124,10 +124,15 @@
   }
 
   async function fetchConfig(options = {}) {
-    if (globalThis.MonkehUseBackendConfig === true) return fetchBackendConfig(options);
+    if (globalThis.MochiiUseBackendConfig === true || globalThis.MonkehUseBackendConfig === true) return fetchBackendConfig(options);
     options.signal?.throwIfAborted();
     return staticConfig();
   }
 
-  globalThis.MonkehConfig = Object.freeze({ fetchConfig, fetchBackendConfig, staticConfig, redirectShell });
+  if (!Object.getOwnPropertyDescriptor(globalThis, 'MonkehProxyOrigin')?.get) {
+    const previousOrigin = globalThis.MonkehProxyOrigin;
+    if (previousOrigin !== undefined && globalThis.MochiiProxyOrigin === undefined) globalThis.MochiiProxyOrigin = previousOrigin;
+    Object.defineProperty(globalThis, 'MonkehProxyOrigin', { configurable: true, get: () => globalThis.MochiiProxyOrigin, set: value => { globalThis.MochiiProxyOrigin = value; } });
+  }
+  globalThis.MochiiConfig = globalThis.MonkehConfig = Object.freeze({ fetchConfig, fetchBackendConfig, staticConfig, redirectShell });
 })();

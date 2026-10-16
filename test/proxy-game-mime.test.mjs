@@ -39,9 +39,9 @@ function worker({ body = '<!DOCTYPE html><html><body>Game</body></html>', type =
   }
   const context = vm.createContext({
     URL, Response, Request, ReadableStream, Uint8Array, TextDecoder, Proxy, Reflect,
-    navigator: { userAgent: 'Monkeh test' }, crossOriginIsolated: false, console,
+    navigator: { userAgent: 'Mochii test' }, crossOriginIsolated: false, console,
     __uv$config: { prefix: '/service/', encodeUrl: encodeURIComponent, decodeUrl: decodeURIComponent },
-    MonkehConfig: { async fetchConfig() { return { proxyOrigin: origin }; } },
+    MochiiConfig: { async fetchConfig() { return { proxyOrigin: origin }; } },
     Ultraviolet,
     location: { origin },
     addEventListener(name, listener) { events.set(name, listener); },

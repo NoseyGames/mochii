@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { defaults, normalizePrivacy, restorePrivacy, frameSandbox } from '../browser-tools/privacy.js';
+import { readMigratedStorage } from '../browser-tools/storage.js';
 
 test('display text defaults upgrade old saved settings once and preserve later explicit choices', () => {
   assert.equal(defaults.characterMasking, true);
@@ -111,15 +112,15 @@ test('cross-tab preference sync replaces state without writing another storage e
   const status = { textContent: '' };
   const win = { dispatchEvent: event => changes.push(event.detail) };
   const context = {
-    window: win, URL, CustomEvent,
+    window: win, URL, CustomEvent, readMigratedStorage,
     document: { readyState: 'complete', getElementById: () => status, querySelectorAll: () => [] },
     localStorage: {
       getItem: () => JSON.stringify({ mode: 'light', cloak: 'google', panicKey: 'Escape' }),
       setItem: (key, value) => writes.push({ key, value })
     }
   };
-  vm.runInNewContext(source.replace(/^export /gm, ''), context, { filename: 'privacy.js' });
-  const privacy = win.MonkehPrivacy;
+  vm.runInNewContext(source.replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, ''), context, { filename: 'privacy.js' });
+  const privacy = win.MochiiPrivacy;
   assert.equal(privacy.get().mode, 'light');
   privacy.sync({ mode: 'dark', cloak: 'classroom' });
   assert.equal(privacy.get().cloak, 'classroom');
@@ -153,11 +154,11 @@ async function preferenceController() {
   }
   const doc = { readyState: 'complete', hidden: false, getElementById: () => status, querySelectorAll: () => inputs, addEventListener: (name, listener) => listeners.set(name, listener) };
   const context = {
-    window: win, document: doc, URL, CustomEvent,
+    window: win, document: doc, URL, CustomEvent, readMigratedStorage,
     localStorage: { getItem: () => null, setItem(key, value) { if (failWrites) throw new Error('Storage blocked'); writes.push({ key, value }); } }
   };
-  vm.runInNewContext(source.replace(/^export /gm, ''), context);
-  return { privacy: win.MonkehPrivacy, writes, changes, timers, status, doc, inputs, listeners, set failWrites(value) { failWrites = value; }, get games() { return games; }, get apps() { return apps; }, flushTimer() { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(callback => callback()); } };
+  vm.runInNewContext(source.replace(/^import .*;\r?\n/gm, '').replace(/^export /gm, ''), context);
+  return { privacy: win.MochiiPrivacy, writes, changes, timers, status, doc, inputs, listeners, set failWrites(value) { failWrites = value; }, get games() { return games; }, get apps() { return apps; }, flushTimer() { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(callback => callback()); } };
 }
 
 test('appearance previews update immediately and coalesce disk writes without duplicate no-op events', async () => {

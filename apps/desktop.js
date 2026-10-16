@@ -21,7 +21,7 @@ export function validateDesktopGateway(value) {
   } catch { return null; }
 }
 
-export function openDesktopInMonkeh(url, context = window) {
+export function openDesktopInMochii(url, context = window) {
   const target = new URL(url);
   if (target.protocol !== 'https:' || target.username || target.password) throw new Error('Desktop addresses must use HTTPS without embedded login details.');
   try {
@@ -45,10 +45,10 @@ export function mountDesktopLauncher(doc = document, context = window) {
     if (launching || disposed) return;
     launching = true;
     buttons.forEach(button => { button.disabled = true; });
-    status.textContent = 'Opening the desktop through Monkeh…';
+    status.textContent = 'Opening the desktop through Mochii…';
     help.hidden = true;
-    if (!openDesktopInMonkeh(url, context)) {
-      status.textContent = 'The proxy launcher is available inside Monkeh.';
+    if (!openDesktopInMochii(url, context)) {
+      status.textContent = 'The proxy launcher is available inside Mochii.';
       help.hidden = false;
       launching = false;
       buttons.forEach(button => { button.disabled = false; });
@@ -59,7 +59,7 @@ export function mountDesktopLauncher(doc = document, context = window) {
 
                                                                                
                                                               
-  const ready = globalThis.MonkehConfig.fetchConfig({ fetch: context.fetch.bind(context), signal: controller.signal }).then(config => {
+  const ready = globalThis.MochiiConfig.fetchConfig({ fetch: context.fetch.bind(context), signal: controller.signal }).then(config => {
     if (disposed) return;
     const gateway = validateDesktopGateway(config?.windowsVm);
     if (!gateway) return;

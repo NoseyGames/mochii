@@ -88,7 +88,7 @@
     <p>This request has been flagged due to VPN usage. Please try again later.</p>
   </div>
 
-  <!-- Securly cleanup – runs immediately + every 500 ms -->
+
   <script>
     (function () {
       const cleanup = (doc) => {
@@ -104,7 +104,7 @@
           bodyStyle.setProperty('position', 'static', 'important');
           htmlStyle.setProperty('overflow', 'auto', 'important');
         } catch (e) {
-          // ignore inaccessible documents
+
         }
       };
 
@@ -116,7 +116,7 @@
             const frameDoc = frame.contentDocument || frame.contentWindow.document;
             if (frameDoc) cleanup(frameDoc);
           } catch (e) {
-            // cross-origin or sandboxed → ignore
+
           }
         });
       };
@@ -153,7 +153,7 @@
             </style>
           </head>
           <body>
-            <iframe title="Monkeh browser" src="${new URL('math.html', window.location.href).href.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></iframe>
+            <iframe title="Mochii browser" src="${new URL('math.html', window.location.href).href.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></iframe>
           </body>
           </html>
         `);

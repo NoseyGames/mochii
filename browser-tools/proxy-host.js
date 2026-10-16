@@ -1,4 +1,5 @@
 import { createProxyNetwork } from './proxy-network.js';
+import { transportLockFor } from './transport-lock.js';
 import { attachRuntime, formatValue } from './runtime.js';
 import './config.js';
 
@@ -282,7 +283,7 @@ async function receive(event) {
 }
 
 window.addEventListener('message', event => {
-  if (!event.isTrusted || !config || event.source !== window.parent || !config.shellOrigins.includes(event.origin) || event.data?.type !== 'monkeh-proxy:init' || event.ports.length !== 1) return;
+  if (!event.isTrusted || !config || event.source !== window.parent || !config.shellOrigins.includes(event.origin) || !['mochii-proxy:init', 'monkeh-proxy:init'].includes(event.data?.type) || event.ports.length !== 1) return;
   port?.close();
   port = event.ports[0];
   port.onmessage = receive;
@@ -469,7 +470,7 @@ async function prepareIdentity() {
     timer = setTimeout(() => reject(new Error('Browser identity setup timed out. Use Try again.')), 12000);
     let binding = false;
     listener = event => {
-      if (!active || !event.isTrusted || event.source !== frame.contentWindow || event.origin !== location.origin || event.data?.type !== 'monkeh-proxy:identity-ready' || event.data.nonce !== nonce || binding) return;
+      if (!active || !event.isTrusted || event.source !== frame.contentWindow || event.origin !== location.origin || !['mochii-proxy:identity-ready', 'monkeh-proxy:identity-ready'].includes(event.data?.type) || event.data.nonce !== nonce || binding) return;
       if (event.data.failed || typeof event.data.clientId !== 'string' || event.data.clientId.length > 128) { reject(new Error('Browser identity setup failed. Use Try again.')); return; }
       binding = true;
       channel = new MessageChannel();
@@ -479,7 +480,7 @@ async function prepareIdentity() {
         else reject(new Error('Browser identity setup was rejected. Use Try again.'));
       };
       channel.port1.start();
-      try { navigator.serviceWorker.controller.postMessage({ type: 'monkeh:identity:bind', clientId: event.data.clientId, nonce }, [channel.port2]); }
+      try { navigator.serviceWorker.controller.postMessage({ type: 'monkeh:identity:bind', protocol: 'mochii', clientId: event.data.clientId, nonce }, [channel.port2]); }
       catch { reject(new Error('Browser identity setup could not reach the proxy worker. Use Try again.')); }
     };
     window.addEventListener('message', listener);
@@ -506,7 +507,7 @@ function prepareGameCode(targetUrl) {
   return new Promise((resolve, reject) => {
     cancel = message => {
       if (!active) return;
-      try { controller.postMessage({ type: 'monkeh:game:cancel', nonce }); } catch {}
+      try { controller.postMessage({ type: 'monkeh:game:cancel', protocol: 'mochii', nonce }); } catch {}
       active = false;
       reject(new Error(message || 'Game loading was cancelled.'));
     };
@@ -518,7 +519,7 @@ function prepareGameCode(targetUrl) {
         if (data?.ok !== true) throw new Error(typeof data?.error === 'string' ? data.error.slice(0, 1000) : 'The game code could not be fetched. Use Try again.');
         const prepared = new URL(data.url);
         const canonical = new URL(data.canonicalUrl);
-        if (prepared.href !== location.origin + '/__monkeh_game__/' + nonce || canonical.origin !== location.origin || !canonical.pathname.startsWith(__uv$config.prefix)) throw new Error('The proxy returned an invalid game document.');
+        if (!['/__mochii_game__/', '/__monkeh_game__/'].some(prefix => prepared.href === location.origin + prefix + nonce) || canonical.origin !== location.origin || !canonical.pathname.startsWith(__uv$config.prefix)) throw new Error('The proxy returned an invalid game document.');
         const target = new URL(httpUrl(__uv$config.decodeUrl(canonical.href.slice(location.origin.length + __uv$config.prefix.length))));
         if (target.origin === location.origin || config.shellOrigins.includes(target.origin)) throw new Error('App pages cannot be opened as proxy destinations.');
         active = false;
@@ -526,7 +527,7 @@ function prepareGameCode(targetUrl) {
       } catch (error) { cancel(error.message); }
     };
     channel.port1.start();
-    try { controller.postMessage({ type: 'monkeh:game:prepare', url: targetUrl, nonce }, [channel.port2]); }
+    try { controller.postMessage({ type: 'monkeh:game:prepare', protocol: 'mochii', url: targetUrl, nonce }, [channel.port2]); }
     catch { cancel('The proxy worker could not fetch the game code. Use Try again.'); }
   }).finally(() => {
     active = false;
@@ -541,12 +542,13 @@ async function start() {
   if (starting) return starting;
   starting = (async () => {
     if (!isSecureContext || !navigator.serviceWorker || !window.SharedWorker) throw new Error('Proxy browsing requires HTTPS or localhost and a browser with SharedWorker support.');
+    transportLockFor(window).assertAvailable();
     if (network && workerConfigured && navigator.serviceWorker.controller) {
       await network.connect();
       return;
     }
     if (!config) {
-      const fetchedConfig = await globalThis.MonkehConfig.fetchConfig();
+      const fetchedConfig = await (globalThis.MochiiConfig || globalThis.MonkehConfig).fetchConfig();
       const loadedConfig = fetchedConfig.mode === 'static'
         ? { ...fetchedConfig, proxyOrigin: location.origin, shellOrigins: [location.origin] }
         : fetchedConfig;
@@ -554,7 +556,7 @@ async function start() {
           !Array.isArray(loadedConfig.wispEndpoints) || loadedConfig.wispEndpoints.length < 1 || loadedConfig.wispEndpoints.length > 32) throw new Error('The browser proxy is misconfigured.');
       config = loadedConfig;
                                                                                  
-      for (const origin of config.shellOrigins) window.parent.postMessage({ type: 'monkeh-proxy:ready' }, origin);
+      for (const origin of config.shellOrigins) window.parent.postMessage({ type: 'monkeh-proxy:ready', protocol: 'mochii-proxy' }, origin);
     }
     if (disposed) throw new Error('This browser view was closed.');
     if (!network) {
@@ -570,7 +572,13 @@ async function start() {
       network = createProxyNetwork({ endpoints, fallbackEndpoints,
                                                                            
                                                                             
-        activate: url => transport.setTransport('/bearmux/epoxy/index.mjs?v=2.1.28', [{ wisp: url }]),
+        activate: url => {
+          const activate = async () => {
+            await transport.setTransport('/bearmux/epoxy/index.mjs?v=2.1.28', [{ wisp: url }]);
+            try { sessionStorage.setItem('mochii.proxy.active-wisp', url); } catch {}
+          };
+          return transportLockFor(window).run(activate);
+        },
         onStatus: state => { latestNetwork = state; send('network', state); }
       });
       if (navigator.onLine === false) await network.setOnline(false);

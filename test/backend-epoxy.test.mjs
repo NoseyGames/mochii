@@ -48,7 +48,7 @@ async function verifyEpoxy(t) {
   const { default: EpoxyTransport } = await import(pathToFileURL(path.join(epoxyPath, 'index.mjs')).href);
   const transport = new EpoxyTransport({ wisp: `${origin.replace('http:', 'ws:')}/wisp/` });
   await transport.init();
-  const body = 'Monkeh upload check.\n'.repeat(256 * 1024);
+  const body = 'Mochii upload check.\n'.repeat(256 * 1024);
   const result = await transport.request(new URL('http://example.test/upload'), 'POST', new TextEncoder().encode(body).buffer, { 'content-type': 'text/plain' });
   assert.equal(result.status, 200);
   assert.equal(await new Response(result.body).text(), body);
