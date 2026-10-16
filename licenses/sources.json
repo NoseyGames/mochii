@@ -1,0 +1,47 @@
+[
+  {
+    "name": "bare-mux-2.1.9",
+    "repository": "MercuryWorkshop/bare-mux",
+    "revision": "bfb262b8c9ca68449601a15d8403de7b2c71a21e",
+    "url": "https://codeload.github.com/MercuryWorkshop/bare-mux/zip/bfb262b8c9ca68449601a15d8403de7b2c71a21e",
+    "file": "licenses/sources/bare-mux-2.1.9.zip",
+    "bytes": 23366,
+    "sha256": "6a4c10fb7a638e696747b0326785a04ac1e2d298fdddc31cdd12b8a89ba08ed6"
+  },
+  {
+    "name": "epoxy-transport-2.1.28",
+    "repository": "MercuryWorkshop/epoxy-transport",
+    "revision": "f9ccb9b14f88a7fda355dc4cf039106c95797849",
+    "url": "https://codeload.github.com/MercuryWorkshop/epoxy-transport/zip/f9ccb9b14f88a7fda355dc4cf039106c95797849",
+    "file": "licenses/sources/epoxy-transport-2.1.28.zip",
+    "bytes": 11676,
+    "sha256": "98eb08eb6ae9344897f4f252bc58b491e696e0a4f9083e1b241f2ae95b52297d"
+  },
+  {
+    "name": "epoxy-tls-2.1.18-1",
+    "repository": "MercuryWorkshop/epoxy-tls",
+    "revision": "b428c01cde0bf9be25469f24ad8b4d2b7c5f6f3b",
+    "url": "https://codeload.github.com/MercuryWorkshop/epoxy-tls/zip/b428c01cde0bf9be25469f24ad8b4d2b7c5f6f3b",
+    "file": "licenses/sources/epoxy-tls-2.1.18-1.zip",
+    "bytes": 439829,
+    "sha256": "a24cb59a6405329d3f5b5d8486c87679254c18e842bc68e1a44aca153d585c3f"
+  },
+  {
+    "name": "epoxy-tls-embedded-build-e2d1d4e",
+    "repository": "MercuryWorkshop/epoxy-tls",
+    "revision": "e2d1d4e50a97be4a1a242eea6b212cfb77b78426",
+    "url": "https://codeload.github.com/MercuryWorkshop/epoxy-tls/zip/e2d1d4e50a97be4a1a242eea6b212cfb77b78426",
+    "file": "licenses/sources/epoxy-tls-embedded-build-e2d1d4e.zip",
+    "bytes": 439831,
+    "sha256": "6b7d9652183b9a016018a694638fd749c431a0eab0deb08eb52e71bfdda95174"
+  },
+  {
+    "name": "ultraviolet-3.2.10",
+    "repository": "titaniumnetwork-dev/Ultraviolet",
+    "revision": "92d907579bc61b6290ded490877834698e0c6439",
+    "url": "https://codeload.github.com/titaniumnetwork-dev/Ultraviolet/zip/92d907579bc61b6290ded490877834698e0c6439",
+    "file": "licenses/sources/ultraviolet-3.2.10.zip",
+    "bytes": 86084,
+    "sha256": "965c1714d2e410f5f479196517f835062422e6d2a88ec724e0367181cd6f7be7"
+  }
+]

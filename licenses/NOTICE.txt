@@ -1,0 +1,78 @@
+THIRD-PARTY SOFTWARE AND SOURCE ACCESS
+
+These third-party components retain their upstream licenses and ownership.
+The Mochii root license does not replace or add restrictions to those licenses.
+All source archives below are unmodified upstream archives, including their
+original copyright notices, source comments, build scripts and lockfiles.
+
+BareMux 2.1.9
+License: MIT; original notice in BARE-MUX-LICENSE.txt.
+Copyright 2024 Mercury Workshop Inc.
+Source: https://github.com/MercuryWorkshop/bare-mux/tree/bfb262b8c9ca68449601a15d8403de7b2c71a21e
+Archive: sources/bare-mux-2.1.9.zip
+Provenance: installed npm package 2.1.9. The public source commit is titled
+"2.1.9" and declares that version. The npm metadata does not provide gitHead;
+the build has not been reproduced byte-for-byte from this source archive.
+Build instructions and configuration: package.json, pnpm-lock.yaml and
+rollup.config.js in the archive; install its locked dependencies and run build.
+The deployed BareMux assets and their existing source maps are copied from
+the pinned npm package without modification. Local legacy copies had ordinary
+comments removed; they are not the files used by the static build.
+
+Epoxy transport 2.1.28
+License: AGPL-3.0-only, as declared by its published package metadata.
+License text: EPOXY-LICENSE.txt (the full GNU AGPL version 3 text).
+Source: https://github.com/MercuryWorkshop/epoxy-transport/tree/f9ccb9b14f88a7fda355dc4cf039106c95797849
+Archive: sources/epoxy-transport-2.1.28.zip
+Provenance: the exact gitHead in the published npm release metadata. The
+installed src/main.ts and build script match this source revision.
+Build instructions: package.json and esbuild.bundle.mjs in the archive;
+install dependencies using pnpm-lock.yaml and run the build script. The pinned
+transport includes Epoxy TLS 2.1.18-1. The deployed transport bundle is copied
+from the pinned npm package without modification.
+The transport package has no separate upstream LICENSE file; its declared
+AGPL-3.0-only license is accompanied here by the unmodified license text
+shipped with its Epoxy TLS dependency. No new copyright attribution is invented.
+
+Epoxy TLS 2.1.18-1
+License: AGPL-3.0-only; original full license in EPOXY-LICENSE.txt.
+Published release source: https://github.com/MercuryWorkshop/epoxy-tls/tree/b428c01cde0bf9be25469f24ad8b4d2b7c5f6f3b
+Archive: sources/epoxy-tls-2.1.18-1.zip
+Embedded build source: https://github.com/MercuryWorkshop/epoxy-tls/tree/e2d1d4e50a97be4a1a242eea6b212cfb77b78426
+Archive: sources/epoxy-tls-embedded-build-e2d1d4e.zip
+The npm release reports the first gitHead, while generated JavaScript reports
+the second commit. These adjacent source revisions differ only in the version
+fields of Cargo.lock, client/Cargo.toml and client/package.json. Both original
+archives are provided to preserve this provenance distinction. The generated
+bundle identifies version 2.1.18-1 and a full release build. A bit-for-bit
+reproduction of the upstream WebAssembly build has not been performed.
+Build instructions: client/README.md and client/build.sh, with the repository
+Cargo.lock and Rust toolchain configuration. The script requires Rust nightly,
+wasm32-unknown-unknown, wasm-bindgen 0.2.100, wasm-opt, jq and git. Use an exact
+git checkout when rebuilding because the script records git rev-parse HEAD;
+follow the full upstream instructions for release flags and tool versions.
+
+Ultraviolet 3.2.10
+Original license: ULTRAVIOLET-LICENSE.txt (GNU AGPL version 3).
+Source: https://github.com/titaniumnetwork-dev/Ultraviolet/tree/92d907579bc61b6290ded490877834698e0c6439
+Archive: sources/ultraviolet-3.2.10.zip
+The service-worker bundle embeds version 3.2.10 and build 92d9075. Each of the
+four supplied bundles has the same JavaScript AST as its official npm 3.2.10
+counterpart; ordinary comments were replaced with whitespace. Project-specific
+configuration is supplied separately in ultrav/uv.config.js.
+The npm package.json says "MIT", but the LICENSE distributed inside that exact
+release and at that exact source revision is the GNU AGPL version 3. Those
+two LICENSE files match byte-for-byte. This distribution preserves that actual
+license rather than treating the conflicting metadata as a broader grant.
+Build instructions: package.json, pnpm-lock.yaml and build.js in the archive;
+install the locked dependencies and run the build script. Source-map metadata
+identifies the embedded JavaScript dependencies; their original license texts
+are reproduced in ULTRAVIOLET-DEPENDENCIES.txt.
+
+The source archives contain upstream dependency manifests and lockfiles.
+They are not a complete offline mirror of every npm package or Rust crate.
+Package/build provenance is described above; these notices do not represent
+a warranty that every upstream artifact is reproducible or a legal opinion.
+
+Checksums, exact source revisions and retrieval URLs: sources.json.
+Human-readable source and license links: index.html.
