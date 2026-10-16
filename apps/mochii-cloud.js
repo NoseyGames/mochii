@@ -343,7 +343,7 @@ export function mountMochii(doc = document, win = window) {
     $('launch-figure').disabled = !figureUrl;
     $('launch-figure').textContent = figureUrl ? 'Play with Figure' : 'Unavailable on Figure';
     $('detail-provider').textContent = figureUrl
-      ? 'Launches with Figure through Monkeh in this page. Figure handles session setup and queues; its availability and terms apply.'
+      ? 'Launches with Figure through Mochii in this page. Figure handles session setup and queues; its availability and terms apply.'
       : 'This game has no verified Figure match yet. Choose another game from the collection.';
     const specs = [];
     for (const [title, requirement] of [['Minimum', game.rm], ['Recommended', game.rr]]) {
@@ -401,16 +401,16 @@ export function mountMochii(doc = document, win = window) {
     playerGame = knownGame;
     if (details.open) details.close();
     $('player-title').textContent = knownGame.n;
-    $('player-hint').textContent = 'Connecting to Monkeh’s proxy…';
+    $('player-hint').textContent = 'Connecting to Mochii’s proxy…';
     $('player-retry').hidden = true;
     player.showModal();
     try {
-      const config = await win.MonkehConfig.fetchConfig({ signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]) });
+      const config = await win.MochiiConfig.fetchConfig({ signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]) });
       if (request.signal.aborted || generation !== launchGeneration || !player.open) return;
-      const proxyUrl = getFigureProxyUrl(knownGame.id, config, win.location.origin, win.MonkehPrivacy?.get().userAgent);
+      const proxyUrl = getFigureProxyUrl(knownGame.id, config, win.location.origin, win.MochiiPrivacy?.get().userAgent);
       if (!proxyUrl) throw new Error('The proxy is not available for this site.');
       const frame = element('iframe');
-      frame.title = `${knownGame.n} · Figure through Monkeh`;
+      frame.title = `${knownGame.n} · Figure through Mochii`;
       frame.setAttribute('sandbox', PLAYER_SANDBOX);
       frame.setAttribute('allow', 'fullscreen; gamepad; autoplay');
       frame.referrerPolicy = 'no-referrer';
