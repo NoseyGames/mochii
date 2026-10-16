@@ -25,7 +25,7 @@ test('effects stop when hidden, during games, for reduced motion and after dispo
   const canvas = { setAttribute() {}, getContext: () => context, remove() { this.removed = true; } };
   const doc = { ...emitter(), hidden: false, querySelector: () => ({ prepend() {} }), createElement: () => canvas,
     getElementById: () => ({ classList: { contains: () => active } }) };
-  const win = { ...emitter(), document: doc, MonkehPrivacy: { get: () => settings }, innerWidth: 1920, innerHeight: 1080, devicePixelRatio: 3,
+  const win = { ...emitter(), document: doc, MochiiPrivacy: { get: () => settings }, innerWidth: 1920, innerHeight: 1080, devicePixelRatio: 3,
     matchMedia: () => reduced, setTimeout, clearTimeout,
     requestAnimationFrame(fn) { frames.set(++frameId, fn); return frameId; }, cancelAnimationFrame(id) { frames.delete(id); },
     MutationObserver: class { constructor(fn) { mutations = fn; } observe() {} disconnect() {} }
@@ -33,7 +33,7 @@ test('effects stop when hidden, during games, for reduced motion and after dispo
   const effects = mountParticles(win, doc);
   assert.equal(frames.size, 1); assert.equal(canvas.width, 2880);
   const frameBeforeUnrelatedChange = frameId;
-  settings.accentColor = '#ff0000'; win.fire('monkeh:privacy');
+  settings.accentColor = '#ff0000'; win.fire('mochii:privacy');
   assert.equal(frameId, frameBeforeUnrelatedChange);
   doc.hidden = true; doc.fire('visibilitychange'); assert.equal(frames.size, 0);
   doc.hidden = false; doc.fire('visibilitychange'); assert.equal(frames.size, 1);
@@ -43,8 +43,8 @@ test('effects stop when hidden, during games, for reduced motion and after dispo
   reduced.matches = false; reduced.fire('change'); assert.equal(frames.size, 1);
   win.fire('pagehide'); assert.equal(frames.size, 0);
   win.fire('pageshow'); assert.equal(frames.size, 1);
-  settings.particleEffect = 'none'; win.fire('monkeh:privacy'); assert.equal(frames.size, 0);
-  settings.particleEffect = 'bubbles'; win.fire('monkeh:privacy'); assert.equal(frames.size, 1);
+  settings.particleEffect = 'none'; win.fire('mochii:privacy'); assert.equal(frames.size, 0);
+  settings.particleEffect = 'bubbles'; win.fire('mochii:privacy'); assert.equal(frames.size, 1);
   effects.dispose(); assert.equal(frames.size, 0); assert.equal(canvas.removed, true);
-  win.fire('monkeh:privacy'); assert.equal(frames.size, 0);
+  win.fire('mochii:privacy'); assert.equal(frames.size, 0);
 });

@@ -312,7 +312,7 @@ test('pagehide releases the runtime, and inaccessible documents produce a helpfu
   page.dispatch('pagehide');
   assert.equal(navigations, 1);
   await assert.rejects(runtime.evaluate('1'), /page has changed/);
-  assert.throws(() => attachRuntime({ get document() { throw new Error('Denied'); } }), /Reload it through the Monkeh browser/);
+  assert.throws(() => attachRuntime({ get document() { throw new Error('Denied'); } }), /Reload it through the Mochii browser/);
 });
 
 test('cleanup tolerates a WindowProxy becoming inaccessible after a cross-origin navigation', async () => {

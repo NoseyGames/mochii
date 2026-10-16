@@ -78,7 +78,7 @@ test('native shortcuts cover common desktop browser tools without capturing ordi
 test('trusted native shortcut redirects once to the fixed local error page', () => {
   const f = fixture();
   const leaving = [];
-  f.win.addEventListener('monkeh:leaving', event => leaving.push({ reason: event.detail.reason, redirected: f.redirects.length }));
+  f.win.addEventListener('mochii:leaving', event => leaving.push({ reason: event.detail.reason, redirected: f.redirects.length }));
   assert.equal(f.key(), true);
   assert.deepEqual(f.redirects, ['/oops.html']);
   assert.deepEqual(leaving, [{ reason: 'devtools-guard', redirected: 0 }]);
@@ -92,14 +92,14 @@ test('untrusted shortcuts and built-in inspector interactions do not redirect', 
   const f = fixture();
   assert.equal(f.key({ isTrusted: false }), false);
   f.win.dispatch('click', { target: { id: 'tools-inspect' }, isTrusted: true });
-  f.win.dispatch('monkeh:inspect', { detail: { mode: 'select' } });
+  f.win.dispatch('mochii:inspect', { detail: { mode: 'select' } });
   assert.deepEqual(f.redirects, []);
   f.guard.dispose();
 });
 
 test('a configured panic shortcut takes priority over the matching native tools shortcut', () => {
   const f = fixture();
-  f.win.MonkehPrivacy = { get: () => ({ panicKey: 'Ctrl+Shift+i' }) };
+  f.win.MochiiPrivacy = { get: () => ({ panicKey: 'Ctrl+Shift+i' }) };
   assert.equal(f.key({ key: 'I', ctrlKey: true, shiftKey: true }), false);
   assert.deepEqual(f.redirects, []);
   assert.equal(f.key({ key: 'J', ctrlKey: true, shiftKey: true }), true);
@@ -109,7 +109,7 @@ test('a configured panic shortcut takes priority over the matching native tools 
 
 test('native guard remains active in typing fields where the panic shortcut is ignored', () => {
   const f = fixture();
-  f.win.MonkehPrivacy = { get: () => ({ panicKey: 'F12' }) };
+  f.win.MochiiPrivacy = { get: () => ({ panicKey: 'F12' }) };
   assert.equal(f.key({ target: { closest: () => ({}) } }), true);
   assert.deepEqual(f.redirects, ['/oops.html']);
   f.guard.dispose();
@@ -118,7 +118,7 @@ test('native guard remains active in typing fields where the panic shortcut is i
 test('disabled guard does not intercept keys and can be enabled through privacy settings', () => {
   const f = fixture({ enabled: false });
   assert.equal(f.key(), false);
-  f.win.dispatch('monkeh:privacy', { detail: { nativeDevtoolsGuard: true } });
+  f.win.dispatch('mochii:privacy', { detail: { nativeDevtoolsGuard: true } });
   assert.equal(f.key(), true);
   assert.deepEqual(f.redirects, ['/oops.html']);
   f.guard.dispose();
@@ -188,9 +188,9 @@ test('already docked panels establish the initial baseline instead of immediatel
 
 test('privacy changes stop optional polling and reject non-boolean changes', () => {
   const f = fixture({ detectDocked: true });
-  f.win.dispatch('monkeh:privacy', { detail: { detectDocked: false } });
+  f.win.dispatch('mochii:privacy', { detail: { detectDocked: false } });
   assert.equal(f.timers.size, 0);
-  f.win.dispatch('monkeh:privacy', { detail: { nativeDevtoolsGuard: 'false', detectDocked: 'true' } });
+  f.win.dispatch('mochii:privacy', { detail: { nativeDevtoolsGuard: 'false', detectDocked: 'true' } });
   assert.equal(f.guard.getState().enabled, true);
   assert.equal(f.guard.getState().detectDocked, false);
   f.guard.setDetectDocked(true);

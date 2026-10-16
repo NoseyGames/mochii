@@ -6,11 +6,13 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 
 function harness(t, options = {}) {
   const requests = [];
+  const initializations = [];
   const events = { pages: [], logs: [], selections: [], errors: [], networks: [] };
   let hostPort;
   const frame = { src: 'https://proxy.test/proxy-host.html#https%3A%2F%2Fexample.com', contentWindow: {
     postMessage(message, origin, ports) {
-      assert.deepEqual(message, { type: 'monkeh-proxy:init' });
+      assert.deepEqual(message, { type: 'monkeh-proxy:init', protocol: 'mochii-proxy' });
+      initializations.push(message);
       assert.equal(origin, 'https://proxy.test');
       assert.equal(ports.length, 1);
       hostPort = ports[0];
@@ -25,7 +27,7 @@ function harness(t, options = {}) {
   }, options);
   t.after(() => { runtime.dispose(); hostPort.close(); });
   return {
-    runtime, events, requests,
+    runtime, events, requests, initializations,
     async send(event, data = {}) { hostPort.postMessage({ event, data }); await tick(); await tick(); },
     async response(id, result, error) { hostPort.postMessage({ id, result, error }); await tick(); await tick(); },
   };
@@ -42,6 +44,16 @@ test('remote tools require an exact configured proxy host URL before handing out
     assert.throws(() => createRemoteRuntime({ src }, 'https://proxy.test'), /configured proxy host/);
   }
   assert.throws(() => createRemoteRuntime({ src: 'https://proxy.test/proxy-host.html' }, 'https://proxy.test/wrong'), /configured proxy host/);
+});
+
+test('the initial bridge is understood by cached hosts and transfers its channel only once', async t => {
+  const app = harness(t);
+  assert.equal(app.initializations.length, 1);
+  await app.send('ready');
+  await app.send('ready');
+  assert.equal(app.runtime.hasHandshake, true);
+  assert.equal(app.initializations.length, 1);
+  assert.equal(app.events.errors.length, 0);
 });
 
 test('manual evaluation uses RPC and returns only a bounded formatted string', async t => {
@@ -77,7 +89,7 @@ test('page events become inert bounded trees with cycles and duplicate edges rem
 test('unknown messages cannot ask the shell to evaluate, navigate, or send saved data', async t => {
   const app = harness(t);
   for (const event of ['evaluate', 'readStorage', 'userscripts', 'navigate', '__proto__']) {
-    await app.send(event, { code: 'window.stolen=true', url: 'https://evil.test/', key: 'monkeh.userscripts.v1' });
+    await app.send(event, { code: 'window.stolen=true', url: 'https://evil.test/', key: 'mochii.userscripts.v1' });
   }
   assert.equal(app.requests.length, 0);
   assert.deepEqual(app.events.pages, []);

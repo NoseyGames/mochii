@@ -46,7 +46,7 @@ test('Figure lookup rejects nonstrings without coercing attacker-controlled valu
 });
 
 test('Figure destinations are encoded only beneath a configured isolated proxy host', () => {
-  const shell = 'https://monkeh.example';
+  const shell = 'https://mochii.example';
   const config = { proxyOrigin: 'https://proxy.example', shellOrigins: [shell, 'https://mirror.example'] };
   for (const game of GAMES) {
     const target = getFigureLaunchUrl(game.id);
@@ -62,7 +62,7 @@ test('Figure destinations are encoded only beneath a configured isolated proxy h
 });
 
 test('proxy configuration rejects origin confusion, credentials, remote HTTP, and missing shell approval', () => {
-  const shell = 'https://monkeh.example';
+  const shell = 'https://mochii.example';
   const base = { proxyOrigin: 'https://proxy.example', shellOrigins: [shell] };
   for (const config of [null, {}, [], { ...base, shellOrigins: [] }, { ...base, shellOrigins: shell },
     { ...base, shellOrigins: ['https://another-shell.example'] },
@@ -72,7 +72,7 @@ test('proxy configuration rejects origin confusion, credentials, remote HTTP, an
     { ...base, proxyOrigin: 'https://mirror.example', shellOrigins: [shell, 'https://mirror.example'] }]) {
     assert.equal(getFigureProxyUrl('117', config, shell), null);
   }
-  for (const origin of [undefined, null, '', 'https://monkeh.example.evil.test', 'https://user@monkeh.example', 'https://monkeh.example/path']) {
+  for (const origin of [undefined, null, '', 'https://mochii.example.evil.test', 'https://user@mochii.example', 'https://mochii.example/path']) {
     assert.equal(getFigureProxyUrl('117', base, origin), null);
   }
   for (const id of [null, undefined, 117, 'unknown', 'MC120']) assert.equal(getFigureProxyUrl(id, base, shell), null);
@@ -85,7 +85,7 @@ test('local HTTP development keeps shell and proxy on separate approved loopback
     assert.equal(getFigureProxyUrl('117', config, shell), config.proxyOrigin + '/proxy-host.html#' + encodeURIComponent(getFigureLaunchUrl('117')));
     assert.equal(getFigureProxyUrl('117', { ...config, proxyOrigin: shell }, shell), null);
   }
-  assert.equal(getFigureProxyUrl('117', { proxyOrigin: 'http://localhost:4174', shellOrigins: ['https://monkeh.example'] }, 'https://monkeh.example'), null);
+  assert.equal(getFigureProxyUrl('117', { proxyOrigin: 'http://localhost:4174', shellOrigins: ['https://mochii.example'] }, 'https://mochii.example'), null);
 });
 
 test('static Figure launch stays on any current secure mirror without a configured proxy or shell list', () => {

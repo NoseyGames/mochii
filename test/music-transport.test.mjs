@@ -204,17 +204,18 @@ test('a slow transport mutation retains its lock and is not duplicated after a c
   };
   win.navigator.locks.request = async (_, options, action) => { try { return await action(); } finally { releases++; } };
   const proxy = createLocalProxy({ win, createNetwork, startupTimeout: 5 });
-  await assert.rejects(proxy.url('https://music.example/a', config), /still starting/);
+  await assert.rejects(proxy.url('https://music.example/a', config), /Reload this page/);
   assert.equal(mutations, 1);
   assert.equal(releases, 0);
-  await assert.rejects(proxy.url('https://music.example/b', config), /still starting/);
+  await assert.rejects(proxy.url('https://music.example/b', config), /Reload this page/);
   assert.equal(mutations, 1);
   assert.equal(releases, 0);
   finish();
   await tick();
+  assert.equal(releases, 1);
   assert.match(await proxy.url('https://music.example/c', config), /\/service\//);
   assert.equal(mutations, 1);
-  assert.equal(releases, 1);
+  assert.equal(releases, 2);
 });
 
 test('invalid proxy destinations and unsupported browsers fail before network startup', async () => {
@@ -224,4 +225,43 @@ test('invalid proxy destinations and unsupported browsers fail before network st
   win.isSecureContext = false;
   await assert.rejects(proxy.url('https://music.example/a', config), /HTTPS/);
   assert.equal(calls.length, 0);
+});
+
+
+test('explicit music relay retry excludes the active server and retains native stream routing', async () => {
+  const { win, calls, createNetwork } = fixture();
+  const saved = new Map();
+  win.sessionStorage = { getItem: key => saved.get(key), setItem: (key, value) => saved.set(key, value) };
+  const config = { mode: 'static', wispEndpoints: [{ url: 'wss://first.example/' }, { url: 'wss://second.example/' }] };
+  const proxy = createLocalProxy({ win, createNetwork });
+  const api = createMusicApi({ win, getConfig: async () => config, proxy });
+  await api.resolve('/api/music/browse');
+  assert.equal(saved.get('mochii.proxy.active-wisp'), 'wss://first.example/');
+  await api.retryRelay();
+  assert.deepEqual(calls.filter(([name]) => name === 'network').at(-1)[1], ['wss://second.example/']);
+  assert.equal(saved.get('mochii.proxy.active-wisp'), 'wss://second.example/');
+  assert.equal(calls.filter(([name]) => name === 'set').length, 2);
+});
+
+test('a timed-out explicit relay switch is not duplicated by a second Retry click', async () => {
+  const { win, createNetwork } = fixture({ existing: 'epoxy' });
+  win.sessionStorage = { getItem: () => 'wss://first.example/', setItem() {} };
+  let finish; let changes = 0;
+  win.BareMux.BareMuxConnection = class { async getTransport() { return 'epoxy'; } async setTransport() { changes++; await new Promise(resolve => { finish = resolve; }); } };
+  const proxy = createLocalProxy({ win, createNetwork, startupTimeout: 5 });
+  const config = { mode: 'static', wispEndpoints: [{ url: 'wss://first.example/' }, { url: 'wss://second.example/' }] };
+  await assert.rejects(proxy.retry(config), /Reload this page/);
+  await assert.rejects(proxy.retry(config), /Reload this page/);
+  assert.equal(changes, 1);
+  finish(); await tick();
+});
+
+test('music retry does not switch transports on managed backends or when no alternative exists', async () => {
+  const api = createMusicApi({ getConfig: async () => ({ mode: 'backend', proxyOrigin: 'https://backend.test' }), proxy: { retry() { throw new Error('should not run'); } } });
+  await assert.rejects(api.retryRelay(), /manages its own/);
+  const { win, calls, createNetwork } = fixture({ existing: 'epoxy' });
+  win.sessionStorage = { getItem: () => config.wispEndpoints[0].url };
+  const proxy = createLocalProxy({ win, createNetwork });
+  await assert.rejects(proxy.retry(config), /No different/);
+  assert.equal(calls.some(([name]) => name === 'set'), false);
 });

@@ -12,7 +12,7 @@ function worker(origin, configuredOrigin) {
   let configFails = false;
   let configResponse;
   const context = vm.createContext({
-    MonkehUseBackendConfig: true,
+    MochiiUseBackendConfig: true,
     Response, URL, TextEncoder, TextDecoder, AbortSignal,
     importScripts(path) {
       if (path === '/browser-tools/config.js') vm.runInContext(configSource, context);
@@ -66,7 +66,7 @@ test('worker origin checks fail closed and retry after configuration recovers', 
 
 test('worker rejects an HTML fallback for configuration and recovers when the API returns JSON', async () => {
   const proxy = worker('https://proxy.example', 'https://proxy.example');
-  proxy.setConfigResponse(new Response('<!DOCTYPE html><title>Monkeh</title>', { headers: { 'Content-Type': 'text/html' } }));
+  proxy.setConfigResponse(new Response('<!DOCTYPE html><title>Mochii</title>', { headers: { 'Content-Type': 'text/html' } }));
   assert.equal((await proxy.request('https://proxy.example/service/encoded')).status, 403);
   assert.equal(proxy.proxyFetches, 0);
   proxy.setConfigResponse(null);

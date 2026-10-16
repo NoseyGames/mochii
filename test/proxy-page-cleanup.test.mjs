@@ -9,7 +9,7 @@ worker.self = worker;
 vm.runInContext(source, worker, { filename: 'sw.js' });
 assert.equal(typeof worker.proxyPageCleanup, 'function');
 const injectedSource = `(${worker.proxyPageCleanup.toString()})();`;
-const controllerKey = Symbol.for('monkeh.pageCleanup');
+const controllerKey = Symbol.for('mochii.pageCleanup');
 
 function style() {
   const properties = new Map();

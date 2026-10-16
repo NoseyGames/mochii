@@ -22,7 +22,7 @@ function contextFor(source, overrides = {}) {
     };
   }
   const page = {
-    MonkehUseBackendConfig: true,
+    MochiiUseBackendConfig: true,
     console, performance, URL, Blob, TextEncoder, TextDecoder, Uint8Array, AbortController, AbortSignal,
     setTimeout, clearTimeout, setInterval, clearInterval,
     document: { getElementById: element, querySelector: element, createElement: element, addEventListener() {} },
@@ -182,12 +182,12 @@ test('external app code has integrity checks or executes only in an isolated pro
 
 test('Flyflix opens the live website through the isolated proxy and rejects insecure or shell origins', async () => {
   const page = contextFor(inlineScript(flyflix), {
-    location: new URL('https://monkeh.test/flyflix.html'),
-    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }); }
+    location: new URL('https://mochii.test/flyflix.html'),
+    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://mochii.test'] }); }
   });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(vm.runInContext('frame.src', page), 'https://proxy.test/proxy-host.html#https%3A%2F%2Fflyflix.net%2F');
-  for (const origin of ['https://monkeh.test', 'javascript:alert(1)', 'https://user:password@proxy.test', 'https://proxy.test/path', 'http://proxy.test', 'http://localhost:4174']) {
+  for (const origin of ['https://mochii.test', 'javascript:alert(1)', 'https://user:password@proxy.test', 'https://proxy.test/path', 'http://proxy.test', 'http://localhost:4174']) {
     assert.throws(() => page.validateProviderOrigin(origin), /separate configured proxy origin/);
   }
 });
@@ -197,7 +197,7 @@ test('static Flyflix loads through the current mirror and authenticates its loca
   const channels = [];
   const messages = [];
   const page = contextFor(inlineScript(flyflix), {
-    MonkehUseBackendConfig: false,
+    MochiiUseBackendConfig: false,
     location: new URL('https://new-mirror.example/flyflix.html'),
     addEventListener: (name, listener) => listeners.set(name, listener),
     MessageChannel: class {
@@ -225,7 +225,7 @@ test('Flyflix waits for deferred privacy settings before its first static-config
   const listeners = new Map();
   let configCalls = 0;
   const page = contextFor(inlineScript(flyflix), {
-    location: new URL('https://monkeh.test/flyflix.html'),
+    location: new URL('https://mochii.test/flyflix.html'),
     document: {
       readyState: 'loading',
       getElementById(id) {
@@ -235,11 +235,11 @@ test('Flyflix waits for deferred privacy settings before its first static-config
       addEventListener(name, callback) { listeners.set(name, callback); }
     }
   });
-  page.MonkehConfig = { async fetchConfig() { configCalls++; return { proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }; } };
+  page.MochiiConfig = { async fetchConfig() { configCalls++; return { proxyOrigin: 'https://proxy.test', shellOrigins: ['https://mochii.test'] }; } };
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(configCalls, 0);
   assert.equal(elements.get('provider').src, undefined);
-  page.MonkehPrivacy = { get: () => ({ userAgent: 'Saved Browser/1' }) };
+  page.MochiiPrivacy = { get: () => ({ userAgent: 'Saved Browser/1' }) };
   listeners.get('DOMContentLoaded')();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(configCalls, 1);
@@ -250,22 +250,22 @@ test('Flyflix accepts only the real proxy frame handshake and closes its status 
   const listeners = new Map();
   const channels = [];
   const page = contextFor(inlineScript(flyflix), {
-    location: new URL('https://monkeh.test/flyflix.html'),
+    location: new URL('https://mochii.test/flyflix.html'),
     addEventListener: (name, listener) => listeners.set(name, listener),
     MessageChannel: class {
       constructor() { this.port1 = { starts: 0, closes: 0, start() { this.starts++; }, close() { this.closes++; } }; this.port2 = {}; channels.push(this); }
     },
-    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }); }
+    async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://mochii.test'] }); }
   });
   await new Promise(resolve => setImmediate(resolve));
   const target = vm.runInContext('frame.contentWindow = { postMessage() {} }; frame.contentWindow', page);
-  const handshake = { isTrusted: true, source: target, origin: 'https://proxy.test', data: { type: 'monkeh-proxy:ready' } };
+  const handshake = { isTrusted: true, source: target, origin: 'https://proxy.test', data: { type: 'mochii-proxy:ready' } };
   for (const change of [{ isTrusted: false }, { source: {} }, { origin: 'https://evil.test' }, { data: { type: 'provider-rendered' } }]) listeners.get('message')({ ...handshake, ...change });
   assert.equal(channels.length, 0);
   listeners.get('message')(handshake);
   assert.equal(channels[0].port1.starts, 1);
   channels[0].port1.onmessage({ data: { event: 'page', data: { isError: false } } });
-  assert.match(vm.runInContext('status.textContent', page), /Connected through Monkeh/);
+  assert.match(vm.runInContext('status.textContent', page), /Connected through Mochii/);
   await page.loadProvider();
   assert.equal(channels[0].port1.closes, 1);
   channels[0].port1.onmessage({ data: { event: 'page', data: { isError: false } } });
@@ -276,41 +276,41 @@ test('Flyflix refuses an unconfigured shell and ignores configuration completion
   const listeners = new Map();
   let resolve;
   const page = contextFor(inlineScript(flyflix), {
-    location: new URL('https://monkeh.test/flyflix.html'),
+    location: new URL('https://mochii.test/flyflix.html'),
     addEventListener: (name, listener) => listeners.set(name, listener),
     async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://other.test'] }); }
   });
   await new Promise(done => setImmediate(done));
   assert.equal(vm.runInContext('frame.src', page), undefined);
   assert.match(vm.runInContext('status.textContent', page), /origin is not configured/);
-  page.MonkehConfig = { fetchConfig: () => new Promise(done => { resolve = done; }) };
+  page.MochiiConfig = { fetchConfig: () => new Promise(done => { resolve = done; }) };
   const loading = page.loadProvider();
   listeners.get('pagehide')();
-  resolve({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] });
+  resolve({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://mochii.test'] });
   await loading;
   assert.equal(vm.runInContext('frame.src', page), undefined);
 });
 
 test('Flyflix reports HTML configuration clearly and Reload recovers', async () => {
   const page = contextFor(inlineScript(flyflix), {
-    location: new URL('https://monkeh.test/flyflix.html'),
-    async fetch() { return new Response('<!DOCTYPE html><title>Monkeh</title>', { headers: { 'Content-Type': 'text/html' } }); }
+    location: new URL('https://mochii.test/flyflix.html'),
+    async fetch() { return new Response('<!DOCTYPE html><title>Mochii</title>', { headers: { 'Content-Type': 'text/html' } }); }
   });
   await new Promise(resolve => setImmediate(resolve));
   assert.match(vm.runInContext('status.textContent', page), /backend is not connected.*\/api\/config/);
   assert.doesNotMatch(vm.runInContext('status.textContent', page), /Unexpected token/);
   assert.equal(vm.runInContext('frame.src', page), undefined);
-  page.fetch = async () => Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] });
+  page.fetch = async () => Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://mochii.test'] });
   await page.loadProvider();
   assert.equal(vm.runInContext('frame.src', page), 'https://proxy.test/proxy-host.html#https%3A%2F%2Fflyflix.net%2F');
 });
 
 test('old Flyflix provider links redirect only from the configured proxy origin', async () => {
-  for (const origin of ['https://monkeh.test', 'https://proxy.test']) {
+  for (const origin of ['https://mochii.test', 'https://proxy.test']) {
     let redirected;
     const page = contextFor(inlineScript(flyflixProvider), {
       location: { origin, href: origin + '/flyflix-provider.html', replace(value) { redirected = value; } },
-      async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://monkeh.test'] }); }
+      async fetch() { return Response.json({ proxyOrigin: 'https://proxy.test', shellOrigins: ['https://mochii.test'] }); }
     });
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(redirected, origin === 'https://proxy.test' ? '/proxy-host.html#https%3A%2F%2Fflyflix.net%2F' : undefined);
@@ -321,7 +321,7 @@ test('static Flyflix provider links use the same mirror and reject insecure nonl
   for (const origin of ['https://new-mirror.example', 'http://localhost:4173', 'http://insecure.example']) {
     let redirected;
     const page = contextFor(inlineScript(flyflixProvider), {
-      MonkehUseBackendConfig: false,
+      MochiiUseBackendConfig: false,
       location: { origin, href: origin + '/flyflix-provider.html', replace(value) { redirected = value; } },
       async fetch() { assert.fail('Static provider must not fetch remote configuration'); }
     });

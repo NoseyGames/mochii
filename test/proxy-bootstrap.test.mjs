@@ -41,11 +41,15 @@ test('bootstrap waits for control and sends only the validated client identity t
   assert.equal(app.requests.length, 0);
   app.control(); await flush();
   assert.equal(app.requests[0].type, 'monkeh:identity:client');
+  assert.equal(app.requests[0].protocol, 'mochii');
+  assert.equal(app.requests.length, 1);
   assert.equal(app.requests[0].nonce, nonce);
   assert.equal(app.sent[0].origin, 'https://proxy.test');
   assert.equal(app.sent[0].data.clientId, 'child-client');
   assert.equal(app.sent[0].data.nonce, nonce);
   assert.equal(app.sent[0].data.type, 'monkeh-proxy:identity-ready');
+  assert.equal(app.sent[0].data.protocol, 'mochii-proxy');
+  assert.equal(app.sent.length, 1);
   assert.equal(app.timers.size, 0);
   assert.equal(app.listeners.size, 0);
   assert(app.channels.every(channel => channel.port1.closed && channel.port2.closed));

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import '../browser-tools/config.js';
 
-const { fetchBackendConfig: fetchConfig } = globalThis.MonkehConfig;
+const { fetchBackendConfig: fetchConfig } = globalThis.MochiiConfig;
 const json = (body, type = 'application/json') => new Response(body, { headers: { 'Content-Type': type } });
 
 test('configuration requests are same-origin, uncached, bounded by a deadline and explicitly ask for JSON', async () => {
@@ -41,7 +41,7 @@ test('malformed JSON and non-object configuration produce stable messages withou
   for (const body of ['{not valid private data', '', 'null', '[]', 'true', '1']) {
     await assert.rejects(fetchConfig({ fetch: async () => json(body) }), /invalid JSON|invalid configuration object/);
   }
-  assert.deepEqual(await fetchConfig({ fetch: async () => json('{}', 'application/vnd.monkeh+json') }), {});
+  assert.deepEqual(await fetchConfig({ fetch: async () => json('{}', 'application/vnd.mochii+json') }), {});
 });
 
 test('oversized declared and streamed config responses are cancelled', async () => {

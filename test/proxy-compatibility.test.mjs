@@ -15,7 +15,7 @@ function worker({ clientUrl = proxied('https://game.test/play/index.html'), conf
     URL, Response, Proxy, Reflect,
     importScripts() {},
     __uv$config: { prefix: '/service/', encodeUrl: encodeURIComponent, decodeUrl: decodeURIComponent },
-    MonkehConfig: { async fetchConfig() { return staticMode ? { mode: 'static' } : { proxyOrigin: configuredOrigin }; } },
+    MochiiConfig: { async fetchConfig() { return staticMode ? { mode: 'static' } : { proxyOrigin: configuredOrigin }; } },
     UVServiceWorker: class {
       route({ request }) { return request.url.startsWith(origin + '/service/'); }
       async fetch({ request }) { forwarded.push(request); return upstreamResponse || new Response('proxied'); }

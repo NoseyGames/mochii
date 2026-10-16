@@ -4,12 +4,13 @@ import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { buildStatic, staticFiles, vendorFiles } from '../scripts/build-static.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
 async function fixture(t) {
-  const directory = await mkdtemp(join(tmpdir(), 'monkeh-static-build-'));
+  const directory = await mkdtemp(join(tmpdir(), 'mochii-static-build-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const files = new Set([...staticFiles, 'package.json']);
   for (const [name, source] of vendorFiles) {
@@ -48,6 +49,16 @@ test('static build includes browser assets and pinned bundles without backend fi
     assert.deepEqual(await readFile(join(result.directory, destination)), await readFile(join(directory, 'node_modules', packageName, source)));
   }
   assert.match(await readFile(join(result.directory, '404.html'), 'utf8'), /Page not found/);
+  assert.match(await readFile(join(result.directory, 'licenses/BARE-MUX-LICENSE.txt'), 'utf8'), /Copyright 2024 Mercury Workshop Inc\./);
+  for (const license of ['EPOXY-LICENSE.txt', 'ULTRAVIOLET-LICENSE.txt']) {
+    assert.match(await readFile(join(result.directory, 'licenses', license), 'utf8'), /GNU AFFERO GENERAL PUBLIC LICENSE/);
+  }
+  const sources = JSON.parse(await readFile(join(result.directory, 'licenses/sources.json'), 'utf8'));
+  assert.equal(sources.length, 5);
+  for (const source of sources) {
+    const archive = await readFile(join(result.directory, source.file));
+    assert.equal(createHash('sha256').update(archive).digest('hex'), source.sha256);
+  }
 });
 
 test('static build rejects mismatched vendor versions before replacing previous output', async t => {

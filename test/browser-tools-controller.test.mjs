@@ -67,10 +67,10 @@ function harness(saved = [], { local = false } = {}) {
     getItem: key => key === USERSCRIPTS_STORAGE_KEY ? storageValue : null,
     setItem(key, value) { if (failWrites) throw new Error('Storage is full'); storageValue = value; },
   };
-  const location = new URL('https://monkeh.test/math.html');
+  const location = new URL('https://mochii.test/math.html');
   const window = node();
   window.localStorage = storage;
-  window.MonkehProxyOrigin = local ? location.origin : 'https://proxy.monkeh.test';
+  window.MochiiProxyOrigin = local ? location.origin : 'https://proxy.mochii.test';
   const sessions = [];
   const confirmations = [];
   let confirmResult = true;
@@ -96,11 +96,11 @@ function harness(saved = [], { local = false } = {}) {
     confirm(message) { confirmations.push(message); return confirmResult; },
   }, { filename: 'browser-tools/tools.js' });
   async function connect(url, existingDocument = null, details = {}) {
-    const proxied = `${window.MonkehProxyOrigin}/proxy-host.html#${encodeURIComponent(url)}`;
+    const proxied = `${window.MochiiProxyOrigin}/proxy-host.html#${encodeURIComponent(url)}`;
     const pageDocument = existingDocument || { documentElement: node(), ...details };
     get('viewer-frame').src = proxied;
     get('viewer-frame').contentWindow = { get document() { throw new Error('Cross-origin DOM reads are forbidden'); } };
-    window.MonkehTools.expectDocument(url, true);
+    window.MochiiTools.expectDocument(url, true);
     await get('viewer-frame').fire('load');
     if (!existingDocument && sessions.length) {
       const session = sessions[sessions.length - 1];
@@ -169,7 +169,7 @@ test('toolbar server switching coalesces clicks while an alternative is connecti
 
 test('isolated page metadata never causes automatic disclosure of stored userscripts', async () => {
   const app = harness([script(), script({ id: 'disabled', enabled: false }), script({ id: 'other-host', match: 'https://other.test/*' })]);
-  app.window.MonkehTools.prepareNavigation('https://example.com/', true);
+  app.window.MochiiTools.prepareNavigation('https://example.com/', true);
   const firstDocument = await app.connect('https://example.com/');
   assert.equal(app.sessions.length, 1);
   assert.equal(app.sessions[0].evaluated.length, 0);
@@ -188,13 +188,13 @@ test('isolated page metadata never causes automatic disclosure of stored userscr
 
 test('controller retires stale console results and callbacks during navigation', async () => {
   const app = harness();
-  app.window.MonkehTools.prepareNavigation('https://example.com/', true);
+  app.window.MochiiTools.prepareNavigation('https://example.com/', true);
   await app.connect('https://example.com/');
   let finish;
   app.sessions[0].result = new Promise(resolve => { finish = resolve; });
   app.get('console-input').value = 'pendingResult()';
   const submission = app.get('console-form').fire('submit');
-  app.window.MonkehTools.prepareNavigation('https://other.test/', true);
+  app.window.MochiiTools.prepareNavigation('https://other.test/', true);
   await app.connect('https://other.test/');
   finish('STALE RESULT');
   await submission;
@@ -222,9 +222,9 @@ test('controller keeps unsaved edits after a storage error and honors discard ca
 
 test('closing the viewer disconnects tools and ignores subsequent iframe loads', async () => {
   const app = harness([script()]);
-  app.window.MonkehTools.prepareNavigation('https://example.com/', true);
+  app.window.MochiiTools.prepareNavigation('https://example.com/', true);
   await app.connect('https://example.com/');
-  app.window.MonkehTools.closeViewer();
+  app.window.MochiiTools.closeViewer();
   assert.equal(app.sessions[0].disposed, true);
   assert.equal(app.get('browser-tools').hidden, true);
   assert.equal(app.get('userscript-run').disabled, true);
@@ -235,10 +235,10 @@ test('closing the viewer disconnects tools and ignores subsequent iframe loads',
 test('local app and shell documents never receive tools or wildcard autoruns', async () => {
   const app = harness([script({ match: '*' })]);
   for (const pathname of ['/', '/index.html', '/math.html', '/history.html', '/browser-tools/tools.js', '/apps/auk.html']) {
-    const url = `https://monkeh.test${pathname}`;
-    app.window.MonkehTools.prepareNavigation(url, true);
+    const url = `https://mochii.test${pathname}`;
+    app.window.MochiiTools.prepareNavigation(url, true);
     app.get('viewer-frame').src = url;
-    app.window.MonkehTools.expectDocument(url);
+    app.window.MochiiTools.expectDocument(url);
     await app.get('viewer-frame').fire('load');
     assert.equal(app.sessions.length, 0, `must not attach or evaluate inside ${pathname}`);
     assert.equal(app.get('tools-connection').textContent, 'Local app · tools paused');
@@ -252,25 +252,25 @@ test('local app and shell documents never receive tools or wildcard autoruns', a
 
 test('spoofed host-ready messages cannot establish or replace an isolated tools channel', async () => {
   const app = harness();
-  app.window.MonkehTools.prepareNavigation('https://example.com/');
-  app.window.MonkehTools.expectDocument('https://example.com/');
+  app.window.MochiiTools.prepareNavigation('https://example.com/');
+  app.window.MochiiTools.expectDocument('https://example.com/');
   const viewer = app.get('viewer-frame');
-  viewer.src = 'https://proxy.monkeh.test/proxy-host.html#https%3A%2F%2Fexample.com';
+  viewer.src = 'https://proxy.mochii.test/proxy-host.html#https%3A%2F%2Fexample.com';
   viewer.contentWindow = {};
-  const ready = { type: 'monkeh-proxy:ready' };
+  const ready = { type: 'mochii-proxy:ready' };
   await app.window.fire('message', { source: viewer.contentWindow, origin: 'https://evil.test', data: ready });
-  await app.window.fire('message', { source: {}, origin: 'https://proxy.monkeh.test', data: ready });
+  await app.window.fire('message', { source: {}, origin: 'https://proxy.mochii.test', data: ready });
   assert.equal(app.sessions.length, 0);
-  await app.window.fire('message', { source: viewer.contentWindow, origin: 'https://proxy.monkeh.test', data: ready });
+  await app.window.fire('message', { source: viewer.contentWindow, origin: 'https://proxy.mochii.test', data: ready });
   assert.equal(app.sessions.length, 1);
   app.sessions[0].hasHandshake = true;
-  await app.window.fire('message', { source: viewer.contentWindow, origin: 'https://proxy.monkeh.test', data: ready });
+  await app.window.fire('message', { source: viewer.contentWindow, origin: 'https://proxy.mochii.test', data: ready });
   assert.equal(app.sessions.length, 1, 'an established channel ignores redundant ready events');
 });
 
 test('reload uses the proxy RPC without accessing a cross-origin Location object', async () => {
   const app = harness();
-  app.window.MonkehTools.prepareNavigation('https://example.com/');
+  app.window.MochiiTools.prepareNavigation('https://example.com/');
   await app.connect('https://example.com/');
   await app.get('browser-reload').fire('click');
   assert.equal(app.sessions[0].reloaded, true);
@@ -280,7 +280,7 @@ test('reload delegates srcdoc games and error placeholders to the shell retry na
   const app = harness();
   let retries = 0;
   app.window.retryViewerNavigation = async () => { retries++; };
-  app.window.MonkehTools.prepareNavigation('https://cdn.example/game.html');
+  app.window.MochiiTools.prepareNavigation('https://cdn.example/game.html');
   const frame = app.get('viewer-frame');
   frame.srcdoc = '<h1>Game or error placeholder</h1>';
   Object.defineProperty(frame, 'src', {
@@ -297,7 +297,7 @@ test('reload applies changed proxy identities and restores the real browser defa
   await app.connect('https://example.com/');
   let identity = 'Selected Browser/1';
   let coldReloads = 0;
-  app.window.MonkehPrivacy = { get: () => ({ userAgent: identity }) };
+  app.window.MochiiPrivacy = { get: () => ({ userAgent: identity }) };
   app.window.retryViewerNavigation = async () => { coldReloads++; };
   await app.get('browser-reload').fire('click');
   assert.equal(coldReloads, 1);
@@ -317,20 +317,20 @@ test('reload applies changed proxy identities and restores the real browser defa
 
 test('warm navigation reuses a connected proxy host and falls back when no valid bridge exists', async () => {
   const app = harness();
-  assert.equal(await app.window.MonkehTools.navigateRemote('https://next.example/'), false);
+  assert.equal(await app.window.MochiiTools.navigateRemote('https://next.example/'), false);
   await app.connect('https://example.com/');
   const originalSource = app.get('viewer-frame').src;
-  assert.equal(await app.window.MonkehTools.navigateRemote('https://next.example/path'), true);
+  assert.equal(await app.window.MochiiTools.navigateRemote('https://next.example/path'), true);
   assert.equal(app.sessions[0].navigated, 'https://next.example/path');
   assert.equal(app.sessions.length, 1);
   assert.equal(app.sessions[0].disposed, false);
   assert.equal(app.get('viewer-frame').src, originalSource);
   assert.equal(app.get('browser-url').value, 'https://next.example/path');
-  assert.equal(await app.window.MonkehTools.navigateRemote('https://monkeh.test/math.html'), false);
-  assert.equal(await app.window.MonkehTools.navigateRemote('https://proxy.monkeh.test/math.html'), false);
-  assert.equal(await app.window.MonkehTools.navigateRemote('javascript:bad()'), false);
-  app.window.MonkehTools.closeViewer();
-  assert.equal(await app.window.MonkehTools.navigateRemote('https://later.example/'), false);
+  assert.equal(await app.window.MochiiTools.navigateRemote('https://mochii.test/math.html'), false);
+  assert.equal(await app.window.MochiiTools.navigateRemote('https://proxy.mochii.test/math.html'), false);
+  assert.equal(await app.window.MochiiTools.navigateRemote('javascript:bad()'), false);
+  app.window.MochiiTools.closeViewer();
+  assert.equal(await app.window.MochiiTools.navigateRemote('https://later.example/'), false);
 });
 
 test('a late warm navigation response cannot overwrite a newer destination or closed viewer', async () => {
@@ -338,15 +338,15 @@ test('a late warm navigation response cannot overwrite a newer destination or cl
   await app.connect('https://example.com/');
   let finish;
   app.sessions[0].navigate = () => new Promise(resolve => { finish = resolve; });
-  const first = app.window.MonkehTools.navigateRemote('https://first.example/');
+  const first = app.window.MochiiTools.navigateRemote('https://first.example/');
   app.sessions[0].navigate = async () => true;
-  assert.equal(await app.window.MonkehTools.navigateRemote('https://latest.example/'), true);
+  assert.equal(await app.window.MochiiTools.navigateRemote('https://latest.example/'), true);
   finish(true);
   assert.equal(await first, false);
   assert.equal(app.get('browser-url').value, 'https://latest.example/');
   app.sessions[0].navigate = () => new Promise(resolve => { finish = resolve; });
-  const pending = app.window.MonkehTools.navigateRemote('https://closed.example/');
-  app.window.MonkehTools.closeViewer(); finish(true);
+  const pending = app.window.MochiiTools.navigateRemote('https://closed.example/');
+  app.window.MochiiTools.closeViewer(); finish(true);
   assert.equal(await pending, false);
 });
 
@@ -355,12 +355,12 @@ test('reload recreates the host when popup or download permissions changed', asy
   await app.connect('https://example.com/');
   let coldReloads = 0;
   app.window.retryViewerNavigation = async () => { coldReloads++; };
-  app.window.MonkehPrivacy = { sandbox: () => 'allow-scripts allow-same-origin allow-downloads' };
+  app.window.MochiiPrivacy = { sandbox: () => 'allow-scripts allow-same-origin allow-downloads' };
   app.get('viewer-frame').setAttribute('sandbox', 'allow-scripts allow-same-origin');
   await app.get('browser-reload').fire('click');
   assert.equal(coldReloads, 1);
   assert.equal(app.sessions[0].reloaded, undefined);
-  app.get('viewer-frame').setAttribute('sandbox', app.window.MonkehPrivacy.sandbox(true));
+  app.get('viewer-frame').setAttribute('sandbox', app.window.MochiiPrivacy.sandbox(true));
   await app.get('browser-reload').fire('click');
   assert.equal(app.sessions[0].reloaded, true);
   assert.equal(coldReloads, 1);
@@ -368,15 +368,15 @@ test('reload recreates the host when popup or download permissions changed', asy
 
 test('the network retry action reaches the isolated host through the narrow reconnect method', async () => {
   const app = harness();
-  app.window.MonkehTools.prepareNavigation('https://example.com/');
+  app.window.MochiiTools.prepareNavigation('https://example.com/');
   await app.connect('https://example.com/');
-  assert.equal(await app.window.MonkehTools.reconnect(), true);
+  assert.equal(await app.window.MochiiTools.reconnect(), true);
   assert.equal(app.sessions[0].reconnected, true);
 });
 
 test('runtime picker completion resets the button and permits starting again on one click', async () => {
   const app = harness();
-  app.window.MonkehTools.prepareNavigation('https://example.com/', true);
+  app.window.MochiiTools.prepareNavigation('https://example.com/', true);
   await app.connect('https://example.com/');
   const picker = app.get('inspector-pick');
   await picker.fire('click');
@@ -479,16 +479,16 @@ test('closing clears console logs by default and honors the explicit retain pref
   await app.connect('https://example.com/');
   app.sessions[0].callbacks.onConsole({ level: 'log', args: ['private log'] });
   app.get('console-input').value = 'private command';
-  app.window.MonkehTools.closeViewer();
+  app.window.MochiiTools.closeViewer();
   assert.doesNotMatch(app.text('console-output'), /private log/);
   assert.equal(app.get('console-input').value, '');
   await app.connect('https://example.com/');
-  app.window.MonkehPrivacy = { get: () => ({ clearConsoleOnClose: false }) };
+  app.window.MochiiPrivacy = { get: () => ({ clearConsoleOnClose: false }) };
   app.sessions.at(-1).callbacks.onConsole({ level: 'log', args: ['retained log'] });
-  app.window.MonkehTools.closeViewer();
+  app.window.MochiiTools.closeViewer();
   await app.get('browser-tools-toggle').fire('click');
   assert.match(app.text('console-output'), /retained log/);
-  app.window.MonkehTools.clearConsole();
+  app.window.MochiiTools.clearConsole();
   assert.doesNotMatch(app.text('console-output'), /retained log/);
 });
 
@@ -524,7 +524,7 @@ test('hidden console captures only the newest 500 messages without scheduling or
 test('visible console appends rows, retains existing row identity and scroll position, and updates filters', async () => {
   const app = harness();
   await app.connect('https://example.com/');
-  app.window.MonkehTools.clearConsole();
+  app.window.MochiiTools.clearConsole();
   const output = app.get('console-output');
   output.scrollHeight = 1000; output.clientHeight = 100; output.scrollTop = 30;
   const log = (text, level = 'log') => app.sessions[0].callbacks.onConsole({ level, args: [text] });
@@ -556,7 +556,7 @@ test('visible console appends rows, retains existing row identity and scroll pos
 test('a queued console frame stays dormant after closing and privacy clear cannot resurrect logs', async () => {
   const app = harness();
   await app.connect('https://example.com/');
-  app.window.MonkehTools.clearConsole();
+  app.window.MochiiTools.clearConsole();
   const scheduled = [];
   app.window.requestAnimationFrame = callback => scheduled.push(callback);
   app.sessions[0].callbacks.onConsole({ level: 'log', args: ['private pending message'] });
@@ -565,7 +565,7 @@ test('a queued console frame stays dormant after closing and privacy clear canno
   const initialNodes = app.createdNodes();
   scheduled.shift()();
   assert.equal(app.createdNodes(), initialNodes);
-  app.window.MonkehTools.clearConsole();
+  app.window.MochiiTools.clearConsole();
   await app.get('browser-tools-toggle').fire('click');
   assert.doesNotMatch(app.text('console-output'), /private pending message/);
 });
@@ -624,10 +624,10 @@ test('current-origin proxy hosts support tools and navigation while shell apps r
   await app.connect('https://example.com/');
   assert.equal(app.sessions.length, 1);
   assert.equal(app.sessions[0].evaluated.length, 0);
-  assert.equal(await app.window.MonkehTools.navigateRemote('https://next.example/'), true);
+  assert.equal(await app.window.MochiiTools.navigateRemote('https://next.example/'), true);
   assert.equal(app.sessions[0].navigated, 'https://next.example/');
-  assert.equal(await app.window.MonkehTools.navigateRemote('https://monkeh.test/math.html'), false);
-  app.get('viewer-frame').src = 'https://monkeh.test/apps/auk.html';
+  assert.equal(await app.window.MochiiTools.navigateRemote('https://mochii.test/math.html'), false);
+  app.get('viewer-frame').src = 'https://mochii.test/apps/auk.html';
   await app.get('viewer-frame').fire('load');
   assert.equal(app.sessions[0].disposed, true);
   assert.equal(app.sessions.length, 1);

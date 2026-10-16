@@ -20,7 +20,7 @@ function node() {
 function port() {
   return { messages: [], starts: 0, closes: 0, postMessage(message) { this.messages.push(message); }, start() { this.starts++; }, close() { this.closes++; }, async request(message) { await this.onmessage?.({ data: message }); await flush(); } };
 }
-async function harness({ config: extraConfig = {}, evaluate = async code => `result: ${code}`, startup, fetchConfig, workerReady = Promise.resolve(), workerRegistration, workerController = {}, userAgent = '', loadCode = false, bindIdentity, prepareGame } = {}) {
+async function harness({ config: extraConfig = {}, evaluate = async code => `result: ${code}`, startup, fetchConfig, workerReady = Promise.resolve(), workerRegistration, workerController = {}, userAgent = '', loadCode = false, bindIdentity, prepareGame, legacyConfig = false, transportUncertain = false } = {}) {
   const allNodes = new Map();
   const get = id => {
     if (!allNodes.has(id)) allNodes.set(id, node());
@@ -61,15 +61,15 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   const workerMessages = [];
   if (workerController && !workerController.postMessage) workerController.postMessage = (data, ports) => {
     workerMessages.push(data);
-    if (data.type === 'monkeh:identity:bind') {
+    if (['mochii:identity:bind', 'monkeh:identity:bind'].includes(data.type)) {
       identityRequests.push(data);
       if (bindIdentity) bindIdentity(data, ports);
       else ports[0].postMessage({ ok: true });
-    } else if (data.type === 'monkeh:game:prepare') {
+    } else if (['mochii:game:prepare', 'monkeh:game:prepare'].includes(data.type)) {
       const request = { data, ports, reply: result => ports[0].postMessage(result) };
       gameRequests.push(request);
       prepareGame?.(request);
-    } else if (data.type === 'monkeh:game:cancel') gameCancels.push({ data, ports });
+    } else if (['mochii:game:cancel', 'monkeh:game:cancel'].includes(data.type)) gameCancels.push({ data, ports });
   };
   const serviceWorker = { ...node(), async register() { registrations++; return workerRegistration; }, ready: workerReady, controller: workerController };
   const network = { connects: 0, failures: 0, disposed: 0, switches: [], activeEndpoint: 'ws://127.0.0.1:3101/wisp/',
@@ -77,8 +77,12 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
     async reportFailure() { this.failures++; }, async setOnline() {}, dispose() { this.disposed++; },
     async switchEndpoint(options) { this.switches.push(options); this.activeEndpoint = 'wss://other.example/wisp/'; return this.activeEndpoint; },
   };
+  const transportLock = {
+    assertAvailable() { if (transportUncertain) throw Object.assign(new Error('The shared proxy connection did not finish starting. Reload this page to recover; switching servers cannot repair this stalled connection.'), { code: 'PROXY_TRANSPORT_UNCERTAIN' }); },
+    async run(work) { this.assertAvailable(); return work(); },
+  };
   const sandbox = {
-    MonkehUseBackendConfig: true,
+    MochiiUseBackendConfig: true,
     window: contextWindow, document: doc, location, isSecureContext: true,
     navigator: { onLine: true, serviceWorker },
     URL, AbortSignal, AbortController, TextEncoder, TextDecoder, Map, WeakMap, Set, decodeURIComponent, encodeURIComponent, Uint8Array, crypto,
@@ -98,6 +102,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn, ms }); return id; }, clearTimeout(id) { timers.delete(id); },
     BareMux: { BareMuxConnection: class { async setTransport() { activated++; if (startup) await startup; } } },
     createProxyNetwork(options) { networkOptions = options; return network; },
+    transportLockFor: () => transportLock,
     __uv$config: { prefix: '/service/', encodeUrl: encodeURIComponent, decodeUrl: decodeURIComponent },
     formatValue: value => String(value),
     attachRuntime(target, callbacks) {
@@ -115,16 +120,17 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
   };
   vm.createContext(sandbox);
   vm.runInContext(configSource, sandbox, { filename: 'browser-tools/config.js' });
+  if (legacyConfig) { sandbox.MonkehConfig = sandbox.MochiiConfig; delete sandbox.MochiiConfig; }
   vm.runInContext(source, sandbox, { filename: 'browser-tools/proxy-host.js' });
   await flush();
   function init(connection = port(), changes = {}) {
-    contextWindow.fire('message', { isTrusted: true, source: contextWindow.parent, origin: shellOrigin, data: { type: 'monkeh-proxy:init' }, ports: [connection], ...changes });
+    contextWindow.fire('message', { isTrusted: true, source: contextWindow.parent, origin: shellOrigin, data: { type: 'mochii-proxy:init' }, ports: [connection], ...changes });
     return connection;
   }
   function loadPage() { frame.fire('load'); }
   function bindChild() {
     const nonce = new URL(frame.src, proxyOrigin).searchParams.get('nonce');
-    contextWindow.fire('message', { isTrusted: true, source: pageWindow, origin: proxyOrigin, data: { type: 'monkeh-proxy:identity-ready', nonce, clientId: 'bootstrap-child' } });
+    contextWindow.fire('message', { isTrusted: true, source: pageWindow, origin: proxyOrigin, data: { type: 'mochii-proxy:identity-ready', nonce, clientId: 'bootstrap-child' } });
   }
   function replaceDocument(readyState = 'complete') {
     const next = { ...node(), title: 'Next', readyState, body: { childElementCount: 1, textContent: 'Next' }, getElementById: () => null };
@@ -151,7 +157,7 @@ async function harness({ config: extraConfig = {}, evaluate = async code => `res
 }
 
 const preparedUrl = target => proxyOrigin + '/service/' + encodeURIComponent(target);
-const stagedUrl = request => proxyOrigin + '/__monkeh_game__/' + request.data.nonce;
+const stagedUrl = request => proxyOrigin + '/__mochii_game__/' + request.data.nonce;
 const preparedGame = (request, target = 'https://example.com/') => ({ ok: true, url: stagedUrl(request), canonicalUrl: preparedUrl(target) });
 
 test('ordinary browsing navigates directly without binding or preparing game code', async () => {
@@ -175,6 +181,7 @@ test('game preparation starts without identity bootstrap for both default and cu
     assert.equal(app.gameRequests.length, 1);
     assert.equal(new URL(app.location.href).searchParams.get('ua') || '', userAgent, 'the worker can derive identity from the requesting host URL');
     assert.deepEqual(app.workerMessages.map(message => message.type), ['monkeh:game:prepare']);
+    assert.equal(app.workerMessages[0].protocol, 'mochii');
     const pending = app.gameRequests[0];
     assert.equal(pending.data.url, 'https://example.com/');
     assert.match(pending.data.nonce, /^[a-f0-9]{32}$/);
@@ -243,9 +250,9 @@ test('game preparation requires its exact staging token and an external HTTP can
     () => ({ ok: false, error: 'The game source could not be fetched.' }),
     () => ({ ok: true }),
     request => ({ ...preparedGame(request), canonicalUrl: undefined }),
-    request => ({ ...preparedGame(request), url: proxyOrigin + '/__monkeh_game__/' + (request.data.nonce[0] === '0' ? '1' : '0') + request.data.nonce.slice(1) }),
+    request => ({ ...preparedGame(request), url: proxyOrigin + '/__mochii_game__/' + (request.data.nonce[0] === '0' ? '1' : '0') + request.data.nonce.slice(1) }),
     request => ({ ...preparedGame(request), url: proxyOrigin + '/wrong-path/' + request.data.nonce }),
-    request => ({ ...preparedGame(request), url: 'https://other-proxy.example/__monkeh_game__/' + request.data.nonce }),
+    request => ({ ...preparedGame(request), url: 'https://other-proxy.example/__mochii_game__/' + request.data.nonce }),
     request => ({ ...preparedGame(request), url: stagedUrl(request) + '?unexpected=1' }),
     request => ({ ...preparedGame(request), url: stagedUrl(request) + '#unexpected' }),
     request => ({ ...preparedGame(request), url: preparedUrl('https://example.com/') }),
@@ -303,7 +310,7 @@ test('custom identities wait for a validated controlled child binding before tar
   app.loadPage();
   assert.equal(app.runtimes.length, 0);
   const nonce = new URL(app.frame.src, proxyOrigin).searchParams.get('nonce');
-  const message = { isTrusted: true, source: app.pageWindow, origin: proxyOrigin, data: { type: 'monkeh-proxy:identity-ready', nonce, clientId: 'bootstrap-child' } };
+  const message = { isTrusted: true, source: app.pageWindow, origin: proxyOrigin, data: { type: 'mochii-proxy:identity-ready', nonce, clientId: 'bootstrap-child' } };
   for (const changes of [{ isTrusted: false }, { source: {} }, { origin: shellOrigin }, { data: { ...message.data, nonce: 'a'.repeat(32) } }]) app.contextWindow.fire('message', { ...message, ...changes });
   assert.equal(app.identityRequests.length, 0);
   app.contextWindow.fire('message', message);
@@ -359,6 +366,56 @@ test('proxy host rejects a synthetic message forged by its same-origin viewed pa
   const forged = app.init(port(), { isTrusted: false });
   assert.equal(forged.starts, 0, 'a child can forge source/origin on dispatchEvent, but cannot forge isTrusted');
   app.contextWindow.fire('pagehide');
+});
+
+test('cached shells receive one compatible ready message and both init names retain the same trust boundary', async () => {
+  for (const type of ['monkeh-proxy:init', 'mochii-proxy:init']) {
+    const app = await harness({ legacyConfig: true });
+    assert.equal(app.contextWindow.parent.sent.length, 1);
+    assert.equal(app.contextWindow.parent.sent[0].origin, shellOrigin);
+    assert.equal(app.contextWindow.parent.sent[0].data.type, 'monkeh-proxy:ready');
+    assert.equal(app.contextWindow.parent.sent[0].data.protocol, 'mochii-proxy');
+    for (const changes of [{ source: {} }, { origin: proxyOrigin }, { isTrusted: false }, { ports: [] }, { ports: [port(), port()] }]) {
+      assert.equal(app.init(port(), { data: { type }, ...changes }).starts, 0);
+    }
+    const connection = app.init(port(), { data: { type } });
+    assert.equal(connection.starts, 1);
+    app.loadPage();
+    await connection.request({ id: 1, method: 'evaluate', params: { code: '2 + 2' } });
+    assert.equal(connection.messages.find(message => message.id === 1).result, 'result: 2 + 2');
+    app.contextWindow.fire('pagehide');
+    assert.equal(connection.closes, 1);
+  }
+});
+
+test('legacy identity-ready binds only the current child once with the expected nonce', async () => {
+  const app = await harness({ userAgent: 'Legacy Browser/1' });
+  const nonce = new URL(app.frame.src, proxyOrigin).searchParams.get('nonce');
+  const message = { isTrusted: true, source: app.pageWindow, origin: proxyOrigin, data: { type: 'monkeh-proxy:identity-ready', nonce, clientId: 'bootstrap-child' } };
+  for (const changes of [{ source: {} }, { origin: shellOrigin }, { isTrusted: false }, { data: { ...message.data, nonce: 'f'.repeat(32) } }]) app.contextWindow.fire('message', { ...message, ...changes });
+  assert.equal(app.identityRequests.length, 0);
+  app.contextWindow.fire('message', message);
+  app.contextWindow.fire('message', message);
+  await flush();
+  assert.equal(app.identityRequests.length, 1);
+  assert.equal(app.identityRequests[0].type, 'monkeh:identity:bind');
+  assert.equal(app.identityRequests[0].protocol, 'mochii');
+  assert.equal(app.navigations.length, 2);
+  app.contextWindow.fire('pagehide');
+});
+
+test('a cached worker can return only the exact legacy stage token on the proxy origin', async () => {
+  for (const suffix of ['', '?extra=1', '#extra', '/extra']) {
+    const app = await harness({ loadCode: true });
+    const request = app.gameRequests[0];
+    const url = proxyOrigin + '/__monkeh_game__/' + request.data.nonce + suffix;
+    request.reply({ ...preparedGame(request), url });
+    await flush();
+    assert.equal(app.navigations.length, suffix ? 0 : 1);
+    if (!suffix) assert.equal(app.frame.src, url);
+    else assert.equal(app.get('retry').hidden, false);
+    app.contextWindow.fire('pagehide');
+  }
 });
 
 test('proxy host evaluates code only on its transferred port after a page runtime is attached', async () => {
@@ -755,6 +812,60 @@ test('endpoint selection starts while the service worker activates, but navigati
   ready(); await flush();
   assert.equal(app.navigations.length, 1);
   app.contextWindow.fire('pagehide');
+});
+
+test('first navigation waits for an explicit update check and its newly discovered controller', async () => {
+  for (const alreadyActive of [false, true]) {
+    let completeUpdate;
+    let updates = 0;
+    const original = {};
+    const updating = { ...node(), state: alreadyActive ? 'activated' : 'installing' };
+    const registration = { active: original, update() { updates++; return new Promise(resolve => { completeUpdate = resolve; }); } };
+    const app = await harness({ workerRegistration: registration, workerController: original });
+    assert.equal(updates, 1);
+    assert.equal(app.network.connects, 1);
+    assert.equal(app.navigations.length, 0);
+    registration[alreadyActive ? 'active' : 'installing'] = updating;
+    completeUpdate(registration); await flush();
+    assert.equal(app.navigations.length, 0);
+    if (!alreadyActive) {
+      updating.state = 'activated'; updating.fire('statechange'); await flush();
+      assert.equal(app.navigations.length, 0);
+    }
+    app.serviceWorker.fire('controllerchange'); await flush();
+    assert.equal(app.navigations.length, 0);
+    app.serviceWorker.controller = updating;
+    app.serviceWorker.fire('controllerchange'); await flush();
+    assert.equal(app.navigations.length, 1);
+    assert.equal(updating.listeners.get('statechange').size, 0);
+    assert.equal(app.serviceWorker.listeners.get('controllerchange').size, 0);
+    app.contextWindow.fire('pagehide');
+    assert.equal(app.timers.size, 0);
+  }
+});
+
+test('failed or stalled update checks keep the old controller from navigating and allow a fresh retry', async () => {
+  for (const timeout of [false, true]) {
+    let rejectUpdate;
+    const original = {};
+    const registration = { active: original, update() { return new Promise((resolve, reject) => { rejectUpdate = reject; }); } };
+    const app = await harness({ workerRegistration: registration, workerController: original });
+    if (timeout) {
+      const entry = [...app.timers].find(([, timer]) => timer.ms === 15000);
+      assert.ok(entry);
+      app.timers.delete(entry[0]); entry[1].fn();
+    } else rejectUpdate(new Error('Update unavailable'));
+    await flush();
+    assert.equal(app.navigations.length, 0);
+    assert.equal(app.get('retry').hidden, false);
+    assert.match(app.get('status-message').textContent, timeout ? /update check timed out/i : /Update unavailable/);
+    assert.equal(app.timers.size, 0);
+    registration.update = async () => registration;
+    app.get('retry').fire('click'); await flush();
+    assert.equal(app.registrations, 2);
+    assert.equal(app.navigations.length, 1);
+    app.contextWindow.fire('pagehide');
+  }
 });
 
 test('an existing old controller cannot navigate until an installing proxy update activates and takes control', async () => {
@@ -1156,4 +1267,16 @@ test('failed or stalled update checks keep the old controller from navigating an
     assert.equal(app.navigations.length, 1);
     app.contextWindow.fire('pagehide');
   }
+});
+
+
+test('an uncertain transport fails before probing or registering and directs reload recovery', async () => {
+  const app = await harness({ transportUncertain: true });
+  assert.equal(app.network.connects, 0); assert.equal(app.activated, 0); assert.equal(app.registrations, 0);
+  assert.equal(app.navigations.length, 0); assert.equal(app.timers.size, 0);
+  assert.match(app.get('status-message').textContent, /Reload this page/);
+  assert.match(app.get('status-message').textContent, /switching servers cannot repair/);
+  app.get('retry').fire('click'); await flush();
+  assert.equal(app.network.connects, 0); assert.equal(app.activated, 0); assert.equal(app.timers.size, 0);
+  app.contextWindow.fire('pagehide');
 });
