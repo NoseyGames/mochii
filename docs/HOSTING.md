@@ -1,4 +1,4 @@
-# Hosting Monkeh
+# Hosting Mochii
 
 Checked against provider documentation on 2026-10-04. The adapters in this
 repository prepare deployments; they do not create accounts or guarantee that
@@ -125,7 +125,7 @@ before September 4, 2025 may use different legacy limits. See
 Build `dist` locally, sign into an existing Surge account, then use its CLI to
 publish that folder to an available `https://<chosen-name>.surge.sh` domain.
 The publish command is `surge ./dist https://<chosen-name>.surge.sh` after
-installing the official CLI. The placeholder is not a live Monkeh address.
+installing the official CLI. The placeholder is not a live Mochii address.
 Surge hosts the output, so it does not need access to the private repository.
 
 Surge subdomains support HTTPS. Its CLI can create an account at first login;
@@ -140,7 +140,7 @@ and [account login](https://surge.sh/help/resetting-your-password).
 
 GitHub Free offers Pages for public repositories; this private repository needs
 an eligible paid GitHub plan. A project site also defaults to
-`https://<owner>.github.io/monkeh/`, while Monkeh uses root-relative asset and
+`https://<owner>.github.io/mochii/`, while Mochii uses root-relative asset and
 service-worker URLs. Publishing `dist` there would break those routes. A custom
 domain or a separate account-site repository could address
 the path issue, but neither is assumed or created here. See
